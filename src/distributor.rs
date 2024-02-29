@@ -63,7 +63,7 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
             accumulated.push(AccumulatedVar {
                 accum: weight,
                 variation: Variation {
-                    id: Some(var.id.unwrap_or_else(|| Ulid::new())),
+                    id: Some(var.id.unwrap_or_else(Ulid::new)),
                     value: var.value,
                     weight,
                 },
@@ -74,11 +74,12 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
             bail!("Environmental weights greater than 100%")
         }
 
-        let mut control = self.variations.remove(0);
+        let mut control = self.variations.pop().unwrap();
         control.variation.weight = 100 - weight_sum;
-        accumulated.insert(0, control);
+        control.accum = 100 - weight_sum;
+        accumulated.push(control);
 
-        std::mem::replace(&mut self.variations, accumulated);
+        let _ = std::mem::replace(&mut self.variations, accumulated);
         Ok(self.variations())
     }
 
@@ -93,18 +94,11 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
             .enumerate()
             .max_by(|(_, a), (_, b)| a.accum.cmp(&b.accum));
 
-        let mut weight = 0;
-        let mut res_idx = None;
-
         if let Some((idx, var)) = max_accum {
             var.accum -= 100;
-            weight = var.variation.weight;
-            res_idx = Some(idx)
-        }
 
-        if let Some(idx) = res_idx {
             for var in self.variations.iter_mut() {
-                var.accum += weight;
+                var.accum += var.variation.weight;
             }
             if let Some(var) = self.variations.get(idx).map(|v| &v.variation) {
                 return Ok(var);
