@@ -72,32 +72,30 @@ impl<'a> Feature<'a> {
     /// weights) gets returned.
     pub fn value(&mut self, id: Option<Ulid>) -> Result<FeatureValue> {
         if self.distributor.is_some() {
-            if let Some(variation) = self.variation(id) {
-                return Ok(FeatureValue::Variadic(variation));
+            if let Some(id) = id {
+                if let Some(variation) = self.variation(id)? {
+                    return Ok(FeatureValue::Variadic(variation));
+                }
+                bail!("No feature variation of given id found.");
             }
-            bail!("No variation of given id found");
+            return Ok(FeatureValue::Variadic(
+                self.distributor.as_mut().unwrap().distribute(),
+            ));
         }
         Ok(FeatureValue::Simple(&self.control_value))
     }
 
-    pub fn variation(&mut self, id: Option<Ulid>) -> Option<&Variation> {
-        if let Some(distributor) = &mut self.distributor {
-            if let Some(id) = id {
-                return distributor
-                    .variations()
-                    .into_iter()
-                    .find(|v| v.id == id);
-            }
-            return Some(distributor.distribute());
-        }
-        None
+    /// If feature is variadic one, returns a variation of given `id`.
+    /// Bails out with error otherwise.
+    pub fn variation(&mut self, id: Ulid) -> Result<Option<&Variation>> {
+        Ok(self.variations()?.into_iter().find(|v| v.id == id))
     }
 
     pub fn variations(&self) -> Result<Vec<&Variation>> {
         if let Some(distributor) = &self.distributor {
             Ok(distributor.variations())
         } else {
-            Err(anyhow!("Not a variadic feature"))
+            Err(anyhow!("Not a variadic feature."))
         }
     }
 }

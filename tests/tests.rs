@@ -109,7 +109,7 @@ fn variadic_distribution_with_one_variation() {
     .unwrap();
 
     for _ in 1..=100 {
-        if let Some(variation) = feature.variation(None) {
+        if let Ok(FeatureValue::Variadic(variation)) = feature.value(None) {
             *buckets.entry(variation.id.to_string()).or_insert(0) += 1;
         }
     }
@@ -130,7 +130,7 @@ fn variadic_distribution_with_more_variations() {
     .unwrap();
 
     for _ in 1..=100 {
-        if let Some(variation) = feature.variation(None) {
+        if let Ok(FeatureValue::Variadic(variation)) = feature.value(None) {
             *buckets.entry(variation.id.to_string()).or_insert(0) += 1;
         }
     }
