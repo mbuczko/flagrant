@@ -1,5 +1,5 @@
-use anyhow::{anyhow, bail, Result};
-use ulid::Ulid;
+use anyhow::Result;
+use distributor::{AccumulativeDistributor, Distributor, Variation};
 
 mod distributor;
 
@@ -14,13 +14,6 @@ struct Feature<'a> {
     control_value: String,
     distributor: Option<Box<dyn Distributor<'a>>>,
 }
-
-
-
-trait Distributor<'a> {
-    fn distribute(&mut self, ident: Option<String>) -> Result<&'a Variation>;
-}
-
 
 impl<'a> Feature<'a> {
     fn new(name: String, value: String, is_enabled: bool) -> Result<Self> {
@@ -37,7 +30,17 @@ impl<'a> Feature<'a> {
         is_enabled: bool,
         variations: Vec<(String, i16)>,
     ) -> Result<Self> {
-        let distributor = AccumulativeDistribution::new(control_value.clone(), variations)?;
+        let mut distributor = AccumulativeDistributor::new(control_value.clone());
+        let vars = variations
+            .into_iter()
+            .map(|(value, weight)| Variation {
+                id: None,
+                value,
+                weight,
+            })
+            .collect::<Vec<_>>();
+
+        distributor.set_variations(vars);
         Ok(Feature {
             name,
             is_enabled,
@@ -45,46 +48,11 @@ impl<'a> Feature<'a> {
             distributor: Some(Box::new(distributor)),
         })
     }
-    fn get_value(&self) -> Result<FeatureValue> {
-        if let Some(vars) = self.variations {}
-        match self.control_value {
-            FeatureValue::Simple(ref val) => Ok(FeatureValue::Simple(val.clone())),
-            FeatureValue::Variadic(ref mut strategy) => {
-                let variation = strategy.distribute_and_fetch(None)?;
-                Ok(FeatureValue::Variadic(variation))
-            }
+    fn get_value(&mut self, ident: Option<String>) -> Result<&String> {
+        if let Some(distributor) = &mut self.distributor {
+            return Ok(&distributor.distribute(ident)?.value);
         }
-    }
-}
-
-
-
-/// When a request is received:
-/// - choose the variation with the largest `accum`
-/// - subtract 100 from the `accum` for the chosen variation
-/// - add `weight` to `accum` for all variations, including the chosen one
-impl<'a> Distributor<'a> for AccumulativeDistribution {
-    fn distribute(&mut self, _ident: Option<String>) -> Result<&'a Variation> {
-        // let mut selected = None;
-        let max_accum = self
-            .variations
-            .iter_mut()
-            .max_by(|a, b| a.accum.cmp(&b.accum));
-
-        if let Some(var) = max_accum {
-            return Ok(var)
-        }
-        // if let Some(var) = max_accum {
-        //     var.accum -= 100;
-        //     selected = Some(var.clone());
-        // }
-        // if let Some(var) = selected {
-        //     for i in self.variations.iter_mut() {
-        //         i.accum += var.weight;
-        //     }
-        //     return Ok(max_accum.unwrap());
-        // }
-        Err(anyhow!("No variation found? Should not happen"))
+        Ok(&self.control_value)
     }
 }
 

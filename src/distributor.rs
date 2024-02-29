@@ -3,15 +3,9 @@ use ulid::Ulid;
 
 #[derive(Clone, Debug)]
 pub struct Variation {
-    id: Option<Ulid>,
-    value: String,
-    weight: i16,
-}
-
-trait Distributor<'a> {
-    fn distribute(&mut self, ident: Option<String>) -> Result<&Variation>;
-    fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
-    fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>>;
+    pub id: Option<Ulid>,
+    pub value: String,
+    pub weight: i16,
 }
 
 #[derive(Clone, Debug)]
@@ -21,13 +15,19 @@ pub struct AccumulatedVar {
 }
 
 #[derive(Debug)]
-struct AccumulativeDistributor {
+pub struct AccumulativeDistributor {
     requests: usize,
     variations: Vec<AccumulatedVar>,
 }
 
+pub trait Distributor<'a> {
+    fn distribute(&mut self, ident: Option<String>) -> Result<&Variation>;
+    fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
+    fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>>;
+}
+
 impl AccumulativeDistributor {
-    fn new(control_value: String) -> Self {
+    pub fn new(control_value: String) -> Self {
         let accumulated = AccumulatedVar {
             accum: 100,
             variation: Variation {
@@ -41,7 +41,7 @@ impl AccumulativeDistributor {
             variations: vec![accumulated],
         }
     }
-    fn variations(&self) -> Vec<&Variation> {
+    pub fn variations(&self) -> Vec<&Variation> {
         self.variations.iter().map(|acc| &acc.variation).collect()
     }
 }
