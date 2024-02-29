@@ -10,7 +10,7 @@ fn simple_feature_value() {
 
     // simple feature - no variations, just a constant value
     assert!(feature.variations().is_err());
-    assert_eq!(feature.value(None), FeatureValue::Simple(&value));
+    assert_eq!(feature.value(None).unwrap(), FeatureValue::Simple(&value));
 }
 
 #[test]
@@ -28,12 +28,42 @@ fn multivariadic_feature_with_control_value_only() {
 
     let id = variations.first().unwrap().id;
     assert_eq!(
-        feature.value(None),
+        feature.value(None).unwrap(),
         FeatureValue::Variadic(&Variation {
             id,
             value: control_value,
             weight: 100
         })
+    );
+}
+#[test]
+fn multivariadic_feature_with_changed_control_value() {
+    let new_control_value = String::from("new control value");
+    let mut feature = Feature::new_variadic(
+        String::from("sample feature"),
+        String::from("control value"),
+        vec![],
+    )
+    .unwrap();
+
+    let variations = feature.variations().unwrap();
+    let id = variations.first().unwrap().id;
+
+    feature.set_control_value(new_control_value.clone());
+    assert_eq!(
+        feature.value(None).unwrap(),
+        FeatureValue::Variadic(&Variation {
+            id,
+            value: new_control_value.clone(),
+            weight: 100
+        })
+    );
+
+    // turn variadic feature into a simple one
+    feature.simplify();
+    assert_eq!(
+        feature.value(None).unwrap(),
+        FeatureValue::Simple(&new_control_value)
     );
 }
 

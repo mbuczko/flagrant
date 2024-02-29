@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use distributor::{AccumulativeDistributor, Distributor, Variation};
 use ulid::Ulid;
 
@@ -52,6 +52,34 @@ impl<'a> Feature<'a> {
         })
     }
 
+    pub fn set_control_value(&mut self, control_value: String) -> Result<()> {
+        self.control_value = control_value.clone();
+        if let Some(distributor) = &mut self.distributor {
+            distributor.set_control_value(control_value)?
+        }
+        Ok(())
+    }
+
+    /// Turns a possibly variadic feature into a simple one.
+    pub fn simplify(&mut self) {
+        self.distributor = None;
+    }
+
+    /// Returns a value of feature which might be a simple String or
+    /// a variation if feature is a variadic one. In this case, depending
+    /// on `id` either known variation is returned, or call is being
+    /// distributed among all variations and matching one (depending on
+    /// weights) gets returned.
+    pub fn value(&mut self, id: Option<Ulid>) -> Result<FeatureValue> {
+        if self.distributor.is_some() {
+            if let Some(variation) = self.variation(id) {
+                return Ok(FeatureValue::Variadic(variation));
+            }
+            bail!("No variation of given id found");
+        }
+        Ok(FeatureValue::Simple(&self.control_value))
+    }
+
     pub fn variation(&mut self, id: Option<Ulid>) -> Option<&Variation> {
         if let Some(distributor) = &mut self.distributor {
             if let Some(id) = id {
@@ -63,13 +91,6 @@ impl<'a> Feature<'a> {
             return Some(distributor.distribute());
         }
         None
-    }
-
-    pub fn value(&mut self, id: Option<Ulid>) -> FeatureValue {
-        if self.distributor.is_some() {
-            return FeatureValue::Variadic(self.variation(id).unwrap());
-        }
-        FeatureValue::Simple(&self.control_value)
     }
 
     pub fn variations(&self) -> Result<Vec<&Variation>> {

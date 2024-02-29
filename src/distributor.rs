@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
-use ulid::Ulid;
+use anyhow::{anyhow, bail, Result};
 use core::fmt::Debug;
+use ulid::Ulid;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Variation {
@@ -25,8 +25,8 @@ pub trait Distributor<'a> {
     fn distribute(&mut self) -> &Variation;
     fn variations(&self) -> Vec<&Variation>;
 
-    fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
-    fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>>;
+    fn set_control_value(&mut self, value: String) -> Result<()>;
+    fn set_variations(&mut self, variations: Vec<Variation>) -> Result<()>;
 }
 
 impl<'a> Debug for dyn Distributor<'a> {
@@ -53,13 +53,14 @@ impl AccumulativeDistributor {
 }
 
 impl<'a> Distributor<'a> for AccumulativeDistributor {
-    fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>> {
-        if let Some(v) = self.variations.first_mut() {
+    fn set_control_value(&mut self, value: String) -> Result<()> {
+        if let Some(v) = self.variations.last_mut() {
             v.variation.value = value;
+            return Ok(());
         }
-        Ok(self.variations())
+        Err(anyhow!("No control value found...?"))
     }
-    fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>> {
+    fn set_variations(&mut self, variations: Vec<Variation>) -> Result<()> {
         let mut accumulated = Vec::<AccumulatedVar>::with_capacity(variations.len() + 1);
         let mut weight_sum: i16 = 0;
 
@@ -82,17 +83,18 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
         accumulated.push(control);
 
         let _ = std::mem::replace(&mut self.variations, accumulated);
-        Ok(self.variations())
+        Ok(())
     }
 
     fn variations(&self) -> Vec<&Variation> {
         self.variations.iter().map(|acc| &acc.variation).collect()
     }
 
-    /// When `distribute` is being called:
-    /// - choose the variation with the largest `accum`
-    /// - subtract 100 from the `accum` for the chosen variation
-    /// - add `weight` to `accum` for all variations, including the chosen one
+    /// Distributes hit among defined variations keeping in mind associated weights.
+    /// On every call:
+    ///  - choose the variation with the largest `accum`
+    ///  - subtract 100 from the `accum` for the chosen variation
+    ///  - add `weight` to `accum` for all variations, including the chosen one
     fn distribute(&mut self) -> &Variation {
         let max_accum = self
             .variations
