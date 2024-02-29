@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use ulid::Ulid;
+use core::fmt::Debug;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Variation {
@@ -26,6 +27,12 @@ pub trait Distributor<'a> {
 
     fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
     fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>>;
+}
+
+impl<'a> Debug for dyn Distributor<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Distributor {{ {:?} }}", self.variations())
+    }
 }
 
 impl AccumulativeDistributor {

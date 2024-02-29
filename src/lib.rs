@@ -2,14 +2,15 @@ use anyhow::{anyhow, Result};
 use distributor::{AccumulativeDistributor, Distributor, Variation};
 use ulid::Ulid;
 
-mod distributor;
+pub mod distributor;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FeatureValue<'a> {
     Simple(&'a String),
     Variadic(&'a Variation),
 }
 
+#[derive(Debug)]
 pub struct Feature<'a> {
     name: String,
     is_enabled: bool,
