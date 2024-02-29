@@ -3,7 +3,7 @@ use ulid::Ulid;
 
 #[derive(Clone, Debug)]
 pub struct Variation {
-    pub id: Option<Ulid>,
+    pub id: Ulid,
     pub value: String,
     pub weight: i16,
 }
@@ -21,7 +21,7 @@ pub struct AccumulativeDistributor {
 }
 
 pub trait Distributor<'a> {
-    fn distribute(&mut self, ident: Option<String>) -> &Variation;
+    fn distribute(&mut self) -> &Variation;
     fn variations(&self) -> Vec<&Variation>;
 
     fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
@@ -33,7 +33,7 @@ impl AccumulativeDistributor {
         let accumulated = AccumulatedVar {
             accum: 100,
             variation: Variation {
-                id: Some(Ulid::new()),
+                id: Ulid::new(),
                 value: control_value,
                 weight: 100,
             },
@@ -61,11 +61,7 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
 
             accumulated.push(AccumulatedVar {
                 accum: weight,
-                variation: Variation {
-                    id: Some(var.id.unwrap_or_else(Ulid::new)),
-                    value: var.value,
-                    weight,
-                },
+                variation: var,
             });
             weight_sum += weight;
         }
@@ -90,7 +86,7 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
     /// - choose the variation with the largest `accum`
     /// - subtract 100 from the `accum` for the chosen variation
     /// - add `weight` to `accum` for all variations, including the chosen one
-    fn distribute(&mut self, _ident: Option<String>) -> &Variation {
+    fn distribute(&mut self) -> &Variation {
         let max_accum = self
             .variations
             .iter_mut()

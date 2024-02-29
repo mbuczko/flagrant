@@ -4,6 +4,12 @@ use ulid::Ulid;
 
 mod distributor;
 
+#[derive(Debug)]
+pub enum FeatureValue<'a> {
+    Simple(&'a String),
+    Variadic(&'a Variation),
+}
+
 pub struct Feature<'a> {
     name: String,
     is_enabled: bool,
@@ -30,7 +36,7 @@ impl<'a> Feature<'a> {
         let vars = variations
             .into_iter()
             .map(|(value, weight)| Variation {
-                id: None,
+                id: Ulid::new(),
                 value,
                 weight,
             })
@@ -45,15 +51,27 @@ impl<'a> Feature<'a> {
         })
     }
 
-    pub fn get_value(&mut self, ident: Option<String>) -> (&Option<Ulid>, &String) {
+    pub fn variation(&mut self, id: Option<Ulid>) -> Option<&Variation> {
         if let Some(distributor) = &mut self.distributor {
-            let result = distributor.distribute(ident);
-            return (&result.id, &result.value);
+            if let Some(id) = id {
+                return distributor
+                    .variations()
+                    .into_iter()
+                    .find(|v| v.id == id);
+            }
+            return Some(distributor.distribute());
         }
-        (&None, &self.control_value)
+        None
     }
 
-    pub fn get_variations(&self) -> Result<Vec<& Variation>> {
+    pub fn value(&'a mut self, id: Option<Ulid>) -> FeatureValue {
+        if self.distributor.is_some() {
+            return FeatureValue::Variadic(self.variation(id).unwrap());
+        }
+        FeatureValue::Simple(&self.control_value)
+    }
+
+    pub fn variations(&self) -> Result<Vec<&Variation>> {
         if let Some(distributor) = &self.distributor {
             Ok(distributor.variations())
         } else {

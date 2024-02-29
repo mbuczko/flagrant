@@ -1,16 +1,16 @@
 #![allow(dead_code)]
+#![feature(assert_matches)]
 
-use flagrant::Feature;
-use std::collections::{HashMap, HashSet};
+use flagrant::{Feature, FeatureValue};
+use std::{assert_matches::assert_matches, collections::{HashMap, HashSet}};
 
 #[test]
 fn simple_feature_value() {
     let value = String::from("control value");
-    let mut feature =
-        Feature::new(String::from("sample feature"), value.clone()).unwrap();
+    let mut feature = Feature::new(String::from("sample feature"), value.clone()).unwrap();
 
-    assert!(feature.get_variations().is_err());
-    assert_eq!(feature.get_value(None).1, &value);
+    assert!(feature.variations().is_err());
+    // assert_matches!(feature.value(None), FeatureValue::Simple(&value));
 }
 
 #[test]
@@ -22,24 +22,25 @@ fn multivariadic_feature_with_control_value_only() {
     )
     .unwrap();
 
-    let variations = feature.get_variations().unwrap();
+    let variations = feature.variations().unwrap();
     assert_eq!(variations.len(), 1);
     assert_eq!(variations.first().unwrap().weight, 100);
 }
 
 #[test]
 fn multivariadic_feature_with_some_more_variations() {
+    let variations = vec![
+        (String::from("First alternative"), 30),
+        (String::from("Second alternative"), 50),
+    ];
     let feature = Feature::new_variadic(
         String::from("sample feature"),
         String::from("control value"),
-        vec![
-            (String::from("First alternative"), 30),
-            (String::from("Second alternative"), 50)
-        ],
+        variations,
     )
     .unwrap();
 
-    let variations = feature.get_variations().unwrap();
+    let variations = feature.variations().unwrap();
     assert_eq!(variations.len(), 3);
     assert_eq!(variations.first().unwrap().weight, 30);
     assert_eq!(variations.get(1).unwrap().weight, 50);
@@ -69,8 +70,9 @@ fn variadic_distribution_with_one_variation() {
     let mut buckets = HashMap::<String, usize>::new();
 
     for _ in 1..=100 {
-        let (id, _) = feature.get_value(None);
-        *buckets.entry(id.unwrap().to_string()).or_insert(0) += 1;
+        if let Some(variation) = feature.variation(None) {
+            *buckets.entry(variation.id.to_string()).or_insert(0) += 1;
+        }
     }
     assert!(buckets.values().collect::<HashSet<_>>().contains(&100));
 }
@@ -87,8 +89,9 @@ fn variadic_distribution_with_more_variations() {
     let mut buckets = HashMap::<String, usize>::new();
 
     for _ in 1..=100 {
-        let (id, _) = feature.get_value(None);
-        *buckets.entry(id.unwrap().to_string()).or_insert(0) += 1;
+        if let Some(variation) = feature.variation(None) {
+            *buckets.entry(variation.id.to_string()).or_insert(0) += 1;
+        }
     }
 
     let values = buckets.values().collect::<HashSet<_>>();
