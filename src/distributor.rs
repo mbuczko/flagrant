@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use ulid::Ulid;
 
 #[derive(Clone, Debug)]
@@ -21,7 +21,9 @@ pub struct AccumulativeDistributor {
 }
 
 pub trait Distributor<'a> {
-    fn distribute(&mut self, ident: Option<String>) -> Result<&Variation>;
+    fn distribute(&mut self, ident: Option<String>) -> &Variation;
+    fn variations(&self) -> Vec<&Variation>;
+
     fn set_control_value(&'a mut self, value: String) -> Result<Vec<&'a Variation>>;
     fn set_variations(&'a mut self, variations: Vec<Variation>) -> Result<Vec<&'a Variation>>;
 }
@@ -40,9 +42,6 @@ impl AccumulativeDistributor {
             requests: 0,
             variations: vec![accumulated],
         }
-    }
-    pub fn variations(&self) -> Vec<&Variation> {
-        self.variations.iter().map(|acc| &acc.variation).collect()
     }
 }
 
@@ -83,27 +82,29 @@ impl<'a> Distributor<'a> for AccumulativeDistributor {
         Ok(self.variations())
     }
 
+    fn variations(&self) -> Vec<&Variation> {
+        self.variations.iter().map(|acc| &acc.variation).collect()
+    }
+
     /// When `distribute` is being called:
     /// - choose the variation with the largest `accum`
     /// - subtract 100 from the `accum` for the chosen variation
     /// - add `weight` to `accum` for all variations, including the chosen one
-    fn distribute(&mut self, _ident: Option<String>) -> Result<&Variation> {
+    fn distribute(&mut self, _ident: Option<String>) -> &Variation {
         let max_accum = self
             .variations
             .iter_mut()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.accum.cmp(&b.accum));
 
-        if let Some((idx, var)) = max_accum {
-            var.accum -= 100;
+        // there should be always at least one variation - a control value
+        let (idx, var) = max_accum.unwrap();
 
-            for var in self.variations.iter_mut() {
-                var.accum += var.variation.weight;
-            }
-            if let Some(var) = self.variations.get(idx).map(|v| &v.variation) {
-                return Ok(var);
-            }
+        var.accum -= 100;
+
+        for var in self.variations.iter_mut() {
+            var.accum += var.variation.weight;
         }
-        Err(anyhow!("No variation found? Should not happen"))
+        self.variations.get(idx).map(|v| &v.variation).unwrap()
     }
 }

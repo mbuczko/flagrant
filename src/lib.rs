@@ -1,13 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use distributor::{AccumulativeDistributor, Distributor, Variation};
 use ulid::Ulid;
 
 mod distributor;
-
-enum FeatureValue<'a> {
-    Simple(&'a String),
-    Variadic(&'a Variation),
-}
 
 pub struct Feature<'a> {
     name: String,
@@ -17,18 +12,18 @@ pub struct Feature<'a> {
 }
 
 impl<'a> Feature<'a> {
-    pub fn new(name: String, value: String, is_enabled: bool) -> Result<Self> {
+    pub fn new(name: String, value: String) -> Result<Self> {
         Ok(Feature {
             name,
-            is_enabled,
+            is_enabled: false,
             control_value: value,
             distributor: None,
         })
     }
+
     pub fn new_variadic(
         name: String,
         control_value: String,
-        is_enabled: bool,
         variations: Vec<(String, i16)>,
     ) -> Result<Self> {
         let mut distributor = AccumulativeDistributor::new(control_value.clone());
@@ -44,16 +39,25 @@ impl<'a> Feature<'a> {
         distributor.set_variations(vars)?;
         Ok(Feature {
             name,
-            is_enabled,
+            is_enabled: false,
             control_value,
             distributor: Some(Box::new(distributor)),
         })
     }
-    pub fn get_value(&mut self, ident: Option<String>) -> Result<(&Option<Ulid>, &String)> {
+
+    pub fn get_value(&mut self, ident: Option<String>) -> (&Option<Ulid>, &String) {
         if let Some(distributor) = &mut self.distributor {
-            let result = distributor.distribute(ident)?;
-            return Ok((&result.id, &result.value));
+            let result = distributor.distribute(ident);
+            return (&result.id, &result.value);
         }
-        Ok((&None, &self.control_value))
+        (&None, &self.control_value)
+    }
+
+    pub fn get_variations(&self) -> Result<Vec<& Variation>> {
+        if let Some(distributor) = &self.distributor {
+            Ok(distributor.variations())
+        } else {
+            Err(anyhow!("Not a variadic feature"))
+        }
     }
 }
