@@ -1,16 +1,16 @@
 #![allow(dead_code)]
-#![feature(assert_matches)]
 
 use flagrant::{Feature, FeatureValue};
-use std::{assert_matches::assert_matches, collections::{HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
 
 #[test]
 fn simple_feature_value() {
     let value = String::from("control value");
     let mut feature = Feature::new(String::from("sample feature"), value.clone()).unwrap();
 
+    // simple feature - no variations, just a constant value
     assert!(feature.variations().is_err());
-    // assert_matches!(feature.value(None), FeatureValue::Simple(&value));
+    assert_eq!(feature.value(None), FeatureValue::Simple(&value));
 }
 
 #[test]

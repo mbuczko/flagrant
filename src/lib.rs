@@ -4,7 +4,7 @@ use ulid::Ulid;
 
 mod distributor;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum FeatureValue<'a> {
     Simple(&'a String),
     Variadic(&'a Variation),
@@ -64,7 +64,7 @@ impl<'a> Feature<'a> {
         None
     }
 
-    pub fn value(&'a mut self, id: Option<Ulid>) -> FeatureValue {
+    pub fn value(&mut self, id: Option<Ulid>) -> FeatureValue {
         if self.distributor.is_some() {
             return FeatureValue::Variadic(self.variation(id).unwrap());
         }

@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use ulid::Ulid;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Variation {
     pub id: Ulid,
     pub value: String,
