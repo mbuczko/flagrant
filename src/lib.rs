@@ -66,10 +66,10 @@ impl<'a> Feature<'a> {
     }
 
     /// Returns a value of feature which might be a simple String or
-    /// a variation if feature is a variadic one. In this case, depending
-    /// on `id` either known variation is returned, or call is being
-    /// distributed among all variations and matching one (depending on
-    /// weights) gets returned.
+    /// a `Variation` if feature is a variadic one. In this case, depending
+    /// on `id` either known variation (along with its value) is returned,
+    /// or this method call is being distributed among all variations and
+    /// matching one, depending on weights, gets returned.
     pub fn value(&mut self, id: Option<Ulid>) -> Result<FeatureValue> {
         if self.distributor.is_some() {
             if let Some(id) = id {
@@ -85,12 +85,14 @@ impl<'a> Feature<'a> {
         Ok(FeatureValue::Simple(&self.control_value))
     }
 
-    /// If feature is variadic one, returns a variation of given `id`.
+    /// Returns a variation of given `id` if feature is variadic one.
     /// Bails out with error otherwise.
     pub fn variation(&mut self, id: Ulid) -> Result<Option<&Variation>> {
         Ok(self.variations()?.into_iter().find(|v| v.id == id))
     }
 
+    /// Returns a vector of feature variations if feature is variadic one.
+    /// Bails out with error otherwise.
     pub fn variations(&self) -> Result<Vec<&Variation>> {
         if let Some(distributor) = &self.distributor {
             Ok(distributor.variations())
