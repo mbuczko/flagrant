@@ -23,7 +23,7 @@ fn multivariadic_feature_with_control_value_only() {
     )
     .unwrap();
 
-    let variations = feature.variations().unwrap();
+    let variations = feature.toggle_enabled(true).variations().unwrap();
     assert_eq!(variations.len(), 1);
 
     let id = variations.first().unwrap().id;
@@ -49,7 +49,11 @@ fn multivariadic_feature_with_changed_control_value() {
     let variations = feature.variations().unwrap();
     let id = variations.first().unwrap().id;
 
-    feature.set_control_value(new_control_value.clone());
+    let result = feature
+        .toggle_enabled(true)
+        .set_value(new_control_value.clone());
+
+    assert!(result.is_ok());
     assert_eq!(
         feature.value(None).unwrap(),
         FeatureValue::Variadic(&Variation {

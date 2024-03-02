@@ -52,12 +52,20 @@ impl<'a> Feature<'a> {
         })
     }
 
-    pub fn set_control_value(&mut self, control_value: String) -> Result<()> {
+    /// Resets a feature value. In case when feature happens to be a variadic
+    /// one, value also becomes a "control value".
+    pub fn set_value(&mut self, control_value: String) -> Result<()> {
         self.value = control_value.clone();
         if let Some(distributor) = &mut self.distributor {
             distributor.set_control_value(control_value)?
         }
         Ok(())
+    }
+
+    /// Resets `is_enabled` feature state.
+    pub fn toggle_enabled(&mut self, is_enabled: bool) -> &mut Self {
+        self.is_enabled = is_enabled;
+        self
     }
 
     /// Turns a possibly variadic feature into a simple one.
