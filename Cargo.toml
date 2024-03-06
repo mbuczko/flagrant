@@ -1,12 +1,29 @@
-[package]
-name = "flagrant"
-version = "0.1.0"
+[workspace]
+members = [ "crates/*" ]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+authors = ["Michal Buczko <michal@buczko.pl>"]
 edition = "2021"
 
-[dependencies]
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+sqlx = "0.7.3"
+serde = "1.0"
+serde_json = "1.0"
+tracing-subscriber = "0.3"
+tracing-log = "0.1.3"
+tracing = "0.1.36"
+reqwest = "0.11"
+thiserror = "1.0.29"
 anyhow = "1.0.80"
-ulid = "1.1.2"
+clap = "4.5.1"
 
-[lib]
-doctest = false
-test = false
+[profile.release]
+panic = "abort"
+opt-level = 'z'  # Optimize for size.
+codegen-units = 1
+lto = true
+strip = true
+#strip = "debuginfo
