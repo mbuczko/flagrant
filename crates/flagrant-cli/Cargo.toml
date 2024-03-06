@@ -8,17 +8,16 @@ edition.workspace = true
 flagrant= {path = "../flagrant"}
 
 # common dependencies
-tokio = {workspace = true, features = ["macros"]}
+tokio = {workspace = true}
+axum = {workspace = true}
+axum-extra = {workspace = true}
+tower = {workspace = true}
 tracing = {workspace = true}
-tracing-log = {workspace = true}
-tracing-subscriber = {workspace = true, features = ["env-filter"]}
+tracing-subscriber = {workspace = true}
 serde_json = {workspace = true}
 thiserror = {workspace = true}
 anyhow = {workspace = true}
 
-axum = {version = "0.7"}
-axum-extra = {version = "0.9.1", features = ["typed-header"]}
-tower = {version = "0.4.13", features = ["util", "timeout", "load-shed", "limit"]}
 clap = {version = "4.5.1"}
 
 [dependencies.tower-http]
