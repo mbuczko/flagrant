@@ -6,7 +6,15 @@ edition.workspace = true
 
 [dependencies]
 anyhow = {workspace = true}
+tracing = {workspace = true}
+tracing-log = {workspace = true}
+sqlx = {workspace = true, features = ["sqlite"]}
+
 ulid = "1.1.2"
+semver = "1.0.14"
+rust-embed = "6.4.1"
+lazy_static = "1.4.0"
+hugsqlx = {version = "0.3.0", features = ["sqlite"]}
 
 [lib]
 doctest = false

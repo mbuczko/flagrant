@@ -1,7 +1,10 @@
 use anyhow::{anyhow, bail, Result};
 use distributor::{AccumulativeDistributor, Distributor, Variation};
+use semver::Version;
+use sqlx::{Pool, Sqlite};
 use ulid::Ulid;
 
+pub mod db;
 pub mod distributor;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -110,4 +113,13 @@ impl<'a> Feature<'a> {
             Err(anyhow!("Not a variadic feature."))
         }
     }
+}
+
+pub async fn init() -> Result<Pool<Sqlite>> {
+    let pool = db::init_pool()
+        .await
+        .expect("Could not connect to database");
+
+    db::migrate(&pool, Version::parse(env!("CARGO_PKG_VERSION")).unwrap()).await?;
+    Ok(pool)
 }
