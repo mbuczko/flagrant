@@ -4,8 +4,10 @@ use semver::Version;
 use sqlx::{Pool, Sqlite};
 use ulid::Ulid;
 
-pub mod db;
+mod db;
 pub mod distributor;
+pub mod errors;
+pub mod models;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FeatureValue<'a> {

@@ -1,6 +1,13 @@
 use axum::Router;
+use flagrant::models;
+use sqlx::{Pool, Sqlite};
 use tower_http::compression::CompressionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+mod cookie;
+mod errors;
+mod extractors;
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,6 +23,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let pool = flagrant::init().await?;
+    initialize(&pool).await?;
+
+
     let app = Router::new()
     // .route("/@me", get(users::user_identity))
     // .route_layer(middleware::from_fn(middlewares::add_claim_details))
@@ -27,11 +37,18 @@ async fn main() -> anyhow::Result<()> {
         .await
         .unwrap();
 
-    // how to set a cookie?
+    // how to set/read a cookie?
     // https://github.com/tokio-rs/axum/discussions/351
-    //
+    // https://github.com/tokio-rs/axum/blob/b6b203b3065e4005bda01efac8429176da055ae2/examples/oauth/src/main.rs#L237
+
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 
+    Ok(())
+}
+
+async fn initialize(pool: &Pool<Sqlite>) -> anyhow::Result<()> {
+    let project = models::project::create_project(pool, "flagrant".into()).await?;
+    let environment = models::environment::create_environment(pool, &project, "production".into(), None).await?;
     Ok(())
 }

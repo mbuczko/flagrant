@@ -6,9 +6,12 @@ edition.workspace = true
 
 [dependencies]
 anyhow = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+sqlx = {workspace = true, features = ["sqlite"]}
 tracing = {workspace = true}
 tracing-log = {workspace = true}
-sqlx = {workspace = true, features = ["sqlite"]}
+thiserror = {workspace = true}
 
 ulid = "1.1.2"
 semver = "1.0.14"
