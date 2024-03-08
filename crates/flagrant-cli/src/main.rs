@@ -1,10 +1,10 @@
 use axum::Router;
-use flagrant::models;
+use flagrant::models::{environment, project};
 use sqlx::{Pool, Sqlite};
 use tower_http::compression::CompressionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod cookie;
+mod repl;
 mod errors;
 mod extractors;
 
@@ -23,32 +23,30 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let pool = flagrant::init().await?;
-    initialize(&pool).await?;
+    let proj = initialize_project(&pool).await?;
 
 
-    let app = Router::new()
-    // .route("/@me", get(users::user_identity))
-    // .route_layer(middleware::from_fn(middlewares::add_claim_details))
-        .with_state(pool)
-        .layer(CompressionLayer::new());
+    // let app = Router::new()
+    //     .route("/@me", get(users::user_identity))
+    //     .with_state(pool)
+    //     .layer(CompressionLayer::new());
 
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
         .await
         .unwrap();
 
-    // how to set/read a cookie?
-    // https://github.com/tokio-rs/axum/discussions/351
-    // https://github.com/tokio-rs/axum/blob/b6b203b3065e4005bda01efac8429176da055ae2/examples/oauth/src/main.rs#L237
-
     tracing::info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    // axum::serve(listener, app).await.unwrap();
 
+    repl::init_repl(proj)?;
     Ok(())
 }
 
-async fn initialize(pool: &Pool<Sqlite>) -> anyhow::Result<()> {
-    let project = models::project::create_project(pool, "flagrant".into()).await?;
-    let environment = models::environment::create_environment(pool, &project, "production".into(), None).await?;
-    Ok(())
+/// Initialize temporary project with sample environment
+async fn initialize_project(pool: &Pool<Sqlite>) -> anyhow::Result<project::Project> {
+    let project = project::create_project(pool, "flagrant".into()).await?;
+    let _env = environment::create_environment(pool, &project, "production".into(), None).await?;
+
+    Ok(project)
 }

@@ -21,6 +21,7 @@ thiserror = {workspace = true}
 anyhow = {workspace = true}
 
 clap = {version = "4.5.1"}
+rustyline = {version = "14.0.0", features = ["derive"]}
 
 [dependencies.tower-http]
 version = "*"
