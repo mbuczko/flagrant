@@ -2,7 +2,7 @@ use flagrant::models::project::Project;
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hint, Hinter};
 use rustyline::history::DefaultHistory;
-use rustyline::{Completer, Context, Editor, Hinter, Helper, Highlighter, Result, Validator};
+use rustyline::{Completer, Context, Editor, Helper, Highlighter, Hinter, Result, Validator};
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
 struct ReplHelper {
@@ -11,13 +11,19 @@ struct ReplHelper {
 }
 
 struct ReplHinter {
-    hints: Vec<CommandHint>,
+    hints: Vec<Command>,
 }
 
 #[derive(Hash, Debug, PartialEq, Eq)]
 struct CommandHint {
     display: String,
     complete_up_to: usize,
+}
+
+#[derive(Debug)]
+struct Command {
+    command: String,
+    hint: String,
 }
 
 impl Hint for CommandHint {
@@ -34,19 +40,12 @@ impl Hint for CommandHint {
     }
 }
 
-impl CommandHint {
-    fn new(text: &str, complete_up_to: &str) -> CommandHint {
-        assert!(text.starts_with(complete_up_to));
-        CommandHint {
-            display: text.into(),
-            complete_up_to: complete_up_to.len(),
-        }
-    }
-
-    fn suffix(&self, strip_chars: usize) -> CommandHint {
-        CommandHint {
-            display: self.display[strip_chars..].to_owned(),
-            complete_up_to: self.complete_up_to.saturating_sub(strip_chars),
+impl Command {
+    fn new(command: &str, hint: &str) -> Command {
+        assert!(hint.starts_with(command));
+        Command {
+            command: command.to_lowercase(),
+            hint: hint.into(),
         }
     }
 }
@@ -55,31 +54,50 @@ impl Hinter for ReplHinter {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
-        if line.is_empty() || pos < line.len() || !(line.ends_with(' ') || line.ends_with('/')) {
+        if line.is_empty() || pos < line.len() || !line.ends_with(' ') {
             return None;
         }
 
-        let cmd = line.split(' ').next().unwrap();
-        self.hints
+        let lowered = line[..line.len()-1].to_lowercase();
+        let command = self.hints
             .iter()
-            .filter_map(|hint| {
-                if hint.display.starts_with(cmd) {
-                    Some(hint.suffix(pos))
-                } else {
-                    None
-                }
-            }).next()
+            .filter(|candidate| {
+                lowered.starts_with(candidate.command.as_str())
+            })
+            .next();
+
+        if let Some(command) = command {
+            let typed_words = line.split_whitespace().count();
+            let strip_chars = command.hint
+                .chars()
+                .enumerate()
+                .filter(|(_, c)| c.is_whitespace())
+                .map(|(i, _)| i)
+                .nth(typed_words - 1)
+                .unwrap_or(command.hint.len()-1);
+
+            return Some(CommandHint {
+                display: command.hint[strip_chars+1..].into(),
+                complete_up_to: command.command.len().saturating_sub(strip_chars),
+            })
+        }
+        None
     }
 }
 
-fn diy_hints() -> Vec<CommandHint> {
+fn diy_hints() -> Vec<Command> {
     let mut hints = Vec::new();
-    hints.push(CommandHint::new("help", "help"));
-    hints.push(CommandHint::new("env/[add | del]", "env"));
-    hints.push(CommandHint::new("env/add name value", "env/add"));
-    hints.push(CommandHint::new("env/del name", "env/del"));
-    hints.push(CommandHint::new("hget key field", "hget "));
-    hints.push(CommandHint::new("hset key field value", "hset "));
+    hints.push(Command::new("help", "help"));
+    hints.push(Command::new("env", "env ADD | DEL | LIST | RENAME"));
+    hints.push(Command::new("env ADD", "env ADD name"));
+    hints.push(Command::new("env DEL", "env DEL name"));
+    hints.push(Command::new("env RENAME", "env RENAME name"));
+    hints.push(Command::new("feat ADD", "feat ADD feature-name value"));
+    hints.push(Command::new("feat DEL", "feat DEL feature-name"));
+    hints.push(Command::new("feat VAL", "feat VAL feature-name new-value"));
+    hints.push(Command::new("feat DESC", "feat DESC feature-name new-description"));
+    hints.push(Command::new("feat LIST", "feat LIST"));
+    hints.push(Command::new("feat", "feat ADD | DEL | DESC | LIST | VAL"));
     hints
 }
 
