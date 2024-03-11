@@ -8,3 +8,9 @@ RETURNING environment_id, name, description
 SELECT environment_id, name, description
 FROM environments
 WHERE environment_id = $1
+
+-- :name fetch_environments_by_name :<> :*
+-- :doc Fetches list of environments in a project starting with provided sufix
+SELECT environment_id, name, description
+FROM environments
+WHERE project_id = $1 AND name LIKE $2

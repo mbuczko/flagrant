@@ -1,16 +1,21 @@
+use std::io;
+
+use flagrant::models::environment;
 use flagrant::models::project::Project;
+use futures::executor;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hint, Hinter};
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Context, Editor, Helper, Highlighter, Hinter, Result, Validator};
+use sqlx::{Pool, Sqlite};
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
-struct ReplHelper {
+struct ReplHelper<'a> {
     #[rustyline(Hinter)]
     hinter: ReplHinter,
     #[rustyline(Completer)]
-    completer: CommandCompleter,
+    completer: CommandCompleter<'a>,
 }
 
 struct ReplHinter {
@@ -31,41 +36,93 @@ struct Command {
 }
 
 #[derive(Debug)]
-struct CommandCompleter {
+struct CommandCompleter<'a> {
+    pool: &'a Pool<Sqlite>,
+    project: &'a Project,
     candidates: Vec<&'static str>,
 }
 
-impl CommandCompleter {
-    pub fn complete_command(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
-        let len = line.len();
+impl<'a> CommandCompleter<'a> {
+    pub fn complete_command(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
+        let empty = line.trim().is_empty();
         let pairs = self
             .candidates
             .iter()
             .filter_map(|c| {
-                if len == 0 || c.starts_with(line) {
+                if empty || c.starts_with(line) {
                     return Some(Pair {
                         display: c.to_string(),
-                        replacement: c[pos..].to_string(),
+                        replacement: c.to_uppercase().to_string(),
                     });
                 }
                 None
             })
             .collect::<Vec<_>>();
 
+        Ok((0, pairs))
+    }
+
+    pub fn complete_argument(
+        &self,
+        command: &str,
+        arg_prefix: &str,
+        pos: usize,
+    ) -> Result<(usize, Vec<Pair>)> {
+        let future = environment::fetch_environment_by_name(arg_prefix, self.pool, self.project);
+        let skip_chars = arg_prefix.len() - 1;
+        let pairs = executor::block_on(future)
+            .map_err(|e| ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?
+            .into_iter()
+            .map(|c| Pair {
+                replacement: c.name[skip_chars..].to_string(),
+                display: c.name,
+            })
+            .collect::<Vec<_>>();
+
         Ok((pos, pairs))
     }
-    pub fn new(commands: Vec<&'static str>) -> CommandCompleter {
+
+    pub fn new(
+        commands: Vec<&'static str>,
+        pool: &'a Pool<Sqlite>,
+        project: &'a Project,
+    ) -> CommandCompleter<'a> {
         CommandCompleter {
             candidates: commands,
+            pool,
+            project,
         }
     }
 }
 
-impl Completer for CommandCompleter {
+impl<'a> Completer for CommandCompleter<'a> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
-        self.complete_command(line, pos)
+        let args = line.split_whitespace().collect::<Vec<_>>();
+        match args.len() {
+            // 0 - nothing entered
+            // 1 - command not finished with whitespace
+            // 2 - subcommand not finished with whitespace
+            0..=2 => self.complete_command(line),
+
+            // command and subcommand provided.
+            // proceed with arg completion.
+            _ => {
+                // back to the nearest whitespace to find begining of argument
+                let mut idx = line[..pos].char_indices();
+                while let Some((i, ch)) = idx.next_back() {
+                    if ch.is_whitespace() {
+                        return self.complete_argument(
+                            args.first().unwrap(),
+                            &line[i + 1..pos],
+                            pos - 1,
+                        );
+                    }
+                }
+                Ok((pos, Vec::default()))
+            }
+        }
     }
 }
 
@@ -152,19 +209,19 @@ fn repl_hints() -> Vec<Command> {
     hints
 }
 
-pub fn init_repl(project: Project) -> Result<()> {
+pub fn init_repl<'a>(pool: &'a Pool<Sqlite>, project: &'a Project) -> Result<()> {
+    let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
+    if rl.load_history("history.txt").is_err() {
+        println!("No previous history.");
+    }
+
     let hinter = ReplHinter {
         hints: repl_hints(),
     };
     let helper = ReplHelper {
         hinter,
-        completer: CommandCompleter::new(vec!["feat", "env"]),
+        completer: CommandCompleter::new(vec!["feat", "env"], pool, project),
     };
-    let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
-
-    if rl.load_history("history.txt").is_err() {
-        println!("No previous history.");
-    }
     rl.set_helper(Some(helper));
 
     loop {

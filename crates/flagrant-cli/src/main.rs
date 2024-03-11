@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     // axum::serve(listener, app).await.unwrap();
 
-    repl::init_repl(proj)?;
+    repl::init_repl(&pool, &proj)?;
     Ok(())
 }
 
@@ -47,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
 async fn initialize_project(pool: &Pool<Sqlite>) -> anyhow::Result<project::Project> {
     let project = project::create_project(pool, "flagrant".into()).await?;
     let _env = environment::create_environment(pool, &project, "production".into(), None).await?;
+    let _env = environment::create_environment(pool, &project, "development".into(), None).await?;
+    let _env = environment::create_environment(pool, &project, "beta".into(), None).await?;
 
     Ok(project)
 }
