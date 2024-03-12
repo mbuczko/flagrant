@@ -16,7 +16,11 @@ pub struct CommandCompleter<'a> {
 }
 
 impl<'a> CommandCompleter<'a> {
-    /// Completes main commands
+
+    /// Completes main commands.
+    ///
+    /// As for now only main command (like FEAT or ENV) are auto-completed,
+    /// which means that subcommands (like ADD) need to be fully entered by hand.
     pub fn complete_command(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
         let empty = line.trim().is_empty();
         let pairs = self
@@ -36,8 +40,10 @@ impl<'a> CommandCompleter<'a> {
         Ok((0, pairs))
     }
 
-    /// Completes arguments to commands (like project or environments names).
-    /// This function blocks on asynchronous access to underlaying database.
+    /// Completes contextual arguments to main command (eg. environments name).
+    ///
+    /// As this operation requires asynchronous connection to underlaying database,
+    /// this function blocks till async code gets resolved and comes back with response.
     pub fn complete_argument(
         &self,
         _command: &str,
@@ -78,8 +84,8 @@ impl<'a> Completer for CommandCompleter<'a> {
         let args = line.split_whitespace().collect::<Vec<_>>();
         match args.len() {
             // 0 - nothing entered
-            // 1 - command not finished with whitespace
-            // 2 - subcommand not finished with whitespace
+            // 1 - command not finished with whitespace yet
+            // 2 - subcommand not finished with whitespace yet
             0..=2 => self.complete_command(line),
 
             // command and subcommand provided.
