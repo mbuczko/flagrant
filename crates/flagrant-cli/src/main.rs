@@ -8,7 +8,6 @@ mod repl;
 mod errors;
 mod extractors;
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
@@ -39,7 +38,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     // axum::serve(listener, app).await.unwrap();
 
-    repl::init_repl(&pool, &proj)?;
+    repl::readline::init(&pool, &proj)?;
+
     Ok(())
 }
 
