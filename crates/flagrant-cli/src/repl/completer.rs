@@ -16,7 +16,6 @@ pub struct CommandCompleter<'a> {
 }
 
 impl<'a> CommandCompleter<'a> {
-
     /// Completes main commands
     pub fn complete_command(&self, line: &str) -> Result<(usize, Vec<Pair>)> {
         let empty = line.trim().is_empty();
@@ -61,10 +60,10 @@ impl<'a> CommandCompleter<'a> {
 
     pub fn new(
         commands: Vec<&'static str>,
-        pool: &'a Pool<Sqlite>,
         project: &'a Project,
+        pool: &'a Pool<Sqlite>,
     ) -> CommandCompleter<'a> {
-        CommandCompleter {
+        Self {
             commands,
             pool,
             project,

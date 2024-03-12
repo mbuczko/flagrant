@@ -6,7 +6,7 @@ pub struct ReplHinter {
 }
 
 #[derive(Debug)]
-struct Command {
+pub struct Command {
     command: String,
     hint: String,
     argc: usize,
@@ -32,7 +32,7 @@ impl Hint for CommandHint {
 }
 
 impl Command {
-    fn new(command: &str, hint: &str) -> Command {
+    pub fn new(command: &str, hint: &str) -> Command {
         assert!(hint.starts_with(command));
         Command {
             command: command.to_lowercase(),
@@ -80,23 +80,7 @@ impl Hinter for ReplHinter {
 }
 
 impl ReplHinter {
-    pub fn new() -> ReplHinter {
-        let hints = vec![
-            Command::new("help", "help"),
-            Command::new("env", "env ADD | DEL | LIST | RENAME"),
-            Command::new("env ADD", "env ADD name"),
-            Command::new("env DEL", "env DEL name"),
-            Command::new("env RENAME", "env RENAME name"),
-            Command::new("feat ADD", "feat ADD feature-name value"),
-            Command::new("feat DEL", "feat DEL feature-name"),
-            Command::new("feat VAL", "feat VAL feature-name new-value"),
-            Command::new(
-                "feat DESC",
-                "feat DESC feature-name new-description",
-            ),
-            Command::new("feat LIST", "feat LIST"),
-            Command::new("feat", "feat ADD | DEL | DESC | LIST | VAL"),
-        ];
+    pub fn new(hints: Vec<Command>) -> ReplHinter {
         ReplHinter {
             hints
         }

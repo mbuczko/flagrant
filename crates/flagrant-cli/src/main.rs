@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     // axum::serve(listener, app).await.unwrap();
 
-    repl::readline::init(&pool, &proj)?;
+    repl::readline::init(&proj, &pool)?;
 
     Ok(())
 }
