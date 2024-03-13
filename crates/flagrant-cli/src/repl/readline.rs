@@ -21,27 +21,28 @@ pub fn env_actions(args: Vec<&str>, context: &mut ReplContext) -> anyhow::Result
     if args.is_empty() {
         bail!("Not enough parameters provided.");
     }
-
     match *args.first().unwrap() {
         "add" => {
             let name = args.get(1);
             let description = args.get(2);
             if let Some(name) = name {
-                let fut = environment::create_environment(
+                let env = executor::block_on(environment::create_environment(
                     &context.pool,
                     &context.project,
                     name.to_string(),
                     description.map(|d| d.to_string()),
-                );
-                let env = executor::block_on(fut)?;
+                ))?;
+
                 println!("Created new environment '{}' (id={})", env.name, env.id);
                 return Ok(());
             }
             Err(anyhow!("Environment name not provided"))
         }
         "ls" => {
-            let fut = environment::fetch_environments_for_project(&context.pool, &context.project);
-            let envs = executor::block_on(fut)?;
+            let envs = executor::block_on(environment::fetch_environments_for_project(
+                &context.pool,
+                &context.project,
+            ))?;
             for env in envs {
                 println!("{:4} | {}", env.id, env.name);
             }
@@ -49,9 +50,12 @@ pub fn env_actions(args: Vec<&str>, context: &mut ReplContext) -> anyhow::Result
         }
         "sw" => {
             if let Some(name) = args.get(1) {
-                let fut =
-                    environment::fetch_environment_by_name(&context.pool, &context.project, name);
-                if let Some(env) = executor::block_on(fut)? {
+                let env = executor::block_on(environment::fetch_environment_by_name(
+                    &context.pool,
+                    &context.project,
+                    name,
+                ))?;
+                if let Some(env) = env {
                     println!("Switched to environment '{}' (id={})", env.name, env.id);
                     context.set_environment(env);
                     return Ok(());
