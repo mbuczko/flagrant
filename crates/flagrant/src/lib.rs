@@ -60,7 +60,7 @@ impl<'a> Feature<'a> {
     /// Resets a feature value. In case when feature happens to be a variadic
     /// one, value also becomes a "control value".
     pub fn set_value(&mut self, control_value: String) -> Result<()> {
-        self.value = control_value.clone();
+        self.value.clone_from(&control_value);
         if let Some(distributor) = &mut self.distributor {
             distributor.set_control_value(control_value)?
         }

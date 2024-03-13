@@ -48,9 +48,9 @@ async fn main() -> anyhow::Result<()> {
 /// Initialize temporary project with sample environment
 async fn initialize_project(pool: &Pool<Sqlite>) -> anyhow::Result<project::Project> {
     let project = project::create_project(pool, "flagrant".into()).await?;
-    let _env = environment::create_environment(pool, &project, "production".into(), None).await?;
-    let _env = environment::create_environment(pool, &project, "development".into(), None).await?;
-    let _env = environment::create_environment(pool, &project, "beta".into(), None).await?;
+    let _env = environment::create_environment(pool, &project, "production", None).await?;
+    let _env = environment::create_environment(pool, &project, "development", None).await?;
+    let _env = environment::create_environment(pool, &project, "beta", None).await?;
 
     Ok(project)
 }

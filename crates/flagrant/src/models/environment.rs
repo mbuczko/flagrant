@@ -18,15 +18,15 @@ pub struct Environment {
     pub description: Option<String>,
 }
 
-pub async fn create_environment(
+pub async fn create_environment<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
-    name: String,
-    description: Option<String>,
+    name: T,
+    description: Option<T>,
 ) -> anyhow::Result<Environment> {
     Ok(Environments::create_environment::<_, Environment>(
         pool,
-        params!(project.id, name, description),
+        params!(project.id, name.as_ref(), description.map(|d| d.as_ref().to_string())),
     )
     .await
     .map_err(|e| {
@@ -63,30 +63,31 @@ pub async fn fetch_environments_for_project(
     )
 }
 
-pub async fn fetch_environment_by_name(
+pub async fn fetch_environment_by_name<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
-    name: &str,
+    name: T,
 ) -> anyhow::Result<Option<Environment>> {
-    Ok(
-        Environments::fetch_environments_by_name::<_, Environment>(pool, params!(project.id, name))
-            .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "Could not fetch environment");
-                DbError::QueryFailed
-            })?,
+    Ok(Environments::fetch_environments_by_name::<_, Environment>(
+        pool,
+        params!(project.id, name.as_ref()),
     )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch environment");
+        DbError::QueryFailed
+    })?)
 }
 
-pub async fn fetch_environment_by_pattern(
+pub async fn fetch_environment_by_pattern<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
-    prefix: &str,
+    prefix: T,
 ) -> anyhow::Result<Vec<Environment>> {
     Ok(
         Environments::fetch_environments_by_pattern::<_, Environment>(
             pool,
-            params!(project.id, format!("{}%", prefix)),
+            params!(project.id, format!("{}%", prefix.as_ref())),
         )
         .await
         .map_err(|e| {

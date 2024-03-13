@@ -19,8 +19,9 @@ impl ReplContext {
     pub fn builder(project: Project, pool: Pool<Sqlite>) -> ReplContextBuilder {
         ReplContextBuilder { project, env: None, pool}
     }
-    pub fn set_environment(&mut self, env: Environment) {
+    pub fn set_environment(&mut self, env: Environment) -> anyhow::Result<()> {
         self.env = Some(env);
+        Ok(())
     }
 }
 

@@ -1,15 +1,10 @@
 use rustyline::hint::{Hint, Hinter};
 use rustyline::Context;
 
+use super::command::Command;
+
 pub struct ReplHinter {
     hints: Vec<Command>,
-}
-
-#[derive(Debug)]
-pub struct Command {
-    command: String,
-    hint: String,
-    argc: usize,
 }
 
 #[derive(Hash, Debug, PartialEq, Eq)]
@@ -31,17 +26,6 @@ impl Hint for CommandHint {
     }
 }
 
-impl Command {
-    pub fn new(command: &str, hint: &str) -> Command {
-        assert!(hint.starts_with(command));
-        Command {
-            command: command.to_lowercase(),
-            hint: hint.into(),
-            argc: command.split_whitespace().count() - 1,
-        }
-    }
-}
-
 impl Hinter for ReplHinter {
     type Hint = CommandHint;
 
@@ -56,8 +40,8 @@ impl Hinter for ReplHinter {
             .hints
             .iter()
             .find(|candidate| match candidate.argc {
-                0 => lowered == candidate.command,
-                p => argc >= p && lowered.starts_with(candidate.command.as_str()),
+                0 => lowered == candidate.cmd,
+                p => argc >= p && lowered.starts_with(candidate.cmd.as_str()),
             });
 
         if let Some(command) = command {
@@ -72,7 +56,7 @@ impl Hinter for ReplHinter {
 
             return Some(CommandHint {
                 display: command.hint[strip_chars + 1..].into(),
-                complete_up_to: command.command.len().saturating_sub(strip_chars),
+                complete_up_to: command.cmd.len().saturating_sub(strip_chars),
             });
         }
         None
@@ -81,8 +65,6 @@ impl Hinter for ReplHinter {
 
 impl ReplHinter {
     pub fn new(hints: Vec<Command>) -> ReplHinter {
-        ReplHinter {
-            hints
-        }
+        ReplHinter { hints }
     }
 }
