@@ -9,14 +9,13 @@ use rustyline::{Context, Result};
 use sqlx::{Pool, Sqlite};
 
 #[derive(Debug)]
-pub struct CommandCompleter<'a> {
-    pool: &'a Pool<Sqlite>,
-    project: &'a Project,
+pub struct CommandCompleter {
     commands: Vec<&'static str>,
+    project: Project,
+    pool: Pool<Sqlite>,
 }
 
-impl<'a> CommandCompleter<'a> {
-
+impl CommandCompleter {
     /// Completes main commands.
     ///
     /// As for now only main command (like FEAT or ENV) are auto-completed,
@@ -50,7 +49,11 @@ impl<'a> CommandCompleter<'a> {
         arg_prefix: &str,
         pos: usize,
     ) -> Result<(usize, Vec<Pair>)> {
-        let future = environment::fetch_environment_by_name(arg_prefix, self.pool, self.project);
+        let future = environment::fetch_environment_by_pattern(
+            &self.pool,
+            &self.project,
+            arg_prefix,
+        );
         let skip_chars = arg_prefix.len() - 1;
         let pairs = executor::block_on(future)
             .map_err(|e| ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?
@@ -64,20 +67,12 @@ impl<'a> CommandCompleter<'a> {
         Ok((pos, pairs))
     }
 
-    pub fn new(
-        commands: Vec<&'static str>,
-        project: &'a Project,
-        pool: &'a Pool<Sqlite>,
-    ) -> CommandCompleter<'a> {
-        Self {
-            commands,
-            pool,
-            project,
-        }
+    pub fn new(commands: Vec<&'static str>, project: Project, pool: Pool<Sqlite>) -> CommandCompleter {
+        Self { commands, project, pool}
     }
 }
 
-impl<'a> Completer for CommandCompleter<'a> {
+impl Completer for CommandCompleter {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {

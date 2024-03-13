@@ -49,18 +49,49 @@ pub async fn fetch_environment(
     )
 }
 
-pub async fn fetch_environment_by_name(
-    prefix: &str,
+pub async fn fetch_environments_for_project(
     pool: &Pool<Sqlite>,
     project: &Project,
 ) -> anyhow::Result<Vec<Environment>> {
-    Ok(Environments::fetch_environments_by_name::<_, Environment>(
-        pool,
-        params!(project.id, format!("{}%", prefix)),
+    Ok(
+        Environments::fetch_environments_for_project::<_, Environment>(pool, params!(project.id))
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "Could not fetch environments for project");
+                DbError::QueryFailed
+            })?,
     )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch list of environments");
-        DbError::QueryFailed
-    })?)
+}
+
+pub async fn fetch_environment_by_name(
+    pool: &Pool<Sqlite>,
+    project: &Project,
+    name: &str,
+) -> anyhow::Result<Option<Environment>> {
+    Ok(
+        Environments::fetch_environments_by_name::<_, Environment>(pool, params!(project.id, name))
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "Could not fetch environment");
+                DbError::QueryFailed
+            })?,
+    )
+}
+
+pub async fn fetch_environment_by_pattern(
+    pool: &Pool<Sqlite>,
+    project: &Project,
+    prefix: &str,
+) -> anyhow::Result<Vec<Environment>> {
+    Ok(
+        Environments::fetch_environments_by_pattern::<_, Environment>(
+            pool,
+            params!(project.id, format!("{}%", prefix)),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not fetch list of environments");
+            DbError::QueryFailed
+        })?,
+    )
 }

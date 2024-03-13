@@ -8,7 +8,7 @@ use crate::errors::DbError;
 #[queries = "resources/db/queries/projects.sql"]
 struct Projects {}
 
-#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
+#[derive(Clone, Serialize, Deserialize, Debug, sqlx::FromRow)]
 pub struct Project {
     #[sqlx(rename = "project_id")]
     pub id: u16,

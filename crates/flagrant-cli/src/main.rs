@@ -4,6 +4,8 @@ use sqlx::{Pool, Sqlite};
 use tower_http::compression::CompressionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::repl::context::ReplContext;
+
 mod repl;
 mod errors;
 mod extractors;
@@ -38,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("listening on {}", listener.local_addr().unwrap());
     // axum::serve(listener, app).await.unwrap();
 
-    repl::readline::init(&proj, &pool)?;
+    repl::readline::init(ReplContext::builder(proj, pool).build())?;
 
     Ok(())
 }
