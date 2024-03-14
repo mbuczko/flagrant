@@ -15,7 +15,7 @@ pub trait Invokable {
     /// A case-insensitive command which triggers invokable action
     fn triggered_by() -> &'static str;
 
-    /// Invokes a code handling action that it was implemented for.
+    /// Invokes machinery handling an action that it was implemented for.
     ///
     /// Based on provided arguments, function might mutate a context, which
     /// may be helpful in certain situations, like changing current environment.

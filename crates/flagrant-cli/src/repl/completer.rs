@@ -39,7 +39,7 @@ impl CommandCompleter {
         Ok((0, pairs))
     }
 
-    /// Completes contextual arguments to main command (eg. environments name).
+    /// Completes contextual arguments to main command (eg. environments names).
     ///
     /// As this operation requires asynchronous connection to underlaying database,
     /// this function blocks till async code gets resolved and comes back with response.
@@ -49,11 +49,8 @@ impl CommandCompleter {
         arg_prefix: &str,
         pos: usize,
     ) -> Result<(usize, Vec<Pair>)> {
-        let future = environment::fetch_environment_by_pattern(
-            &self.pool,
-            &self.project,
-            arg_prefix,
-        );
+        let future =
+            environment::fetch_environment_by_pattern(&self.pool, &self.project, arg_prefix);
         let skip_chars = arg_prefix.len() - 1;
         let pairs = executor::block_on(future)
             .map_err(|e| ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?
@@ -67,10 +64,18 @@ impl CommandCompleter {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, project: Project, pool: Pool<Sqlite>) -> CommandCompleter {
-        Self { commands, project, pool}
-    }
-}
+    pub fn new(
+        commands: Vec<&'static str>,
+        project: Project,
+        pool: Pool<Sqlite>,
+    ) -> CommandCompleter {
+        Self {
+            commands,
+            project,
+            pool,
+        }
+    }}
+
 
 impl Completer for CommandCompleter {
     type Candidate = Pair;
