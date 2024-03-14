@@ -1,0 +1,9 @@
+[package]
+name = "flagrant-types"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = {workspace = true}
+sqlx = {workspace = true}

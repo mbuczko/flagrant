@@ -1,24 +1,14 @@
 use hugsqlx::{params, HugSqlx};
-use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 
+use flagrant_types::{Environment, Project};
 use crate::errors::DbError;
-
-use super::project::Project;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/environments.sql"]
 struct Environments {}
 
-#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
-pub struct Environment {
-    #[sqlx(rename = "environment_id")]
-    pub id: u16,
-    pub name: String,
-    pub description: Option<String>,
-}
-
-pub async fn create_environment<T: AsRef<str>>(
+pub async fn create<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
     name: T,
@@ -35,7 +25,7 @@ pub async fn create_environment<T: AsRef<str>>(
     })?)
 }
 
-pub async fn fetch_environment(
+pub async fn fetch(
     pool: &Pool<Sqlite>,
     environment_id: u16,
 ) -> anyhow::Result<Environment> {
@@ -49,7 +39,7 @@ pub async fn fetch_environment(
     )
 }
 
-pub async fn fetch_environments_for_project(
+pub async fn fetch_for_project(
     pool: &Pool<Sqlite>,
     project: &Project,
 ) -> anyhow::Result<Vec<Environment>> {
@@ -63,7 +53,7 @@ pub async fn fetch_environments_for_project(
     )
 }
 
-pub async fn fetch_environment_by_name<T: AsRef<str>>(
+pub async fn fetch_by_name<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
     name: T,
@@ -79,7 +69,7 @@ pub async fn fetch_environment_by_name<T: AsRef<str>>(
     })?)
 }
 
-pub async fn fetch_environment_by_pattern<T: AsRef<str>>(
+pub async fn fetch_by_pattern<T: AsRef<str>>(
     pool: &Pool<Sqlite>,
     project: &Project,
     prefix: T,

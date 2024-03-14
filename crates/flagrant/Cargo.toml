@@ -5,19 +5,20 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-anyhow = {workspace = true}
+flagrant-types = {path = "../flagrant-types"}
+
+sqlx = {workspace = true}
+hugsqlx = {workspace = true}
+tracing = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
-sqlx = {workspace = true, features = ["sqlite"]}
-tracing = {workspace = true}
-tracing-log = {workspace = true}
+anyhow = {workspace = true}
 thiserror = {workspace = true}
 
 ulid = "1.1.2"
 semver = "1.0.14"
 rust-embed = "6.4.1"
 lazy_static = "1.4.0"
-hugsqlx = {version = "0.3.0", features = ["sqlite"]}
 
 [lib]
 doctest = false

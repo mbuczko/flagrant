@@ -5,25 +5,17 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant= {path = "../flagrant"}
+flagrant = {path = "../flagrant"}
+flagrant-api = {path = "../flagrant-api"}
+flagrant-types = {path = "../flagrant-types"}
 
 # common dependencies
-tokio = {workspace = true}
-axum = {workspace = true}
-axum-extra = {workspace = true}
-tower = {workspace = true}
-tracing = {workspace = true}
-tracing-subscriber = {workspace = true}
-sqlx = {workspace = true}
 serde = {workspace = true}
-serde_json = {workspace = true}
-thiserror = {workspace = true}
 anyhow = {workspace = true}
-futures = {workspace = true}
-
-clap = {version = "4.5.1"}
+reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = {version = "14.0.0", features = ["derive"]}
 
-[dependencies.tower-http]
-version = "*"
-features = ["add-extension", "compression-full", "trace"]
+clap = {version = "4.5.1"}
+
+[[bin]]
+name = "flagrant-cli"

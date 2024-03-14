@@ -10,8 +10,8 @@ pub struct ServiceError(anyhow::Error);
 
 #[derive(Error, Debug)]
 pub enum InternalError {
-    #[error("Malformed cookie")]
-    MalformedCookie,
+    // #[error("Malformed cookie")]
+    // MalformedCookie,
 }
 
 impl IntoResponse for ServiceError {
