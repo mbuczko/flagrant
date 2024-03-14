@@ -10,7 +10,7 @@ use crate::client::HttpClientContext;
 #[derive(Debug)]
 pub struct CommandCompleter {
     commands: Vec<&'static str>,
-    client: HttpClientContext,
+    context: HttpClientContext,
 }
 
 impl CommandCompleter {
@@ -44,9 +44,10 @@ impl CommandCompleter {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let guard = self.client.lock().unwrap();
+        let guard = self.context.lock().unwrap();
         let project_id = guard.project.id;
-        let envs = guard.get::<_, Vec<Environment>>(format!("/projects/{project_id}/envs?name={arg_prefix}"))?;
+        let envs = guard
+            .get::<_, Vec<Environment>>(format!("/projects/{project_id}/envs?name={arg_prefix}"))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
             .into_iter()
@@ -60,7 +61,10 @@ impl CommandCompleter {
     }
 
     pub fn new(commands: Vec<&'static str>, client: HttpClientContext) -> CommandCompleter {
-        Self { commands, client }
+        Self {
+            commands,
+            context: client,
+        }
     }
 }
 

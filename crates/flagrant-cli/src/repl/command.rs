@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail};
 
 use crate::client::HttpClientContext;
-use flagrant_types::{NewEnvRequestPayload, Environment};
+use flagrant_types::{Environment, NewEnvRequestPayload};
 
 #[derive(Debug)]
 pub struct Command {
@@ -54,8 +54,10 @@ impl Invokable for Env {
                         name: name.as_ref().to_owned(),
                         description: description.map(|d| d.as_ref().to_owned()),
                     };
-                    let env: Environment =
-                        client.lock().unwrap().post(format!("/projects/{project_id}/envs"), &payload)?;
+                    let env: Environment = client
+                        .lock()
+                        .unwrap()
+                        .post(format!("/projects/{project_id}/envs"), &payload)?;
 
                     println!("Created new environment '{}' (id={})", env.name, env.id);
                     return Ok(());
@@ -63,15 +65,26 @@ impl Invokable for Env {
                 Err(anyhow!("Environment name not provided"))
             }
             "ls" => {
-                let envs: Vec<Environment> = client.lock().unwrap().get(format!("/projects/{project_id}/envs"))?;
+                let envs: Vec<Environment> = client
+                    .lock()
+                    .unwrap()
+                    .get(format!("/projects/{project_id}/envs"))?;
+
+                println!("{:-^52}", "");
+                println!("{0: <4} | {1: <30} | description", "id", "name");
+                println!("{:-^52}", "");
+
                 for env in envs {
-                    println!("{:4} | {}", env.id, env.name);
+                    println!("{0: <4} | {1: <30} | {2: <30}", env.id, env.name, env.description.unwrap_or_default());
                 }
                 Ok(())
             }
             "sw" => {
                 if let Some(name) = args.get(1) {
-                    let env: Option<Environment> = client.lock().unwrap().get(format!("/projects/{project_id}/envs/{}", name.as_ref()))?;
+                    let env: Option<Environment> = client
+                        .lock()
+                        .unwrap()
+                        .get(format!("/projects/{project_id}/envs/{}", name.as_ref()))?;
 
                     if let Some(env) = env {
                         println!("Switched to environment '{}' (id={})", env.name, env.id);

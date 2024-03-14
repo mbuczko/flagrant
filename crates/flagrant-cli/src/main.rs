@@ -7,11 +7,10 @@ mod repl;
 
 fn main() -> anyhow::Result<()> {
     let project_id = 295;
-    let client = HttpClient::new(project_id)
-        .expect("Project does not exist");
+    let client = HttpClient::new(project_id).expect("Project does not exist");
 
-    let client = Arc::new(Mutex::new(client));
-    readline::init(client)?;
+    let context = Arc::new(Mutex::new(client));
+    readline::init(context)?;
 
     Ok(())
 }
