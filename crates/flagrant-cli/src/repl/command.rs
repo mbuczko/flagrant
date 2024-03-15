@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail};
 
 use flagrant_types::{Environment, Feature, NewEnvRequestPayload, NewFeatureRequestPayload};
 
-use super::HttpClientContext;
+use super::ReplContext;
 
 #[derive(Debug)]
 pub struct Command {
@@ -16,7 +16,7 @@ pub trait Invokable {
     fn triggered_by() -> &'static str;
 
     /// Invokes machinery handling an action that it was implemented for.
-    fn invoke<S: AsRef<str>>(args: Vec<S>, client: &HttpClientContext) -> anyhow::Result<()>;
+    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &ReplContext) -> anyhow::Result<()>;
 
     /// Creates a new Command with hint digestable by rustyline
     fn command(op: Option<&str>, hint: &str) -> Command {
@@ -40,14 +40,12 @@ impl Invokable for Env {
     fn triggered_by() -> &'static str {
         "env"
     }
-    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &HttpClientContext) -> anyhow::Result<()> {
+    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &ReplContext) -> anyhow::Result<()> {
         if args.is_empty() {
             bail!("Not enough parameters provided.");
         }
 
         let mut guard = context.lock().unwrap();
-        let project_id = guard.project.id;
-
         match args.first().map(|s| s.as_ref()).unwrap() {
             "add" => {
                 let name = args.get(1);
@@ -58,8 +56,7 @@ impl Invokable for Env {
                         name: name.as_ref().to_owned(),
                         description: description.map(|d| d.as_ref().to_owned()),
                     };
-                    let env: Environment =
-                        guard.post(format!("/projects/{project_id}/envs"), &payload)?;
+                    let env: Environment = guard.client.post("/envs", &payload)?;
 
                     println!("Created new environment '{}' (id={})", env.name, env.id);
                     return Ok(());
@@ -67,7 +64,7 @@ impl Invokable for Env {
                 Err(anyhow!("No environment name provided"))
             }
             "ls" => {
-                let envs: Vec<Environment> = guard.get(format!("/projects/{project_id}/envs"))?;
+                let envs: Vec<Environment> = guard.client.get("/envs")?;
 
                 println!("{:-^52}", "");
                 println!("{0: <4} | {1: <30} | description", "id", "name");
@@ -86,7 +83,7 @@ impl Invokable for Env {
             "sw" => {
                 if let Some(name) = args.get(1) {
                     let env: anyhow::Result<Option<Environment>> =
-                        guard.get(format!("/projects/{project_id}/envs/{}", name.as_ref()));
+                        guard.client.get(format!("/envs/{}", name.as_ref()));
                     if let Ok(Some(env)) = env {
                         println!("Switched to environment '{}' (id={})", env.name, env.id);
                         guard.environment = Some(env);
@@ -106,13 +103,12 @@ impl Invokable for Feat {
         "feat"
     }
 
-    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &HttpClientContext) -> anyhow::Result<()> {
+    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &ReplContext) -> anyhow::Result<()> {
         if args.is_empty() {
             bail!("Not enough parameters provided.");
         }
 
-        let guard = context.lock().unwrap();
-        let project_id = guard.project.id;
+        let client = &context.lock().unwrap().client;
 
         match args.first().map(|s| s.as_ref()).unwrap() {
             "add" => {
@@ -128,8 +124,7 @@ impl Invokable for Feat {
                             description: description.map(|d| d.as_ref().to_owned()),
                             is_enabled: false,
                         };
-                        let feat: Feature =
-                            guard.post(format!("/projects/{project_id}/features"), &payload)?;
+                        let feat: Feature = client.post("/features", &payload)?;
 
                         println!(
                             "Created new feature '{}' (id={}, value={})",
@@ -142,7 +137,7 @@ impl Invokable for Feat {
                 Err(anyhow!("No feature name provided"))
             }
             "ls" => {
-                let feats: Vec<Feature> = guard.get(format!("/projects/{project_id}/features"))?;
+                let feats: Vec<Feature> = client.get("/features")?;
 
                 println!("{:-^50}", "");
                 println!("{0: <4} | {1: <30} | {2: <30}", "id", "name", "value");
@@ -162,7 +157,7 @@ impl Invokable for Feat {
 
                 if let Some(name) = name {
                     if let Some(value) = value {
-                        let feat: Feature = guard.get(format!("/projects/{project_id}/features/{}", name.as_ref()))?;
+                        let feat: Feature = client.get(format!("/features/{}", name.as_ref()))?;
                     }
                     bail!("No feature value provided")
                 }

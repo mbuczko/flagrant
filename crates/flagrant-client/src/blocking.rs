@@ -1,5 +1,3 @@
-pub mod blocking;
-
 use flagrant_types::{HttpRequestPayload, Project};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -7,7 +5,7 @@ use serde::{de::DeserializeOwned, Serialize};
 pub struct HttpClient {
     api_host: String,
     project_id: u16,
-    client: reqwest::Client,
+    client: reqwest::blocking::Client,
 }
 
 impl HttpClient {
@@ -15,23 +13,21 @@ impl HttpClient {
         HttpClient {
             api_host,
             project_id,
-            client: reqwest::Client::new(),
+            client: reqwest::blocking::Client::new(),
         }
     }
 
-    pub async fn get<S: AsRef<str>, T: DeserializeOwned>(&self, path: S) -> anyhow::Result<T> {
-        Ok(reqwest::get(format!(
+    pub fn get<S: AsRef<str>, T: DeserializeOwned>(&self, path: S) -> anyhow::Result<T> {
+        Ok(reqwest::blocking::get(format!(
             "{}/projects/{}{}",
             self.api_host,
             self.project_id,
             path.as_ref()
-        ))
-        .await?
-        .json::<T>()
-        .await?)
+        ))?
+        .json::<T>()?)
     }
 
-    pub async fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
+    pub fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
         &self,
         path: S,
         payload: &P,
@@ -45,13 +41,12 @@ impl HttpClient {
                 path.as_ref()
             ))
             .json(payload)
-            .send()
-            .await?
-            .json::<T>()
-            .await?)
+            .send()?
+            .json::<T>()?)
     }
 
-    pub async fn project(&self) -> anyhow::Result<Project> {
-        self.get::<_, Project>("").await
+    pub fn project(&self) -> anyhow::Result<Project> {
+        self.get::<_, Project>("")
     }
+
 }

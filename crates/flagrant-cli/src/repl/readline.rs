@@ -6,7 +6,7 @@ use rustyline::{Completer, Editor, Helper, Highlighter, Hinter, Validator};
 use super::command::{Env, Feat, Invokable};
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
-use super::HttpClientContext;
+use super::ReplContext;
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
 struct ReplHelper {
@@ -18,7 +18,7 @@ struct ReplHelper {
     // highlighter: PromptHighlighter
 }
 
-pub fn prompt(client: &HttpClientContext) -> String {
+pub fn prompt(client: &ReplContext) -> String {
     let guard = client.lock().unwrap();
     let project = &guard.project;
     let env = &guard.environment;
@@ -32,7 +32,7 @@ pub fn prompt(client: &HttpClientContext) -> String {
 
 /// Inits a REPL with history, hints and autocompletions
 /// pulled straight from database in context of given project.
-pub fn init(context: HttpClientContext) -> anyhow::Result<()> {
+pub fn init(context: ReplContext) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let helper = ReplHelper {
         hinter: ReplHinter::new(vec![

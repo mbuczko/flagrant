@@ -1,9 +1,11 @@
 use std::sync::{Arc, Mutex};
-use flagrant_client::blocking::HttpClient;
+
+use self::context::HttpClientContext;
 
 pub mod command;
 pub mod completer;
 pub mod hinter;
 pub mod readline;
+pub mod context;
 
-pub type HttpClientContext = Arc<Mutex<HttpClient>>;
+pub type ReplContext = Arc<Mutex<HttpClientContext>>;

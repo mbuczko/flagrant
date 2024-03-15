@@ -5,12 +5,12 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::HttpClientContext;
+use super::ReplContext;
 
 #[derive(Debug)]
 pub struct CommandCompleter {
     commands: Vec<&'static str>,
-    context: HttpClientContext,
+    context: ReplContext,
 }
 
 impl CommandCompleter {
@@ -44,10 +44,8 @@ impl CommandCompleter {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let guard = self.context.lock().unwrap();
-        let project_id = guard.project.id;
-        let envs = guard
-            .get::<_, Vec<Environment>>(format!("/projects/{project_id}/envs?name={arg_prefix}"))?;
+        let client = &self.context.lock().unwrap().client;
+        let envs = client.get::<_, Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
             .into_iter()
@@ -60,7 +58,7 @@ impl CommandCompleter {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, client: HttpClientContext) -> CommandCompleter {
+    pub fn new(commands: Vec<&'static str>, client: ReplContext) -> CommandCompleter {
         Self {
             commands,
             context: client,
