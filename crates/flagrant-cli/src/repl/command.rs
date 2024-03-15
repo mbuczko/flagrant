@@ -11,7 +11,6 @@ pub struct Command {
 }
 
 pub trait Invokable {
-
     /// A case-insensitive command which triggers invokable action
     fn triggered_by() -> &'static str;
 
@@ -85,10 +84,9 @@ impl Invokable for Env {
             }
             "sw" => {
                 if let Some(name) = args.get(1) {
-                    let env: Option<Environment> =
-                        guard.get(format!("/projects/{project_id}/envs/{}", name.as_ref()))?;
-
-                    if let Some(env) = env {
+                    let env: anyhow::Result<Option<Environment>> =
+                        guard.get(format!("/projects/{project_id}/envs/{}", name.as_ref()));
+                    if let Ok(Some(env)) = env {
                         println!("Switched to environment '{}' (id={})", env.name, env.id);
                         guard.environment = Some(env);
                         return Ok(());
@@ -127,18 +125,21 @@ impl Invokable for Feat {
                             name: name.as_ref().to_owned(),
                             value: value.as_ref().to_owned(),
                             description: description.map(|d| d.as_ref().to_owned()),
-                            is_enabled: false
+                            is_enabled: false,
                         };
                         let feat: Feature =
                             guard.post(format!("/projects/{project_id}/features"), &payload)?;
 
-                        println!("Created new feature '{}' (id={}, value={})", feat.name, feat.id, feat.value);
+                        println!(
+                            "Created new feature '{}' (id={}, value={})",
+                            feat.name, feat.id, feat.value
+                        );
                         return Ok(());
                     }
                     bail!("No feature value provided")
                 }
                 Err(anyhow!("No feature name provided"))
-            },
+            }
             "ls" => {
                 let feats: Vec<Feature> = guard.get(format!("/projects/{project_id}/features"))?;
 
@@ -149,9 +150,7 @@ impl Invokable for Feat {
                 for feat in feats {
                     println!(
                         "{0: <4} | {1: <28} | {2: <30} ",
-                        feat.id,
-                        feat.name,
-                        feat.value,
+                        feat.id, feat.name, feat.value,
                     );
                 }
                 Ok(())
