@@ -29,6 +29,12 @@ pub struct NewFeatureRequestPayload {
     pub is_enabled: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct NewVariantRequestPayload {
+    pub value: String,
+    pub weight: u16,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Feature {
     #[sqlx(rename = "feature_id")]
@@ -44,10 +50,11 @@ pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: u16,
     pub value: String,
-    pub weight: i16,
+    pub weight: u16,
     pub acc: i16,
 }
 pub trait HttpRequestPayload {}
 
 impl HttpRequestPayload for NewEnvRequestPayload {}
 impl HttpRequestPayload for NewFeatureRequestPayload {}
+impl HttpRequestPayload for NewVariantRequestPayload {}

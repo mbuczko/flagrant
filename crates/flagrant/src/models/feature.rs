@@ -1,7 +1,7 @@
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Pool, Sqlite};
 
-use flagrant_types::{Feature, Project};
+use flagrant_types::{Environment, Feature, Project};
 use crate::errors::DbError;
 
 #[derive(HugSqlx)]
@@ -22,6 +22,17 @@ pub async fn create(pool: &Pool<Sqlite>, project: &Project, name: String, value:
 pub async fn fetch(pool: &Pool<Sqlite>, feature_id: u16) -> anyhow::Result<Feature> {
     Ok(
         Features::fetch_feature::<_, Feature>(pool, params!(feature_id))
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "Could not fetch a feature");
+                DbError::QueryFailed
+            })?
+    )
+}
+
+pub async fn fetch_by_name(pool: &Pool<Sqlite>, project: &Project, name: String) -> anyhow::Result<Feature> {
+    Ok(
+        Features::fetch_feature_by_name::<_, Feature>(pool, params!(project.id, name))
             .await
             .map_err(|e| {
                 tracing::error!(error = ?e, "Could not fetch a feature");

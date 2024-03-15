@@ -38,7 +38,7 @@ pub fn init(context: HttpClientContext) -> anyhow::Result<()> {
     let helper = ReplHelper {
         hinter: ReplHinter::new(vec![
             // environments
-            Env::command(None, "ADD | DEL | SW | REN"),
+            Env::command(None, "ADD | DEL | LS | SW | REN"),
             Env::command(Some("ADD"), "env-name description"),
             Env::command(Some("DEL"), "env-name"),
             Env::command(Some("REN"), "env-name new-name"),
@@ -48,6 +48,7 @@ pub fn init(context: HttpClientContext) -> anyhow::Result<()> {
             Feat::command(None, "ADD | DEL | DESC | LIST | VAL"),
             Feat::command(Some("ADD"), "feature-name value"),
             Feat::command(Some("DEL"), "feature-name"),
+            Feat::command(Some("VAL"), "feature-name new-value"),
 
             // Command::new("env REN", "env RENAME name"),
             // Command::new("feat ADD", "feat ADD feature-name value"),

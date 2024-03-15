@@ -3,35 +3,30 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, feature, project, variant};
-use flagrant_types::{Feature, NewFeatureRequestPayload, Variant};
-use serde::Deserialize;
+use flagrant_types::{NewVariantRequestPayload, Variant};
 use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;
 
-#[derive(Debug, Deserialize)]
-pub struct QueryParams {
-    name: Option<String>,
-}
-
 pub async fn create(
     State(pool): State<SqlitePool>,
-    Path(project_id): Path<u16>,
-    Json(feat): Json<NewFeatureRequestPayload>,
-) -> Result<Json<Feature>, ServiceError> {
+    Path((project_id, feature_name, env_name)): Path<(u16, String, String) >,
+    Json(variant): Json<NewVariantRequestPayload>,
+) -> Result<Json<Variant>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    let feature = feature::create(&pool, &project, feat.name, feat.value, feat.is_enabled).await?;
+    let feature = feature::fetch_by_name(&pool, &project, feature_name).await?;
+    let env = environment::fetch_by_name(&pool, &project, env_name).await?;
 
-    Ok(Json(feature))
+    Ok(Json(variant::create(&pool, &env, &feature, variant.value, variant.weight).await?))
 }
 
 pub async fn list(
     State(pool): State<SqlitePool>,
-    Path((project_id, feature_id, env_name)): Path<(u16, u16, String)>,
+    Path((project_id, feature_name, env_name)): Path<(u16, String, String)>,
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
+    let feature = feature::fetch_by_name(&pool, &project, feature_name).await?;
     let env = environment::fetch_by_name(&pool, &project, env_name).await?;
-    let feature = feature::fetch(&pool, feature_id).await?;
 
     Ok(Json(variant::list(&pool, &env, &feature).await?))
 }

@@ -144,16 +144,28 @@ impl Invokable for Feat {
                 let feats: Vec<Feature> = guard.get(format!("/projects/{project_id}/features"))?;
 
                 println!("{:-^50}", "");
-                println!("{0: <4} | {1: <28} | {2: <30}", "id", "name", "value");
+                println!("{0: <4} | {1: <30} | {2: <30}", "id", "name", "value");
                 println!("{:-^50}", "");
 
                 for feat in feats {
                     println!(
-                        "{0: <4} | {1: <28} | {2: <30} ",
+                        "{0: <4} | {1: <30} | {2: <30} ",
                         feat.id, feat.name, feat.value,
                     );
                 }
                 Ok(())
+            }
+            "val" => {
+                let name = args.get(1);
+                let value = args.get(2);
+
+                if let Some(name) = name {
+                    if let Some(value) = value {
+                        let feat: Feature = guard.get(format!("/projects/{project_id}/features/{}", name.as_ref()))?;
+                    }
+                    bail!("No feature value provided")
+                }
+                bail!("No feature name provided")
             }
             _ => bail!("Unknown subcommand"),
         }

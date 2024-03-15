@@ -27,9 +27,10 @@ pub async fn create(
 
 pub async fn fetch(
     State(pool): State<SqlitePool>,
-    Path((_project_id, feature_id)): Path<(u16, u16)>,
+    Path((project_id, feature_name)): Path<(u16, String)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    Ok(Json(feature::fetch(&pool, feature_id).await?))
+    let project = project::fetch(&pool, project_id).await?;
+    Ok(Json(feature::fetch_by_name(&pool, &project, feature_name).await?))
 }
 
 pub async fn list(
