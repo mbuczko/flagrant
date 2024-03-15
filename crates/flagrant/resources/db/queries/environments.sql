@@ -15,7 +15,7 @@ SELECT environment_id, name, description
 FROM environments
 WHERE project_id = $1
 
--- :name fetch_environments_by_name :<> :?
+-- :name fetch_environments_by_name :<> :1
 -- :doc Fetches environment of given name
 SELECT environment_id, name, description
 FROM environments

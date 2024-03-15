@@ -39,6 +39,22 @@ pub async fn fetch(
     )
 }
 
+pub async fn fetch_by_name<T: AsRef<str>>(
+    pool: &Pool<Sqlite>,
+    project: &Project,
+    name: T,
+) -> anyhow::Result<Environment> {
+    Ok(Environments::fetch_environments_by_name::<_, Environment>(
+        pool,
+        params!(project.id, name.as_ref()),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch environment");
+        DbError::QueryFailed
+    })?)
+}
+
 pub async fn fetch_for_project(
     pool: &Pool<Sqlite>,
     project: &Project,
@@ -51,22 +67,6 @@ pub async fn fetch_for_project(
                 DbError::QueryFailed
             })?,
     )
-}
-
-pub async fn fetch_by_name<T: AsRef<str>>(
-    pool: &Pool<Sqlite>,
-    project: &Project,
-    name: T,
-) -> anyhow::Result<Option<Environment>> {
-    Ok(Environments::fetch_environments_by_name::<_, Environment>(
-        pool,
-        params!(project.id, name.as_ref()),
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch environment");
-        DbError::QueryFailed
-    })?)
 }
 
 pub async fn fetch_by_pattern<T: AsRef<str>>(

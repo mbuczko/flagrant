@@ -15,18 +15,19 @@ CREATE TABLE IF NOT EXISTS environments (
 );
 
 CREATE TABLE IF NOT EXISTS features (
-  feature_id TEXT PRIMARY KEY,
+  feature_id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL,
   name TEXT NOT NULL,
+  value TEXT NOT NULL,
   description TEXT,
-  value TEXT,
+  is_enabled BOOLEAN,
   version INTEGER NOT NULL DEFAULT 0,
 
   FOREIGN KEY (project_id) REFERENCES projects(project_id)
 );
 
 CREATE TABLE IF NOT EXISTS variants (
-  variant_id TEXT PRIMARY KEY,
+  variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
   feature_id TEXT NOT NULL,
   value TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 0,
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS variants_weights (
   variant_id TEXT NOT NULL,
   environment_id TEXT NOT NULL,
   weight INTEGER NOT NULL,
+  acc INTEGER NOT NULL DEFAULT 100,
 
   PRIMARY KEY (variant_id, environment_id),
   FOREIGN KEY (variant_id) REFERENCES variants(variant_id),

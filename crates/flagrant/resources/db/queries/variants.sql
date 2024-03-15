@@ -1,0 +1,31 @@
+-- :name create_variant :|| :1
+-- :doc Creates a new variation for given feature
+INSERT INTO variants(feature_id, value) VALUES($1, $2)
+RETURNING variant_id
+
+-- :name fetch_variant :<> :1
+-- :doc Fetches a variant of given id
+SELECT v.variant_id, feature_id, value, weight, acc
+FROM variants v JOIN variants_weights vw USING(variant_id) 
+WHERE environment_id = $1 AND v.variant_id = $2
+
+-- :name fetch_variants_for_feature :<> :*
+-- :doc Fetches all variants for given feature
+SELECT v.variant_id, feature_id, value, weight, acc
+FROM variants v JOIN variants_weights vw USING(variant_id) 
+WHERE environment_id = $1 AND feature_id = $2
+
+-- :name create_variant_weight :|| :1
+-- :doc Creates a weight for feature variant in given environment
+INSERT INTO variants_weights(environment_id, variant_id, weight) VALUES($1, $2, $3)
+RETURNING weight
+
+-- :name update_variant_weight :<> :!
+-- :doc Updates weight of given feature variant
+UPDATE variants_weights SET weight = $1
+WHERE variant_id = $2 AND environment_id = $3
+
+-- :name update_variant_value :<> :!
+-- :doc Updates value of given feature variant
+UPDATE variants SET value = $1
+WHERE variant_id = $2

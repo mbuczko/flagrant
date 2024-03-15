@@ -7,3 +7,5 @@ edition.workspace = true
 [dependencies]
 serde = {workspace = true}
 sqlx = {workspace = true}
+ulid = {workspace = true}
+

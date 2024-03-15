@@ -1,32 +1,32 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail};
 use core::fmt::Debug;
 use ulid::Ulid;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Variation {
+pub(crate) struct Variation {
     pub id: Ulid,
     pub value: String,
     pub weight: i16,
 }
 
-#[derive(Clone, Debug)]
-pub struct AccumulatedVar {
-    accum: i16,
-    variation: Variation,
-}
-
 #[derive(Debug)]
-pub struct AccumulativeDistributor {
+pub(crate) struct AccumulativeDistributor {
     requests: usize,
     variations: Vec<AccumulatedVar>,
+}
+
+#[derive(Clone, Debug)]
+struct AccumulatedVar {
+    accum: i16,
+    variation: Variation,
 }
 
 pub trait Distributor<'a> {
     fn distribute(&mut self) -> &Variation;
     fn variations(&self) -> Vec<&Variation>;
 
-    fn set_control_value(&mut self, value: String) -> Result<()>;
-    fn set_variations(&mut self, variations: Vec<Variation>) -> Result<()>;
+    fn set_control_value(&mut self, value: String) -> anyhow::Result<()>;
+    fn set_variations(&mut self, variations: Vec<Variation>) -> anyhow::Result<()>;
 }
 
 impl<'a> Debug for dyn Distributor<'a> {
@@ -53,14 +53,14 @@ impl AccumulativeDistributor {
 }
 
 impl<'a> Distributor<'a> for AccumulativeDistributor {
-    fn set_control_value(&mut self, value: String) -> Result<()> {
+    fn set_control_value(&mut self, value: String) -> anyhow::Result<()> {
         if let Some(v) = self.variations.last_mut() {
             v.variation.value = value;
             return Ok(());
         }
         Err(anyhow!("No control value found...?"))
     }
-    fn set_variations(&mut self, variations: Vec<Variation>) -> Result<()> {
+    fn set_variations(&mut self, variations: Vec<Variation>) -> anyhow::Result<()> {
         let mut accumulated = Vec::<AccumulatedVar>::with_capacity(variations.len() + 1);
         let mut weight_sum: i16 = 0;
 

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail};
 
 use crate::client::HttpClientContext;
-use flagrant_types::{Environment, NewEnvRequestPayload};
+use flagrant_types::{Environment, Feature, NewEnvRequestPayload, NewFeatureRequestPayload};
 
 #[derive(Debug)]
 pub struct Command {
@@ -11,12 +11,14 @@ pub struct Command {
 }
 
 pub trait Invokable {
+
     /// A case-insensitive command which triggers invokable action
     fn triggered_by() -> &'static str;
 
     /// Invokes machinery handling an action that it was implemented for.
     fn invoke<S: AsRef<str>>(args: Vec<S>, client: &HttpClientContext) -> anyhow::Result<()>;
 
+    /// Creates a new Command with hint digestable by rustyline
     fn command(op: Option<&str>, hint: &str) -> Command {
         let op = op.unwrap_or_default();
         let cmd = concat(&[Self::triggered_by(), op]).to_lowercase();
@@ -38,12 +40,14 @@ impl Invokable for Env {
     fn triggered_by() -> &'static str {
         "env"
     }
-    fn invoke<S: AsRef<str>>(args: Vec<S>, client: &HttpClientContext) -> anyhow::Result<()> {
+    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &HttpClientContext) -> anyhow::Result<()> {
         if args.is_empty() {
             bail!("Not enough parameters provided.");
         }
 
-        let project_id = client.lock().unwrap().project.id;
+        let mut guard = context.lock().unwrap();
+        let project_id = guard.project.id;
+
         match args.first().map(|s| s.as_ref()).unwrap() {
             "add" => {
                 let name = args.get(1);
@@ -54,46 +58,44 @@ impl Invokable for Env {
                         name: name.as_ref().to_owned(),
                         description: description.map(|d| d.as_ref().to_owned()),
                     };
-                    let env: Environment = client
-                        .lock()
-                        .unwrap()
-                        .post(format!("/projects/{project_id}/envs"), &payload)?;
+                    let env: Environment =
+                        guard.post(format!("/projects/{project_id}/envs"), &payload)?;
 
                     println!("Created new environment '{}' (id={})", env.name, env.id);
                     return Ok(());
                 }
-                Err(anyhow!("Environment name not provided"))
+                Err(anyhow!("No environment name provided"))
             }
             "ls" => {
-                let envs: Vec<Environment> = client
-                    .lock()
-                    .unwrap()
-                    .get(format!("/projects/{project_id}/envs"))?;
+                let envs: Vec<Environment> = guard.get(format!("/projects/{project_id}/envs"))?;
 
                 println!("{:-^52}", "");
                 println!("{0: <4} | {1: <30} | description", "id", "name");
                 println!("{:-^52}", "");
 
                 for env in envs {
-                    println!("{0: <4} | {1: <30} | {2: <30}", env.id, env.name, env.description.unwrap_or_default());
+                    println!(
+                        "{0: <4} | {1: <30} | {2: <30}",
+                        env.id,
+                        env.name,
+                        env.description.unwrap_or_default()
+                    );
                 }
                 Ok(())
             }
             "sw" => {
                 if let Some(name) = args.get(1) {
-                    let env: Option<Environment> = client
-                        .lock()
-                        .unwrap()
-                        .get(format!("/projects/{project_id}/envs/{}", name.as_ref()))?;
+                    let env: Option<Environment> =
+                        guard.get(format!("/projects/{project_id}/envs/{}", name.as_ref()))?;
 
                     if let Some(env) = env {
                         println!("Switched to environment '{}' (id={})", env.name, env.id);
-                        client.lock().unwrap().environment = Some(env);
+                        guard.environment = Some(env);
                         return Ok(());
                     }
                     bail!("No environment found")
                 }
-                Err(anyhow!("Environment name not provided"))
+                Err(anyhow!("No environment name provided"))
             }
             _ => bail!("Unknown subcommand"),
         }
@@ -105,8 +107,57 @@ impl Invokable for Feat {
         "feat"
     }
 
-    fn invoke<S: AsRef<str>>(_args: Vec<S>, _client: &HttpClientContext) -> anyhow::Result<()> {
-        todo!()
+    fn invoke<S: AsRef<str>>(args: Vec<S>, context: &HttpClientContext) -> anyhow::Result<()> {
+        if args.is_empty() {
+            bail!("Not enough parameters provided.");
+        }
+
+        let guard = context.lock().unwrap();
+        let project_id = guard.project.id;
+
+        match args.first().map(|s| s.as_ref()).unwrap() {
+            "add" => {
+                let name = args.get(1);
+                let value = args.get(2);
+                let description = args.get(3);
+
+                if let Some(name) = name {
+                    if let Some(value) = value {
+                        let payload = NewFeatureRequestPayload {
+                            name: name.as_ref().to_owned(),
+                            value: value.as_ref().to_owned(),
+                            description: description.map(|d| d.as_ref().to_owned()),
+                            is_enabled: false
+                        };
+                        let feat: Feature =
+                            guard.post(format!("/projects/{project_id}/features"), &payload)?;
+
+                        println!("Created new feature '{}' (id={}, value={})", feat.name, feat.id, feat.value);
+                        return Ok(());
+                    }
+                    bail!("No feature value provided")
+                }
+                Err(anyhow!("No feature name provided"))
+            },
+            "ls" => {
+                let feats: Vec<Feature> = guard.get(format!("/projects/{project_id}/features"))?;
+
+                println!("{:-^50}", "");
+                println!("{0: <4} | {1: <28} | {2: <30}", "id", "name", "value");
+                println!("{:-^50}", "");
+
+                for feat in feats {
+                    println!(
+                        "{0: <4} | {1: <28} | {2: <30} ",
+                        feat.id,
+                        feat.name,
+                        feat.value,
+                    );
+                }
+                Ok(())
+            }
+            _ => bail!("Unknown subcommand"),
+        }
     }
 }
 

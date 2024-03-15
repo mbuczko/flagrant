@@ -10,13 +10,13 @@ pub mod errors;
 pub mod models;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FeatureValue<'a> {
+pub(crate) enum FeatureValue<'a> {
     Simple(&'a String),
     Variadic(&'a Variation),
 }
 
 #[derive(Debug)]
-pub struct Feature<'a> {
+pub(crate) struct Feature<'a> {
     name: String,
     value: String,
     is_enabled: bool,
@@ -27,8 +27,8 @@ impl<'a> Feature<'a> {
     pub fn new(name: String, value: String) -> Result<Self> {
         Ok(Feature {
             name,
-            is_enabled: false,
             value,
+            is_enabled: false,
             distributor: None,
         })
     }

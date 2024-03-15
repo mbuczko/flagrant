@@ -37,11 +37,14 @@ pub fn init(context: HttpClientContext) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let helper = ReplHelper {
         hinter: ReplHinter::new(vec![
+            // environments
             Env::command(None, "ADD | DEL | SW | REN"),
             Env::command(Some("ADD"), "env-name description"),
             Env::command(Some("DEL"), "env-name"),
             Env::command(Some("REN"), "env-name new-name"),
             Env::command(Some("SW"), "env-name"),
+
+            // features
             Feat::command(None, "ADD | DEL | DESC | LIST | VAL"),
             Feat::command(Some("ADD"), "feature-name value"),
             Feat::command(Some("DEL"), "feature-name"),
