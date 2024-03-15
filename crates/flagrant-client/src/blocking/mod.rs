@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use flagrant_types::{Environment, HttpRequestPayload, Project};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -11,8 +9,6 @@ pub struct HttpClient {
     pub environment: Option<Environment>,
     client: reqwest::blocking::Client,
 }
-
-pub type HttpClientContext = Arc<Mutex<HttpClient>>;
 
 impl HttpClient {
     pub fn new(project_id: u16) -> anyhow::Result<HttpClient> {

@@ -3,11 +3,10 @@ use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Editor, Helper, Highlighter, Hinter, Validator};
 
-use crate::client::HttpClientContext;
-
 use super::command::{Env, Feat, Invokable};
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
+use super::HttpClientContext;
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
 struct ReplHelper {

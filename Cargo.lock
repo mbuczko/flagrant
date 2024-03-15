@@ -680,11 +680,21 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
- "flagrant",
- "flagrant-api",
+ "flagrant-client",
  "flagrant-types",
  "reqwest",
  "rustyline",
+ "serde",
+]
+
+[[package]]
+name = "flagrant-client"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "flagrant",
+ "flagrant-types",
+ "reqwest",
  "serde",
 ]
 

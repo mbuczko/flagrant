@@ -1,7 +1,8 @@
 use anyhow::{anyhow, bail};
 
-use crate::client::HttpClientContext;
 use flagrant_types::{Environment, Feature, NewEnvRequestPayload, NewFeatureRequestPayload};
+
+use super::HttpClientContext;
 
 #[derive(Debug)]
 pub struct Command {

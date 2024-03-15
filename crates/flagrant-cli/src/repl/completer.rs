@@ -5,7 +5,7 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use crate::client::HttpClientContext;
+use super::HttpClientContext;
 
 #[derive(Debug)]
 pub struct CommandCompleter {

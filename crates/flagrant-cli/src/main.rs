@@ -1,8 +1,7 @@
-use client::HttpClient;
+use flagrant_client::blocking::HttpClient;
 use repl::readline;
 use std::sync::{Arc, Mutex};
 
-mod client;
 mod repl;
 
 fn main() -> anyhow::Result<()> {

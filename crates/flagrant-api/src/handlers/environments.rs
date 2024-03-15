@@ -3,11 +3,12 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{NewEnvRequestPayload, Environment};
+use flagrant_types::{Environment, NewEnvRequestPayload};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;
+
 
 #[derive(Debug, Deserialize)]
 pub struct QueryParams {
