@@ -31,6 +31,26 @@ impl HttpClient {
         .await?)
     }
 
+    pub async fn put<S: AsRef<str>, P: HttpRequestPayload + Serialize>(
+        &self,
+        path: S,
+        payload: &P,
+    ) -> anyhow::Result<()> {
+        self
+            .client
+            .put(format!(
+                "{}/projects/{}{}",
+                self.api_host,
+                self.project_id,
+                path.as_ref()
+            ))
+            .json(payload)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
         &self,
         path: S,

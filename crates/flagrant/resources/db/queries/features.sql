@@ -20,3 +20,9 @@ WHERE project_id = $1 AND name = $2
 SELECT feature_id, project_id, name, value, is_enabled
 FROM features
 WHERE project_id = $1
+
+-- :name update_feature_by_name :<> :!
+-- :doc Updates feature with new values of name, value and is_enabled
+UPDATE features
+SET name = $3, value = $4, is_enabled = $5
+WHERE project_id = $1 AND name = $2

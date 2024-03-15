@@ -1,4 +1,4 @@
-use axum::{routing::{get, post}, Router};
+use axum::{routing::{get, post, put}, Router};
 use tower_http::compression::CompressionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -32,6 +32,7 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .route("/projects/:project_id/features", get(features::list))
         .route("/projects/:project_id/features", post(features::create))
         .route("/projects/:project_id/features/:feature_name", get(features::fetch))
+        .route("/projects/:project_id/features/:feature_name", put(features::update))
         .route("/projects/:project_id/features/:feature_name/:env_name/variants", get(variants::list))
         .route("/projects/:project_id/features/:feature_name/:env_name/variants", post(variants::create))
 

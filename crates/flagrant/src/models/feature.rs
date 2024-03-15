@@ -41,6 +41,17 @@ pub async fn fetch_by_name(pool: &Pool<Sqlite>, project: &Project, name: String)
     )
 }
 
+pub async fn update_by_name(pool: &Pool<Sqlite>, project: &Project, name: String, new_name: String, new_value: String, is_enabled: bool) -> anyhow::Result<()> {
+    Features::update_feature_by_name(pool, params!(project.id, name, new_name, new_value, is_enabled))
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not fetch a feature");
+            DbError::QueryFailed
+        })?;
+
+    Ok(())
+}
+
 pub async fn list(pool: &Pool<Sqlite>, project: &Project) -> anyhow::Result<Vec<Feature>> {
     Ok(
         Features::fetch_features_for_project::<_, Feature>(pool, params!(project.id))

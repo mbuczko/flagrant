@@ -44,10 +44,12 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
             Env::command(Some("SW"), "env-name"),
 
             // features
-            Feat::command(None, "ADD | DEL | DESC | LIST | VAL"),
+            Feat::command(None, "ADD | DEL | LS | VAL | ON | OFF"),
             Feat::command(Some("ADD"), "feature-name value"),
             Feat::command(Some("DEL"), "feature-name"),
             Feat::command(Some("VAL"), "feature-name new-value"),
+            Feat::command(Some("ON"), "feature-name"),
+            Feat::command(Some("OFF"), "feature-name"),
 
             // Command::new("env REN", "env RENAME name"),
             // Command::new("feat ADD", "feat ADD feature-name value"),

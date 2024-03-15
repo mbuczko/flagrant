@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 
 use flagrant_types::{Environment, Feature, NewEnvRequestPayload, NewFeatureRequestPayload};
 
@@ -56,12 +56,12 @@ impl Invokable for Env {
                         name: name.as_ref().to_owned(),
                         description: description.map(|d| d.as_ref().to_owned()),
                     };
-                    let env: Environment = guard.client.post("/envs", &payload)?;
+                    let env: Environment = guard.client.post("/envs", payload)?;
 
                     println!("Created new environment '{}' (id={})", env.name, env.id);
                     return Ok(());
                 }
-                Err(anyhow!("No environment name provided"))
+                bail!("No environment name provided")
             }
             "ls" => {
                 let envs: Vec<Environment> = guard.client.get("/envs")?;
@@ -89,9 +89,8 @@ impl Invokable for Env {
                         guard.environment = Some(env);
                         return Ok(());
                     }
-                    bail!("No environment found")
                 }
-                Err(anyhow!("No environment name provided"))
+                bail!("No such environment")
             }
             _ => bail!("Unknown subcommand"),
         }
@@ -109,22 +108,19 @@ impl Invokable for Feat {
         }
 
         let client = &context.lock().unwrap().client;
+        let command = args.first().map(|s| s.as_ref()).unwrap();
 
-        match args.first().map(|s| s.as_ref()).unwrap() {
+        match command {
             "add" => {
-                let name = args.get(1);
-                let value = args.get(2);
-                let description = args.get(3);
-
-                if let Some(name) = name {
-                    if let Some(value) = value {
+                if let Some(name) = args.get(1) {
+                    if let Some(value) = args.get(2) {
                         let payload = NewFeatureRequestPayload {
                             name: name.as_ref().to_owned(),
                             value: value.as_ref().to_owned(),
-                            description: description.map(|d| d.as_ref().to_owned()),
+                            description: args.get(3).map(|d| d.as_ref().to_owned()),
                             is_enabled: false,
                         };
-                        let feat: Feature = client.post("/features", &payload)?;
+                        let feat: Feature = client.post("/features", payload)?;
 
                         println!(
                             "Created new feature '{}' (id={}, value={})",
@@ -132,34 +128,74 @@ impl Invokable for Feat {
                         );
                         return Ok(());
                     }
-                    bail!("No feature value provided")
                 }
-                Err(anyhow!("No feature name provided"))
+                bail!("No feature name or value provided")
             }
             "ls" => {
                 let feats: Vec<Feature> = client.get("/features")?;
 
-                println!("{:-^50}", "");
-                println!("{0: <4} | {1: <30} | {2: <30}", "id", "name", "value");
-                println!("{:-^50}", "");
+                println!("{:-^60}", "");
+                println!(
+                    "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
+                    "id", "name", "enabled?", "value"
+                );
+                println!("{:-^60}", "");
 
                 for feat in feats {
                     println!(
-                        "{0: <4} | {1: <30} | {2: <30} ",
-                        feat.id, feat.name, feat.value,
+                        "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
+                        feat.id, feat.name, feat.is_enabled, feat.value
                     );
                 }
                 Ok(())
             }
             "val" => {
-                let name = args.get(1);
-                let value = args.get(2);
+                if let Some(name) = args.get(1) {
+                    if let Some(value) = args.get(2) {
+                        let name = name.as_ref();
+                        if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
+                            let payload = NewFeatureRequestPayload {
+                                name: name.to_owned(),
+                                value: value.as_ref().to_owned(),
+                                description: None,
+                                is_enabled: feature.is_enabled,
+                            };
+                            client.put(format!("/features/{name}"), payload)?;
 
-                if let Some(name) = name {
-                    if let Some(value) = value {
-                        let feat: Feature = client.get(format!("/features/{}", name.as_ref()))?;
+                            // re-fetch feature to be sure it's updated
+                            let feature: Feature = client.get(format!("/features/{name}"))?;
+                            println!(
+                                "Updated feature (id={}, name={}, value={}, is_enabled={})",
+                                feature.id, feature.name, feature.value, feature.is_enabled
+                            );
+                            return Ok(());
+                        }
+                        bail!("No such a feature")
                     }
-                    bail!("No feature value provided")
+                }
+                bail!("No feature name or value provided")
+            }
+            "on" | "off" => {
+                if let Some(name) = args.get(1) {
+                    let name = name.as_ref();
+                    if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
+                        let payload = NewFeatureRequestPayload {
+                            name: feature.name,
+                            value: feature.value,
+                            description: None,
+                            is_enabled: command == "on",
+                        };
+                        if client.put(format!("/features/{name}"), payload).is_ok() {
+                            // re-fetch feature to be sure it's updated
+                            let feature: Feature = client.get(format!("/features/{name}"))?;
+                            println!(
+                                "Updated feature (id={}, name={}, value={}, is_enabled={})",
+                                feature.id, feature.name, feature.value, feature.is_enabled
+                            );
+                            return Ok(());
+                        }
+                    }
+                    bail!("No such a feature")
                 }
                 bail!("No feature name provided")
             }

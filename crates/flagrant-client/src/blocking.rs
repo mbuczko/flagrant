@@ -26,11 +26,29 @@ impl HttpClient {
         ))?
         .json::<T>()?)
     }
+    pub fn put<S: AsRef<str>, P: HttpRequestPayload + Serialize>(
+        &self,
+        path: S,
+        payload: P,
+    ) -> anyhow::Result<()> {
+        self
+            .client
+            .put(format!(
+                "{}/projects/{}{}",
+                self.api_host,
+                self.project_id,
+                path.as_ref()
+            ))
+            .json(&payload)
+            .send()?;
+
+        Ok(())
+    }
 
     pub fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
         &self,
         path: S,
-        payload: &P,
+        payload: P,
     ) -> anyhow::Result<T> {
         Ok(self
             .client
@@ -40,7 +58,7 @@ impl HttpClient {
                 self.project_id,
                 path.as_ref()
             ))
-            .json(payload)
+            .json(&payload)
             .send()?
             .json::<T>()?)
     }
@@ -48,5 +66,4 @@ impl HttpClient {
     pub fn project(&self) -> anyhow::Result<Project> {
         self.get::<_, Project>("")
     }
-
 }
