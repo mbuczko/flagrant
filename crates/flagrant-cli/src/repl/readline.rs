@@ -6,9 +6,8 @@ use crate::handlers;
 
 use super::command::{self, Command, Env, Feat, Var};
 use super::completer::CommandCompleter;
+use super::context::ReplContext;
 use super::hinter::ReplHinter;
-use super::ReplContext;
-
 
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
 struct ReplHelper<'a> {

@@ -1,7 +1,7 @@
 use anyhow::bail;
 use flagrant_types::{Environment, NewEnvRequestPayload};
 
-use crate::repl::ReplContext;
+use crate::repl::context::ReplContext;
 
 /// Adds a new Environment
 pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {

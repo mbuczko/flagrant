@@ -1,4 +1,4 @@
-use super::ReplContext;
+use super::context::ReplContext;
 
 type CommandHandler = fn(Vec<&str>, &ReplContext) -> anyhow::Result<()>;
 

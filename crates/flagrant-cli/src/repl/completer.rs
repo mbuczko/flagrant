@@ -5,7 +5,7 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::ReplContext;
+use super::context::ReplContext;
 
 #[derive(Debug)]
 pub struct CommandCompleter {

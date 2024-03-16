@@ -1,8 +1,9 @@
 use anyhow::bail;
 use flagrant_types::{Feature, NewFeatureRequestPayload};
 
-use crate::repl::ReplContext;
+use crate::repl::context::ReplContext;
 
+/// Adds a new feature
 pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
     if args.is_empty() {
         bail!("Not enough parameters provided.");
@@ -27,6 +28,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
     bail!("No feature name or value provided")
 }
 
+/// Lists all features in a project
 pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
     let feats: Vec<Feature> = context.lock().unwrap().client.get("/features")?;
 
@@ -46,6 +48,7 @@ pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
     Ok(())
 }
 
+/// Changes value of given feature
 pub fn val<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
     if args.is_empty() {
         bail!("Not enough parameters provided.");
@@ -76,6 +79,7 @@ pub fn val<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
     bail!("No feature name or value provided")
 }
 
+/// Switches feature on/off
 pub fn onoff<'a>(args: Vec<&'a str>, context: &'a ReplContext, on: bool) -> anyhow::Result<()> {
     if args.is_empty() {
         bail!("Not enough parameters provided.");
@@ -104,10 +108,12 @@ pub fn onoff<'a>(args: Vec<&'a str>, context: &'a ReplContext, on: bool) -> anyh
     bail!("No feature name provided")
 }
 
+/// Switches feature on
 pub fn on<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
     onoff(args, context, true)
 }
 
+/// Switches feature off
 pub fn off<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
     onoff(args, context, false)
 }
