@@ -1,6 +1,6 @@
 use flagrant_client::blocking::HttpClient;
 use repl::{context::HttpClientContext, readline};
-use std::{rc::Rc, sync::Mutex};
+use std::{rc::Rc, sync::RwLock};
 
 mod repl;
 mod handlers;
@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
     let project_id = 295;
     let client = HttpClient::new(API_HOST.into(), project_id);
 
-    let context = Rc::new(Mutex::new(HttpClientContext::new(client)?));
+    let context = Rc::new(RwLock::new(HttpClientContext::new(client)?));
     readline::init(context)?;
 
     Ok(())

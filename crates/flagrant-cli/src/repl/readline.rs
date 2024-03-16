@@ -20,7 +20,7 @@ struct ReplHelper<'a> {
 }
 
 pub fn prompt(client: &ReplContext) -> String {
-    let guard = client.lock().unwrap();
+    let guard = client.read().unwrap();
     let project = &guard.project;
     let env = &guard.environment;
 

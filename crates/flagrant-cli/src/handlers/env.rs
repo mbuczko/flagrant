@@ -13,7 +13,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
             name: name.to_string(),
             description: args.get(2).map(|d| d.to_string()),
         };
-        let env: Environment = context.lock().unwrap().client.post("/envs", payload)?;
+        let env: Environment = context.read().unwrap().client.post("/envs", payload)?;
         println!("Created new environment '{}' (id={})", env.name, env.id);
         return Ok(());
     }
@@ -22,7 +22,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
 
 /// Lists all environments
 pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
-    let envs: Vec<Environment> = context.lock().unwrap().client.get("/envs")?;
+    let envs: Vec<Environment> = context.read().unwrap().client.get("/envs")?;
 
     println!("{:-^52}", "");
     println!("{0: <4} | {1: <30} | description", "id", "name");
@@ -45,12 +45,11 @@ pub fn sw<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()
         bail!("Not enough parameters provided.");
     }
     if let Some(name) = args.get(1) {
-        let mut guard = context.lock().unwrap();
         let env: anyhow::Result<Option<Environment>> =
-            guard.client.get(format!("/envs/{}", name));
+            context.read().unwrap().client.get(format!("/envs/{}", name));
         if let Ok(Some(env)) = env {
             println!("Switched to environment '{}' (id={})", env.name, env.id);
-            guard.environment = Some(env);
+            context.write().unwrap().environment = Some(env);
             return Ok(());
         }
     }

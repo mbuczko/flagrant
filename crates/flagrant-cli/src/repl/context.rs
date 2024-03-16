@@ -1,9 +1,9 @@
-use std::{rc::Rc, sync::Mutex};
+use std::{rc::Rc, sync::RwLock};
 
 use flagrant_client::blocking::HttpClient;
 use flagrant_types::{Environment, Project};
 
-pub type ReplContext = Rc<Mutex<HttpClientContext>>;
+pub type ReplContext = Rc<RwLock<HttpClientContext>>;
 
 #[derive(Debug)]
 pub struct HttpClientContext {

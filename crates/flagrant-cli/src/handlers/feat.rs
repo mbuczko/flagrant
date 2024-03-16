@@ -16,7 +16,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
                 description: args.get(3).map(|d| d.to_string()),
                 is_enabled: false,
             };
-            let feat: Feature = context.lock().unwrap().client.post("/features", payload)?;
+            let feat: Feature = context.read().unwrap().client.post("/features", payload)?;
 
             println!(
                 "Created new feature '{}' (id={}, value={})",
@@ -30,7 +30,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
 
 /// Lists all features in a project
 pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
-    let feats: Vec<Feature> = context.lock().unwrap().client.get("/features")?;
+    let feats: Vec<Feature> = context.read().unwrap().client.get("/features")?;
 
     println!("{:-^60}", "");
     println!(
@@ -55,7 +55,7 @@ pub fn val<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
     }
     if let Some(name) = args.get(1) {
         if let Some(value) = args.get(2) {
-            let client = &context.lock().unwrap().client;
+            let client = &context.read().unwrap().client;
             if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
                 let payload = NewFeatureRequestPayload {
                     name: name.to_string(),
@@ -85,7 +85,7 @@ pub fn onoff<'a>(args: Vec<&'a str>, context: &'a ReplContext, on: bool) -> anyh
         bail!("Not enough parameters provided.");
     }
     if let Some(name) = args.get(1) {
-        let client = &context.lock().unwrap().client;
+        let client = &context.read().unwrap().client;
         if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
             let payload = NewFeatureRequestPayload {
                 name: feature.name,

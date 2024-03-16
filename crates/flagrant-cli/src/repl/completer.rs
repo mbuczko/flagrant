@@ -44,7 +44,7 @@ impl CommandCompleter {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let client = &self.context.lock().unwrap().client;
+        let client = &self.context.read().unwrap().client;
         let envs = client.get::<_, Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
