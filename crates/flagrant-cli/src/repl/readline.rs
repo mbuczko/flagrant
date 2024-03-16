@@ -41,7 +41,6 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         Env::command(Some("add"), "env-name description", handlers::env::add),
         Env::command(Some("ls"), "", handlers::env::ls),
         Env::command(Some("sw"), "env-name", handlers::env::sw),
-
         // features
         Feat::command(None, "all | del | ls | val | on | off", command::no_op),
         Feat::command(Some("add "), "feature-name value", handlers::feat::add),
@@ -49,10 +48,13 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         Feat::command(Some("ls"), "feature-name value", handlers::feat::ls),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
-
         // Variants
         Var::command(None, "add | del", command::no_op),
-        Var::command(Some("add"), "feature-name var-weight var-value", handlers::var::add),
+        Var::command(
+            Some("add"),
+            "feature-name var-weight var-value",
+            handlers::var::add,
+        ),
     ];
     let helper = ReplHelper {
         hinter: ReplHinter::new(&commands),
@@ -67,7 +69,6 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&context).as_str()) {
             Ok(line) => {
-
                 // todo: parse the line to handle description as a string in quotes
                 let mut chunks = line.split_whitespace().collect::<Vec<_>>();
 

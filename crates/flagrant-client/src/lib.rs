@@ -36,8 +36,7 @@ impl HttpClient {
         path: S,
         payload: &P,
     ) -> anyhow::Result<()> {
-        self
-            .client
+        self.client
             .put(format!(
                 "{}/projects/{}{}",
                 self.api_host,

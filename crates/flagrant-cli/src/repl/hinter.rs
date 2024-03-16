@@ -20,7 +20,7 @@ impl Hint for CommandHint {
 
     fn completion(&self) -> Option<&str> {
         if self.complete_up_to > 0 {
-            return Some(&self.display[..self.complete_up_to])
+            return Some(&self.display[..self.complete_up_to]);
         }
         None
     }

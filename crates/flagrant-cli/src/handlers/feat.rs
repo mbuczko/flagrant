@@ -91,7 +91,7 @@ pub fn onoff<'a>(args: Vec<&'a str>, context: &'a ReplContext, on: bool) -> anyh
                 name: feature.name,
                 value: feature.value,
                 description: None,
-                is_enabled: on
+                is_enabled: on,
             };
             if client.put(format!("/features/{name}"), payload).is_ok() {
                 // re-fetch feature to be sure it's updated

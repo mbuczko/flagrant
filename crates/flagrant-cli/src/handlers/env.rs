@@ -45,8 +45,11 @@ pub fn sw<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()
         bail!("Not enough parameters provided.");
     }
     if let Some(name) = args.get(1) {
-        let env: anyhow::Result<Option<Environment>> =
-            context.read().unwrap().client.get(format!("/envs/{}", name));
+        let env: anyhow::Result<Option<Environment>> = context
+            .read()
+            .unwrap()
+            .client
+            .get(format!("/envs/{}", name));
         if let Ok(Some(env)) = env {
             println!("Switched to environment '{}' (id={})", env.name, env.id);
             context.write().unwrap().environment = Some(env);

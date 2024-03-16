@@ -35,7 +35,15 @@ pub async fn update(
     Json(feat): Json<NewFeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    feature::update_by_name(&pool, &project, feature_name, feat.name, feat.value, feat.is_enabled).await?;
+    feature::update_by_name(
+        &pool,
+        &project,
+        feature_name,
+        feat.name,
+        feat.value,
+        feat.is_enabled,
+    )
+    .await?;
     Ok(Json(()))
 }
 

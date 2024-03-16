@@ -1,8 +1,8 @@
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Pool, Sqlite};
 
-use flagrant_types::{Environment, Project};
 use crate::errors::DbError;
+use flagrant_types::{Environment, Project};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/environments.sql"]
@@ -16,7 +16,11 @@ pub async fn create<T: AsRef<str>>(
 ) -> anyhow::Result<Environment> {
     Ok(Environments::create_environment::<_, Environment>(
         pool,
-        params!(project.id, name.as_ref(), description.map(|d| d.as_ref().to_string())),
+        params!(
+            project.id,
+            name.as_ref(),
+            description.map(|d| d.as_ref().to_string())
+        ),
     )
     .await
     .map_err(|e| {
@@ -25,10 +29,7 @@ pub async fn create<T: AsRef<str>>(
     })?)
 }
 
-pub async fn fetch(
-    pool: &Pool<Sqlite>,
-    environment_id: u16,
-) -> anyhow::Result<Environment> {
+pub async fn fetch(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
     Ok(
         Environments::fetch_environment::<_, Environment>(pool, params!(environment_id))
             .await

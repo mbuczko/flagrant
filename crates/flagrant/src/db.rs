@@ -62,9 +62,9 @@ pub async fn migrate(pool: &SqlitePool, app_semver: Version) -> anyhow::Result<V
             tracing::debug!("Upgrading DB schema from {v} to latest version: {app_semver}");
             upgrade(pool, last_script_version, app_semver).await?
         }
-        v if last_app_version > app_semver => panic!(
-            "Your app version {app_semver} is too old, minimal required version is: {v}"
-        ),
+        v if last_app_version > app_semver => {
+            panic!("Your app version {app_semver} is too old, minimal required version is: {v}")
+        }
         v => {
             tracing::debug!("DB schema already at newest version: {v}");
             v
@@ -85,7 +85,7 @@ async fn upgrade(
                 tracing::debug!("Upgraded to latest migration {m}");
                 return Ok(current_version);
             }
-            Err(e) => panic!("Couldn't upgrade the schema. Bailing out: {e}")
+            Err(e) => panic!("Couldn't upgrade the schema. Bailing out: {e}"),
         }
     }
     Ok(app_semver)

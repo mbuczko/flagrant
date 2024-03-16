@@ -2,6 +2,15 @@ use super::context::ReplContext;
 
 type CommandHandler = fn(Vec<&str>, &ReplContext) -> anyhow::Result<()>;
 
+/// Feature related commands
+pub struct Feat;
+
+/// Variants related commands
+pub struct Var;
+
+/// Environment related commands
+pub struct Env;
+
 #[derive(Debug)]
 pub struct ReplCommand {
     pub cmd: String,
@@ -43,14 +52,9 @@ pub trait Command {
             handler: Some(handler),
             _argc: argc,
             _cmdop: concat(&[Self::triggered_by(), op]).to_lowercase(),
-
         }
     }
 }
-
-pub struct Env;
-pub struct Feat;
-pub struct Var;
 
 impl Command for Env {
     fn triggered_by() -> &'static str {
@@ -85,4 +89,3 @@ fn concat(strings: &[&str]) -> String {
         }
     })
 }
-

@@ -1,9 +1,12 @@
-use axum::{routing::{get, post, put}, Router};
+use axum::{
+    routing::{get, post, put},
+    Router,
+};
 use tower_http::compression::CompressionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::handlers::{environments, features, variants};
 use crate::handlers::projects;
+use crate::handlers::{environments, features, variants};
 
 mod errors;
 mod extractors;
@@ -28,14 +31,28 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .route("/projects/:project_id", get(projects::fetch))
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
-        .route("/projects/:project_id/envs/:env_name", get(environments::fetch))
+        .route(
+            "/projects/:project_id/envs/:env_name",
+            get(environments::fetch),
+        )
         .route("/projects/:project_id/features", get(features::list))
         .route("/projects/:project_id/features", post(features::create))
-        .route("/projects/:project_id/features/:feature_name", get(features::fetch))
-        .route("/projects/:project_id/features/:feature_name", put(features::update))
-        .route("/projects/:project_id/features/:feature_name/:env_name/variants", get(variants::list))
-        .route("/projects/:project_id/features/:feature_name/:env_name/variants", post(variants::create))
-
+        .route(
+            "/projects/:project_id/features/:feature_name",
+            get(features::fetch),
+        )
+        .route(
+            "/projects/:project_id/features/:feature_name",
+            put(features::update),
+        )
+        .route(
+            "/projects/:project_id/features/:feature_name/:env_name/variants",
+            get(variants::list),
+        )
+        .route(
+            "/projects/:project_id/features/:feature_name/:env_name/variants",
+            post(variants::create),
+        )
         .with_state(pool)
         .layer(CompressionLayer::new());
 
@@ -48,4 +65,3 @@ pub async fn start_api_server() -> anyhow::Result<()> {
 
     Ok(())
 }
-

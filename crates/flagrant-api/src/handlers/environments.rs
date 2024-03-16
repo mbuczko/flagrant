@@ -9,7 +9,6 @@ use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;
 
-
 #[derive(Debug, Deserialize)]
 pub struct QueryParams {
     name: Option<String>,
@@ -21,7 +20,9 @@ pub async fn create(
     Json(env): Json<NewEnvRequestPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(environment::create(&pool, &project, env.name, env.description).await?))
+    Ok(Json(
+        environment::create(&pool, &project, env.name, env.description).await?,
+    ))
 }
 
 pub async fn fetch(
@@ -29,7 +30,9 @@ pub async fn fetch(
     Path((project_id, env_name)): Path<(u16, String)>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(environment::fetch_by_name(&pool, &project, env_name).await?))
+    Ok(Json(
+        environment::fetch_by_name(&pool, &project, env_name).await?,
+    ))
 }
 
 pub async fn list(
@@ -39,7 +42,9 @@ pub async fn list(
 ) -> Result<Json<Vec<Environment>>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
     if let Some(pattern) = params.name {
-        Ok(Json(environment::fetch_by_pattern(&pool, &project, pattern).await?))
+        Ok(Json(
+            environment::fetch_by_pattern(&pool, &project, pattern).await?,
+        ))
     } else {
         Ok(Json(environment::fetch_for_project(&pool, &project).await?))
     }

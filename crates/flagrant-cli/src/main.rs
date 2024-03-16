@@ -2,8 +2,8 @@ use flagrant_client::blocking::HttpClient;
 use repl::{context::HttpClientContext, readline};
 use std::{rc::Rc, sync::RwLock};
 
-mod repl;
 mod handlers;
+mod repl;
 
 const API_HOST: &str = "http://localhost:3030";
 
