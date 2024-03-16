@@ -1,10 +1,10 @@
 use rustyline::hint::{Hint, Hinter};
 use rustyline::Context;
 
-use super::command::Command;
+use super::command::ReplCommand;
 
-pub struct ReplHinter {
-    hints: Vec<Command>,
+pub struct ReplHinter<'a> {
+    hints: &'a Vec<ReplCommand>,
 }
 
 #[derive(Hash, Debug, PartialEq, Eq)]
@@ -26,7 +26,7 @@ impl Hint for CommandHint {
     }
 }
 
-impl Hinter for ReplHinter {
+impl<'a> Hinter for ReplHinter<'a> {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
@@ -39,10 +39,7 @@ impl Hinter for ReplHinter {
         let command = self
             .hints
             .iter()
-            .find(|candidate| match candidate.argc {
-                0 => lowered == candidate.cmd,
-                p => argc >= p && lowered.starts_with(candidate.cmd.as_str()),
-            });
+            .find(|candidate| candidate.matches(&lowered));
 
         if let Some(command) = command {
             let strip_chars = command
@@ -56,15 +53,15 @@ impl Hinter for ReplHinter {
 
             return Some(CommandHint {
                 display: command.hint[strip_chars + 1..].into(),
-                complete_up_to: command.cmd.len().saturating_sub(strip_chars),
+                complete_up_to: command.op.len().saturating_sub(strip_chars),
             });
         }
         None
     }
 }
 
-impl ReplHinter {
-    pub fn new(hints: Vec<Command>) -> ReplHinter {
+impl<'a> ReplHinter<'a> {
+    pub fn new(hints: &'a Vec<ReplCommand>) -> ReplHinter<'a> {
         ReplHinter { hints }
     }
 }

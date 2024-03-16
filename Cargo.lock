@@ -692,7 +692,6 @@ name = "flagrant-client"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "flagrant",
  "flagrant-types",
  "reqwest",
  "serde",

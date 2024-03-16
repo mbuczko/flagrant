@@ -1,17 +1,19 @@
-use anyhow::anyhow;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Editor, Helper, Highlighter, Hinter, Validator};
 
-use super::command::{Env, Feat, Invokable};
+use crate::handlers;
+
+use super::command::{self, Command, Env, Feat, Var};
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
 use super::ReplContext;
 
+
 #[derive(Helper, Completer, Hinter, Validator, Highlighter)]
-struct ReplHelper {
+struct ReplHelper<'a> {
     #[rustyline(Hinter)]
-    hinter: ReplHinter,
+    hinter: ReplHinter<'a>,
     #[rustyline(Completer)]
     completer: CommandCompleter,
     // #[rustyline(Highlighter)]
@@ -34,32 +36,28 @@ pub fn prompt(client: &ReplContext) -> String {
 /// pulled straight from database in context of given project.
 pub fn init(context: ReplContext) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
+    let commands = vec![
+        // environments
+        Env::command(None, "add | del | ls | sw", command::no_op),
+        Env::command(Some("add"), "env-name description", handlers::env::add),
+        Env::command(Some("ls"), "", handlers::env::ls),
+        Env::command(Some("sw"), "env-name", handlers::env::sw),
+
+        // features
+        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
+        Feat::command(Some("add "), "feature-name value", handlers::feat::add),
+        Feat::command(Some("val"), "feature-name new-value", handlers::feat::val),
+        Feat::command(Some("ls"), "feature-name value", handlers::feat::ls),
+        Feat::command(Some("on"), "feature-name", handlers::feat::on),
+        Feat::command(Some("off"), "feature-name", handlers::feat::off),
+
+        // Variants
+        Var::command(None, "add | del", command::no_op),
+        Var::command(Some("add"), "feature-name var-weight var-value", handlers::var::add),
+    ];
     let helper = ReplHelper {
-        hinter: ReplHinter::new(vec![
-            // environments
-            Env::command(None, "ADD | DEL | LS | SW | REN"),
-            Env::command(Some("ADD"), "env-name description"),
-            Env::command(Some("DEL"), "env-name"),
-            Env::command(Some("REN"), "env-name new-name"),
-            Env::command(Some("SW"), "env-name"),
-
-            // features
-            Feat::command(None, "ADD | DEL | LS | VAL | ON | OFF"),
-            Feat::command(Some("ADD"), "feature-name value"),
-            Feat::command(Some("DEL"), "feature-name"),
-            Feat::command(Some("VAL"), "feature-name new-value"),
-            Feat::command(Some("ON"), "feature-name"),
-            Feat::command(Some("OFF"), "feature-name"),
-
-            // Command::new("env REN", "env RENAME name"),
-            // Command::new("feat ADD", "feat ADD feature-name value"),
-            // Command::new("feat DEL", "feat DEL feature-name"),
-            // Command::new("feat VAL", "feat VAL feature-name new-value"),
-            // Command::new("feat DESC", "feat DESC feature-name new-description"),
-            // Command::new("feat LIST", "feat LIST"),
-            // Command::new("feat", "feat ADD | DEL | DESC | LIST | VAL"),
-        ]),
-        completer: CommandCompleter::new(vec!["feat", "env"], context.clone()),
+        hinter: ReplHinter::new(&commands),
+        completer: CommandCompleter::new(vec!["feat", "env", "var"], context.clone()),
     };
 
     if rl.load_history("history.txt").is_err() {
@@ -70,18 +68,28 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&context).as_str()) {
             Ok(line) => {
-                let mut chunks = line.split_whitespace().collect::<Vec<_>>();
-                let command = chunks.remove(0).to_lowercase();
-                let result = match command.as_ref() {
-                    "env" => Env::invoke(chunks, &context),
-                    "feat" => Feat::invoke(chunks, &context),
-                    _ => Err(anyhow!("Action not supported")),
-                };
 
-                if let Err(error) = result {
-                    eprintln!("{error}");
+                // todo: parse the line to handle description as a string in quotes
+                let mut chunks = line.split_whitespace().collect::<Vec<_>>();
+
+                let command = chunks.remove(0).to_lowercase();
+                let op = chunks.first().unwrap_or(&"");
+
+                // find the command with provided op and invoke its handler
+                if let Some(cmd) = commands
+                    .iter()
+                    .find(|c| c.cmd == command && c.op.as_str() == *op)
+                {
+                    // handler for a command might not exists
+                    if let Some(handler) = cmd.handler {
+                        if let Err(error) = handler(chunks, &context) {
+                            eprintln!("{error}");
+                        } else {
+                            rl.add_history_entry(line.as_str())?;
+                        }
+                    }
                 } else {
-                    rl.add_history_entry(line.as_str())?;
+                    eprintln!("Action or its argument not supported");
                 }
             }
             Err(ReadlineError::Interrupted) => {

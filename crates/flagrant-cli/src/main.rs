@@ -3,6 +3,7 @@ use repl::{context::HttpClientContext, readline};
 use std::sync::{Arc, Mutex};
 
 mod repl;
+mod handlers;
 
 const API_HOST: &str = "http://localhost:3030";
 
