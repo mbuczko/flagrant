@@ -4,7 +4,7 @@ use flagrant_types::{Environment, NewEnvRequestPayload};
 use crate::repl::context::ReplContext;
 
 /// Adds a new Environment
-pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
+pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if args.is_empty() {
         bail!("Not enough parameters provided.");
     }
@@ -21,7 +21,7 @@ pub fn add<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
 }
 
 /// Lists all environments
-pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
+pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     let envs: Vec<Environment> = context.read().unwrap().client.get("/envs")?;
 
     println!("{:-^52}", "");
@@ -40,7 +40,7 @@ pub fn ls<'a>(_args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<(
 }
 
 /// Switches REPL context to the other environment
-pub fn sw<'a>(args: Vec<&'a str>, context: &'a ReplContext) -> anyhow::Result<()> {
+pub fn sw(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if args.is_empty() {
         bail!("Not enough parameters provided.");
     }

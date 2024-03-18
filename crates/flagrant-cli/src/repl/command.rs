@@ -41,6 +41,7 @@ pub trait Command {
         let op = op.unwrap_or_default();
         let mut argc = 0;
 
+        // op counts as argument to a command
         if !op.is_empty() {
             argc += 1;
         }

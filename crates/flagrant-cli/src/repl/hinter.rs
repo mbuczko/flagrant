@@ -34,8 +34,8 @@ impl<'a> Hinter for ReplHinter<'a> {
             return None;
         }
 
-        let lowered = line[..line.len() - 1].to_lowercase();
         let argc = line.split_whitespace().count();
+        let lowered = line[..line.len() - 1].to_lowercase();
         let command = self
             .hints
             .iter()

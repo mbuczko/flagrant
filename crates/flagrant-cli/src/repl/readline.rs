@@ -56,16 +56,13 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
             handlers::var::add,
         ),
     ];
-    let helper = ReplHelper {
+    rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
         completer: CommandCompleter::new(vec!["feat", "env", "var"], context.clone()),
-    };
-
+    }));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
-    rl.set_helper(Some(helper));
-
     loop {
         match rl.readline(prompt(&context).as_str()) {
             Ok(line) => {

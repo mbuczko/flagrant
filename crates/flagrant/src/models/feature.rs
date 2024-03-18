@@ -2,7 +2,7 @@ use hugsqlx::{params, HugSqlx};
 use sqlx::{Pool, Sqlite};
 
 use crate::errors::DbError;
-use flagrant_types::{Environment, Feature, Project};
+use flagrant_types::{Feature, Project};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
