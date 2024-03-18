@@ -37,17 +37,19 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Env::command(None, "add | del | ls | sw", command::no_op),
         Env::command(Some("add"), "env-name description", handlers::env::add),
         Env::command(Some("ls"), "", handlers::env::ls),
         Env::command(Some("sw"), "env-name", handlers::env::sw),
+        Env::command(None, "add | del | ls | sw", command::no_op),
+
         // features
-        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
-        Feat::command(Some("add "), "feature-name value", handlers::feat::add),
+        Feat::command(Some("add"), "feature-name value", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::val),
-        Feat::command(Some("ls"), "feature-name value", handlers::feat::ls),
+        Feat::command(Some("ls"), "", handlers::feat::ls),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
+        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
+
         // Variants
         Var::command(None, "add | del", command::no_op),
         Var::command(
@@ -67,19 +69,19 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         match rl.readline(prompt(&context).as_str()) {
             Ok(line) => {
                 // todo: parse the line to handle description as a string in quotes
-                let mut chunks = line.split_whitespace().collect::<Vec<_>>();
+                let mut words = line.split_whitespace().collect::<Vec<_>>();
 
-                let command = chunks.remove(0).to_lowercase();
-                let op = chunks.first().unwrap_or(&"");
+                let command = words.remove(0).to_lowercase();
+                let op = words.first().as_ref().map(|&s| *s);
 
                 // find the command with provided op and invoke its handler
                 if let Some(cmd) = commands
                     .iter()
-                    .find(|c| c.cmd == command && c.op.as_str() == *op)
+                    .find(|c| c.cmd == command && c.op.as_deref() == op)
                 {
                     // handler for a command might not exists
                     if let Some(handler) = cmd.handler {
-                        if let Err(error) = handler(chunks, &context) {
+                        if let Err(error) = handler(words, &context) {
                             eprintln!("{error}");
                         } else {
                             rl.add_history_entry(line.as_str())?;
