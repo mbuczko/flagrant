@@ -24,7 +24,8 @@ impl ReplCommand {
     /// If not empty, array of words contains command (like env) as a first
     /// element and optionally operation (op) as a second one.
     pub fn matches(&self, words: &[&str]) -> bool {
-        !words.is_empty() && words.first().unwrap().to_lowercase() == self.cmd
+        !words.is_empty()
+            && words.first().unwrap().to_lowercase() == self.cmd
             && match (&self.op, words.get(1)) {
                 // command has an op which matches first provided argument
                 (Some(op), Some(arg)) => op == arg,
@@ -58,11 +59,11 @@ impl ReplCommand {
                 .chars()
                 .enumerate()
                 .filter(|(_, c)| c.is_whitespace())
-                .map(|(i, _)| i+1)
+                .map(|(i, _)| i + 1)
                 .nth(words.len() - to_skip - 1);
 
             if let Some(strip_chars) = strip_chars {
-                return &self.hint[strip_chars..]
+                return &self.hint[strip_chars..];
             }
             ""
         }

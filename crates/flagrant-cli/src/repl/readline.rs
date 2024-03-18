@@ -41,7 +41,6 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         Env::command(Some("ls"), "", handlers::env::ls),
         Env::command(Some("sw"), "env-name", handlers::env::sw),
         Env::command(None, "add | del | ls | sw", command::no_op),
-
         // features
         Feat::command(Some("add"), "feature-name value", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::val),
@@ -49,7 +48,6 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
         Feat::command(None, "all | del | ls | val | on | off", command::no_op),
-
         // Variants
         Var::command(None, "add | del", command::no_op),
         Var::command(

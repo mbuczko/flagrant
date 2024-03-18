@@ -30,8 +30,7 @@ impl<'a> Hinter for ReplHinter<'a> {
             return None;
         }
 
-        let words = line.
-            split_whitespace().collect::<Vec<_>>();
+        let words = line.split_whitespace().collect::<Vec<_>>();
         let command = self
             .hints
             .iter()
@@ -39,8 +38,8 @@ impl<'a> Hinter for ReplHinter<'a> {
 
         if let Some(command) = command {
             return Some(CommandHint {
-                display: command.remaining_hint(&words).into()
-            })
+                display: command.remaining_hint(&words).into(),
+            });
         }
         None
     }
