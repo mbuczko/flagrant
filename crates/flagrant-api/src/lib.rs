@@ -37,22 +37,10 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         )
         .route("/projects/:project_id/features", get(features::list))
         .route("/projects/:project_id/features", post(features::create))
-        .route(
-            "/projects/:project_id/features/:feature_name",
-            get(features::fetch),
-        )
-        .route(
-            "/projects/:project_id/features/:feature_name",
-            put(features::update),
-        )
-        .route(
-            "/projects/:project_id/features/:feature_name/:env_name/variants",
-            get(variants::list),
-        )
-        .route(
-            "/projects/:project_id/features/:feature_name/:env_name/variants",
-            post(variants::create),
-        )
+        .route("/projects/:project_id/features/:feature_name", get(features::fetch))
+        .route("/projects/:project_id/features/:feature_name", put(features::update))
+        .route("/projects/:project_id/features/:feature_name/:env_name/variants", get(variants::list))
+        .route("/projects/:project_id/features/:feature_name/:env_name/variants", post(variants::create))
         .with_state(pool)
         .layer(CompressionLayer::new());
 

@@ -15,6 +15,25 @@ pub struct Environment {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Feature {
+    #[sqlx(rename = "feature_id")]
+    pub id: u16,
+    pub project_id: u16,
+    pub name: String,
+    pub value: String,
+    pub is_enabled: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, sqlx::FromRow)]
+pub struct Variant {
+    #[sqlx(rename = "variant_id")]
+    pub id: u16,
+    pub value: String,
+    pub weight: u16,
+    pub acc: i16,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct NewEnvRequestPayload {
     pub name: String,
@@ -35,24 +54,6 @@ pub struct NewVariantRequestPayload {
     pub weight: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct Feature {
-    #[sqlx(rename = "feature_id")]
-    pub id: u16,
-    pub project_id: u16,
-    pub name: String,
-    pub value: String,
-    pub is_enabled: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, sqlx::FromRow)]
-pub struct Variant {
-    #[sqlx(rename = "variant_id")]
-    pub id: u16,
-    pub value: String,
-    pub weight: u16,
-    pub acc: i16,
-}
 pub trait HttpRequestPayload {}
 
 impl HttpRequestPayload for NewEnvRequestPayload {}

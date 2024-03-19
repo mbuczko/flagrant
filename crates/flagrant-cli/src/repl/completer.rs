@@ -16,8 +16,7 @@ pub struct CommandCompleter {
 impl CommandCompleter {
     /// Completes main commands.
     ///
-    /// As for now only main command (like FEAT or ENV) are auto-completed,
-    /// which means that subcommands (like ADD) need to be fully entered by hand.
+    /// As for now only command (like FEAT or ENV) are auto-completed, operations are not.
     pub fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let empty = line.trim().is_empty();
         let pairs = self
@@ -27,7 +26,7 @@ impl CommandCompleter {
                 if empty || c.starts_with(line) {
                     return Some(Pair {
                         display: c.to_string(),
-                        replacement: c.to_uppercase().to_string(),
+                        replacement: c.to_uppercase().to_owned(),
                     });
                 }
                 None
@@ -74,12 +73,12 @@ impl Completer for CommandCompleter {
         match args.len() {
             // 0 - nothing entered
             // 1 - command not finished with whitespace yet
-            // 2 - subcommand not finished with whitespace yet
+            // 2 - operation not finished with whitespace yet
             0..=2 => self.complete_command(line).map_err(|e| {
                 ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
             }),
 
-            // command and subcommand provided - proceed with arg completion.
+            // command and operation provided - proceed with arg completion.
             _ => {
                 // back to the nearest whitespace to find begining of argument
                 let mut idx = line[..pos].char_indices();

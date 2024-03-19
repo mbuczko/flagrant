@@ -21,8 +21,8 @@ pub struct ReplCommand {
 
 impl ReplCommand {
     /// Returns true if command matches provided array of command line words.
-    /// If not empty, array of words contains command (like env) as a first
-    /// element and optionally operation (op) as a second one.
+    /// If not empty, array of words contains command (like 'ENV') as a first
+    /// element and optionally operation (like 'add') as a second one.
     pub fn matches(&self, words: &[&str]) -> bool {
         !words.is_empty()
             && words.first().unwrap().to_lowercase() == self.cmd
@@ -36,22 +36,22 @@ impl ReplCommand {
             }
     }
 
-    /// Returns a remaining part of the hint for given command line words.
-    /// Depending on how much words has been provided only a part of the hint
+    /// Returns a remaining part of hint for already entered command-line words.
+    /// Depending on how much words have been provided, only a part of the hint
     /// may be returned, eg:
     ///
     /// - for "ENV add" - entire hint describing all arguments is returned.
     /// - for "ENV add dev" - only a part of the hint describing second argument
     ///   is returned.
     pub fn remaining_hint(&self, words: &[&str]) -> &str {
-        let to_skip = match self.op {
+        let words_to_skip = match self.op {
             // skip command and op
             Some(_) => 2,
             // skip command only
             None => 1,
         };
 
-        if words.len() <= to_skip {
+        if words.len() <= words_to_skip {
             self.hint.as_str()
         } else {
             let strip_chars = self
@@ -60,7 +60,7 @@ impl ReplCommand {
                 .enumerate()
                 .filter(|(_, c)| c.is_whitespace())
                 .map(|(i, _)| i + 1)
-                .nth(words.len() - to_skip - 1);
+                .nth(words.len() - words_to_skip - 1);
 
             if let Some(strip_chars) = strip_chars {
                 return &self.hint[strip_chars..];
@@ -79,11 +79,11 @@ pub trait Command {
         ReplCommand {
             cmd: Self::triggered_by().into(),
             op: op.map(String::from),
-            hint: hint.to_string(),
+            hint: hint.to_owned(),
             handler: Some(handler),
         }
-    }
-}
+    }}
+
 
 impl Command for Env {
     fn triggered_by() -> &'static str {
