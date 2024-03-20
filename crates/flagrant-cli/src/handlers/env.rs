@@ -13,7 +13,11 @@ pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
             name: name.to_string(),
             description: args.get(2).map(|d| d.to_string()),
         };
-        let env: Environment = context.read().unwrap().client.post("/envs", payload)?;
+        let env = context
+            .read()
+            .unwrap()
+            .client
+            .post::<_, _, Environment>("/envs", payload)?;
         println!("Created new environment '{}' (id={})", env.name, env.id);
         return Ok(());
     }

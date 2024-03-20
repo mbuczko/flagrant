@@ -82,8 +82,8 @@ pub trait Command {
             hint: hint.to_owned(),
             handler: Some(handler),
         }
-    }}
-
+    }
+}
 
 impl Command for Env {
     fn triggered_by() -> &'static str {

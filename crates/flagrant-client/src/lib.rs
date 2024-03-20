@@ -50,7 +50,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub async fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
+    pub async fn post<S: AsRef<str>, P: HttpRequestPayload + Serialize, T: DeserializeOwned>(
         &self,
         path: S,
         payload: &P,

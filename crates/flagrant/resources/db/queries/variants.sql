@@ -9,6 +9,13 @@ SELECT v.variant_id, feature_id, value, weight, acc
 FROM variants v JOIN variants_weights vw USING(variant_id) 
 WHERE environment_id = $1 AND v.variant_id = $2
 
+-- name fetch_variant_with_control_value :<> :1
+-- doc Fetches a variant with control weight and value
+-- SELECT v.variant_id, f.feature_id, f.value, 100-sum(weight) as weight, acc
+-- FROM variants v JOIN variants_weights vw USING(variant_id)
+-- JOIN features f USING (feature_id)
+-- WHERE f.feature_id = $1
+
 -- :name fetch_variants_for_feature :<> :*
 -- :doc Fetches all variants for given feature
 SELECT v.variant_id, feature_id, value, weight, acc
@@ -29,3 +36,7 @@ WHERE variant_id = $2 AND environment_id = $3
 -- :doc Updates value of given feature variant
 UPDATE variants SET value = $1
 WHERE variant_id = $2
+
+-- :name delete_variant :<> :!
+-- :doc Removes variant of given id
+DELETE FROM variants WHERE variant_id = $1

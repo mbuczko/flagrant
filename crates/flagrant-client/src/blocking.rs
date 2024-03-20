@@ -44,7 +44,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub fn post<S: AsRef<str>, T: DeserializeOwned, P: HttpRequestPayload + Serialize>(
+    pub fn post<S: AsRef<str>, P: HttpRequestPayload + Serialize, T: DeserializeOwned>(
         &self,
         path: S,
         payload: P,
@@ -60,6 +60,19 @@ impl HttpClient {
             .json(&payload)
             .send()?
             .json::<T>()?)
+    }
+
+    pub fn delete<S: AsRef<str>>(&self, path: S) -> anyhow::Result<()> {
+        self.client
+            .delete(format!(
+                "{}/projects/{}{}",
+                self.api_host,
+                self.project_id,
+                path.as_ref()
+            ))
+            .send()?;
+
+        Ok(())
     }
 
     pub fn project(&self) -> anyhow::Result<Project> {

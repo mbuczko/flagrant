@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::compression::CompressionLayer;
@@ -37,10 +37,26 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         )
         .route("/projects/:project_id/features", get(features::list))
         .route("/projects/:project_id/features", post(features::create))
-        .route("/projects/:project_id/features/:feature_name", get(features::fetch))
-        .route("/projects/:project_id/features/:feature_name", put(features::update))
-        .route("/projects/:project_id/features/:feature_name/:env_name/variants", get(variants::list))
-        .route("/projects/:project_id/features/:feature_name/:env_name/variants", post(variants::create))
+        .route(
+            "/projects/:project_id/features/:feature_name",
+            get(features::fetch),
+        )
+        .route(
+            "/projects/:project_id/features/:feature_name",
+            put(features::update),
+        )
+        .route(
+            "/projects/:project_id/variants/feature/:feature_name/env/:env_name",
+            get(variants::list),
+        )
+        .route(
+            "/projects/:project_id/variants/feature/:feature_name/env/:env_name",
+            post(variants::create),
+        )
+        .route(
+            "/projects/:project_id/variants/:variant_id",
+            delete(variants::delete),
+        )
         .with_state(pool)
         .layer(CompressionLayer::new());
 

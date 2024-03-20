@@ -70,3 +70,14 @@ pub async fn list(
             })?,
     )
 }
+
+pub async fn delete(pool: &Pool<Sqlite>, variant_id: u16) -> anyhow::Result<()> {
+    Variants::delete_variant(pool, params!(variant_id))
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not remove variant");
+            DbError::QueryFailed
+        })?;
+
+    Ok(())
+}
