@@ -14,7 +14,8 @@ anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = {version = "14.0.0", features = ["derive"]}
 
-clap = {version = "4.5.1"}
+clap = "4.5.1"
+itertools = "0.12.1"
 
 [[bin]]
 name = "flagrant-cli"

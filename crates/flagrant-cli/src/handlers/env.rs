@@ -5,9 +5,6 @@ use crate::repl::context::ReplContext;
 
 /// Adds a new Environment
 pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
-    if args.is_empty() {
-        bail!("Not enough parameters provided.");
-    }
     if let Some(name) = args.get(1) {
         let payload = NewEnvRequestPayload {
             name: name.to_string(),
@@ -18,10 +15,13 @@ pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
             .unwrap()
             .client
             .post::<_, _, Environment>("/envs", payload)?;
-        println!("Created new environment '{}' (id={})", env.name, env.id);
-        return Ok(());
+
+        return Ok(println!(
+            "Created new environment '{}' (id={})",
+            env.name, env.id
+        ));
     }
-    bail!("No environment name provided")
+    bail!("No environment name provided.")
 }
 
 /// Lists all environments
@@ -45,9 +45,6 @@ pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 
 /// Switches REPL context to the other environment
 pub fn sw(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
-    if args.is_empty() {
-        bail!("Not enough parameters provided.");
-    }
     if let Some(name) = args.get(1) {
         let env: anyhow::Result<Option<Environment>> = context
             .read()
@@ -59,6 +56,7 @@ pub fn sw(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
             context.write().unwrap().environment = Some(env);
             return Ok(());
         }
+        bail!("No such an environment.")
     }
-    bail!("No such environment")
+    bail!("No environment name provided.");
 }
