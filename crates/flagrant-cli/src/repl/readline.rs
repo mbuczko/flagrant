@@ -1,6 +1,9 @@
+use std::borrow::Cow::{self, Owned};
+
 use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
-use rustyline::{Completer, Editor, Helper, Highlighter, Hinter, Validator};
+use rustyline::{Completer, Editor, Helper, Hinter, Validator};
 
 use crate::handlers;
 
@@ -9,14 +12,19 @@ use super::completer::CommandCompleter;
 use super::context::ReplContext;
 use super::hinter::ReplHinter;
 
-#[derive(Helper, Completer, Hinter, Validator, Highlighter)]
+#[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper<'a> {
     #[rustyline(Hinter)]
     hinter: ReplHinter<'a>,
     #[rustyline(Completer)]
     completer: CommandCompleter,
-    // #[rustyline(Highlighter)]
-    // highlighter: PromptHighlighter
+}
+
+impl<'a> Highlighter for ReplHelper<'a> {
+    /// Hint in a dark gray
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        Owned("\x1b[38;5;8m".to_owned() + hint + "\x1b[0m")
+    }
 }
 
 pub fn prompt(client: &ReplContext) -> String {
@@ -37,17 +45,17 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
+        Env::command(None, "add | del | ls | sw", command::no_op),
         Env::command(Some("add"), "env-name description", handlers::env::add),
         Env::command(Some("ls"), "", handlers::env::ls),
         Env::command(Some("sw"), "env-name", handlers::env::sw),
-        Env::command(None, "add | del | ls | sw", command::no_op),
         // features
+        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
         Feat::command(Some("add"), "feature-name value", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::val),
         Feat::command(Some("ls"), "", handlers::feat::ls),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
-        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
         // Variants
         Var::command(None, "add | del | ls", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),
