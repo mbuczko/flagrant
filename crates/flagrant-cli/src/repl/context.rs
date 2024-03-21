@@ -14,8 +14,10 @@ pub struct HttpClientContext {
 
 impl HttpClientContext {
     /// Creates a struct shared among all the commands.
-    /// Context contains a project information and HTTP client used
+    /// Context contains a project information, environment (not set up
+    /// initially, may be switched at any time) and HTTP client configured
     /// to communicate with API server.
+    ///
     /// Returns Error in case of any problems with fetching project data.
     pub fn new(client: HttpClient) -> anyhow::Result<HttpClientContext> {
         let project = client.project()?;

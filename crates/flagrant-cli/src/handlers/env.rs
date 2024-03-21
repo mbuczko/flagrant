@@ -6,20 +6,19 @@ use crate::repl::context::ReplContext;
 /// Adds a new Environment
 pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let payload = NewEnvRequestPayload {
-            name: name.to_string(),
-            description: args.get(2).map(|d| d.to_string()),
-        };
-        let env = context
-            .read()
-            .unwrap()
-            .client
-            .post::<_, _, Environment>("/envs", payload)?;
+        let env = context.read().unwrap().client.post::<_, _, Environment>(
+            "/envs",
+            NewEnvRequestPayload {
+                name: name.to_string(),
+                description: args.get(2).map(|d| d.to_string()),
+            },
+        )?;
 
-        return Ok(println!(
+        println!(
             "Created new environment '{}' (id={})",
             env.name, env.id
-        ));
+        );
+        return Ok(())
     }
     bail!("No environment name provided.")
 }

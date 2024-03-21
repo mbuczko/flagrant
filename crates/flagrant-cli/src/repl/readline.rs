@@ -51,11 +51,7 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
         // Variants
         Var::command(None, "add | del | ls", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),
-        Var::command(
-            Some("add"),
-            "feature-name var-weight var-value",
-            handlers::var::add,
-        ),
+        Var::command(Some("add"), "feature-name var-weight var-value", handlers::var::add),
         Var::command(Some("del"), "variant-id", handlers::var::del),
     ];
     rl.set_helper(Some(ReplHelper {
