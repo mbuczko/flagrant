@@ -33,7 +33,7 @@ pub fn prompt(client: &ReplContext) -> String {
     let env = &guard.environment;
 
     if let Some(env) = env {
-        format!("[{}/{}] > ", project.name, env.name)
+        format!("[{}/\x1b[32m{}\x1b[0m] > ", project.name, env.name)
     } else {
         format!("[{}] > ", project.name)
     }
