@@ -1,5 +1,6 @@
 use std::{rc::Rc, sync::RwLock};
 
+use anyhow::bail;
 use flagrant_client::blocking::HttpClient;
 use flagrant_types::{Environment, Project};
 
@@ -20,12 +21,17 @@ impl HttpClientContext {
     ///
     /// Returns Error in case of any problems with fetching project data.
     pub fn new(client: HttpClient) -> anyhow::Result<HttpClientContext> {
-        let project = client.project()?;
-        let environment = client.environment()?;
-        Ok(HttpClientContext {
-            client,
-            project,
-            environment,
-        })
+        if let Ok(project ) = client.project() {
+            if let Ok(environment) = client.environment() {
+                return Ok(HttpClientContext {
+                    client,
+                    project,
+                    environment,
+                })
+            }
+
+            bail!("No such an environment found.")
+        }
+        bail!("No project of given id found.")
     }
 }
