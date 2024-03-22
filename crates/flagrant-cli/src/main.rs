@@ -9,7 +9,8 @@ const API_HOST: &str = "http://localhost:3030";
 
 fn main() -> anyhow::Result<()> {
     let project_id = 295;
-    let client = HttpClient::new(API_HOST.into(), project_id);
+    let environment = "development";
+    let client = HttpClient::new(API_HOST.into(), project_id, environment.into());
 
     let context = Rc::new(RwLock::new(HttpClientContext::new(client)?));
     readline::init(context)?;

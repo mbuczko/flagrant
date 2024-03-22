@@ -52,7 +52,7 @@ pub fn sw(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
             .get(format!("/envs/{}", name));
         if let Ok(Some(env)) = env {
             println!("Switched to environment '{}' (id={})", env.name, env.id);
-            context.write().unwrap().environment = Some(env);
+            context.write().unwrap().environment = env;
             return Ok(());
         }
         bail!("No such an environment.")

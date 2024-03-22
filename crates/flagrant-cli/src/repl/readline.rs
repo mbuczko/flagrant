@@ -32,11 +32,7 @@ pub fn prompt(client: &ReplContext) -> String {
     let project = &guard.project;
     let env = &guard.environment;
 
-    if let Some(env) = env {
-        format!("[{}/\x1b[32m{}\x1b[0m] > ", project.name, env.name)
-    } else {
-        format!("[{}] > ", project.name)
-    }
+    format!("[{}/\x1b[35m{}\x1b[0m] > ", project.name, env.name)
 }
 
 /// Inits a REPL with history, hints and autocompletions

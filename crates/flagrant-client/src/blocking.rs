@@ -1,19 +1,21 @@
-use flagrant_types::{HttpRequestPayload, Project};
+use flagrant_types::{Environment, HttpRequestPayload, Project};
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
 pub struct HttpClient {
     api_host: String,
     project_id: u16,
+    env_name: String,
     client: reqwest::blocking::Client,
 }
 
 impl HttpClient {
-    pub fn new(api_host: String, project_id: u16) -> HttpClient {
+    pub fn new(api_host: String, project_id: u16, env_name: String) -> HttpClient {
         HttpClient {
+            client: reqwest::blocking::Client::new(),
             api_host,
             project_id,
-            client: reqwest::blocking::Client::new(),
+            env_name,
         }
     }
 
@@ -77,5 +79,8 @@ impl HttpClient {
 
     pub fn project(&self) -> anyhow::Result<Project> {
         self.get::<_, Project>("")
+    }
+    pub fn environment(&self) -> anyhow::Result<Environment> {
+        self.get::<_, Environment>(format!("/envs/{}", self.env_name))
     }
 }

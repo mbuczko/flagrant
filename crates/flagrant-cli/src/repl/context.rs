@@ -9,7 +9,7 @@ pub type ReplContext = Rc<RwLock<HttpClientContext>>;
 pub struct HttpClientContext {
     pub client: HttpClient,
     pub project: Project,
-    pub environment: Option<Environment>,
+    pub environment: Environment,
 }
 
 impl HttpClientContext {
@@ -21,10 +21,11 @@ impl HttpClientContext {
     /// Returns Error in case of any problems with fetching project data.
     pub fn new(client: HttpClient) -> anyhow::Result<HttpClientContext> {
         let project = client.project()?;
+        let environment = client.environment()?;
         Ok(HttpClientContext {
             client,
             project,
-            environment: None,
+            environment,
         })
     }
 }

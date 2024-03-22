@@ -7,13 +7,10 @@ use crate::repl::context::ReplContext;
 pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some((_, feature_name, weight, value)) = args.iter().collect_tuple() {
         let env = &context.read().unwrap().environment;
-        if env.is_none() {
-            bail!("Environment not set. Use ENV sw <environment> to set it up.");
-        }
         let var = context.read().unwrap().client.post::<_, _, Variant>(
             format!(
                 "/variants/feature/{feature_name}/env/{}",
-                env.as_ref().unwrap().name
+                env.name
             ),
             NewVariantRequestPayload {
                 value: value.to_string(),
@@ -33,12 +30,9 @@ pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 pub fn list(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
         let env = &context.read().unwrap().environment;
-        if env.is_none() {
-            bail!("Environment not set. Use ENV sw <environment> to set it up.");
-        }
         let variants: Vec<Variant> = context.read().unwrap().client.get(format!(
             "/variants/feature/{feature_name}/env/{}",
-            env.as_ref().unwrap().name
+            env.name
         ))?;
 
         println!("{:-^60}", "");
