@@ -1,4 +1,4 @@
-use flagrant_types::{Environment, HttpRequestPayload, Project};
+use flagrant_types::{Environment, Project};
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl HttpClient {
         ))?
         .json::<T>()?)
     }
-    pub fn put<S: AsRef<str>, P: HttpRequestPayload + Serialize>(
+    pub fn put<S: AsRef<str>, P: Serialize>(
         &self,
         path: S,
         payload: P,
@@ -46,7 +46,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub fn post<S: AsRef<str>, P: HttpRequestPayload + Serialize, T: DeserializeOwned>(
+    pub fn post<S: AsRef<str>, P: Serialize, T: DeserializeOwned>(
         &self,
         path: S,
         payload: P,

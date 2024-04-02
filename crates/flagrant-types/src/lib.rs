@@ -53,9 +53,3 @@ pub struct NewVariantRequestPayload {
     pub value: String,
     pub weight: u16,
 }
-
-pub trait HttpRequestPayload {}
-
-impl HttpRequestPayload for NewEnvRequestPayload {}
-impl HttpRequestPayload for NewFeatureRequestPayload {}
-impl HttpRequestPayload for NewVariantRequestPayload {}

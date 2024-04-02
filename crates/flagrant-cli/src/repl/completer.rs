@@ -6,6 +6,7 @@ use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
 use super::context::ReplContext;
+use super::tokenizer::split;
 
 #[derive(Debug)]
 pub struct CommandCompleter {
@@ -57,10 +58,10 @@ impl CommandCompleter {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, client: ReplContext) -> CommandCompleter {
+    pub fn new(commands: Vec<&'static str>, context: ReplContext) -> CommandCompleter {
         Self {
             commands,
-            context: client,
+            context,
         }
     }
 }
@@ -69,7 +70,7 @@ impl Completer for CommandCompleter {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
-        let args = line.split_whitespace().collect::<Vec<_>>();
+        let args = split(line).unwrap();
         match args.len() {
             // 0 - nothing entered
             // 1 - command not finished with whitespace yet

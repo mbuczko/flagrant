@@ -29,9 +29,9 @@ impl ReplCommand {
             && match (&self.op, words.get(1)) {
                 // command has an op which matches first provided argument
                 (Some(op), Some(arg)) => op == arg,
-                // command has an op but no one has been provided
+                // command has an op but none has been provided
                 (Some(_), None) => false,
-                // command has no op and nothing except the command was provided
+                // command has no op and none was provided
                 (None, _) => words.len() == 1,
             }
     }

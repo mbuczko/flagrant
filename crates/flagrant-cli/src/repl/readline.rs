@@ -11,6 +11,7 @@ use super::command::{self, Command, Env, Feat, Var};
 use super::completer::CommandCompleter;
 use super::context::ReplContext;
 use super::hinter::ReplHinter;
+use super::tokenizer::split;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper<'a> {
@@ -68,9 +69,10 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&context).as_str()) {
             Ok(line) => {
-                // todo: parse the line to handle description as a string in quotes
-                let mut words = line.split_whitespace().collect::<Vec<_>>();
-
+                let mut words = split(&line)?;
+                if words.is_empty() {
+                    continue;
+                }
                 let command = words.remove(0).to_lowercase();
                 let op = words.first().as_ref().map(|&s| *s);
 

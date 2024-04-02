@@ -1,6 +1,6 @@
 pub mod blocking;
 
-use flagrant_types::{HttpRequestPayload, Project};
+use flagrant_types::Project;
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ impl HttpClient {
         .await?)
     }
 
-    pub async fn put<S: AsRef<str>, P: HttpRequestPayload + Serialize>(
+    pub async fn put<S: AsRef<str>, P: Serialize>(
         &self,
         path: S,
         payload: &P,
@@ -50,7 +50,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub async fn post<S: AsRef<str>, P: HttpRequestPayload + Serialize, T: DeserializeOwned>(
+    pub async fn post<S: AsRef<str>, P: Serialize, T: DeserializeOwned>(
         &self,
         path: S,
         payload: &P,
