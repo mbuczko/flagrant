@@ -6,8 +6,9 @@ use crate::repl::context::ReplContext;
 
 pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some((_, feature_name, weight, value)) = args.iter().collect_tuple() {
-        let env = &context.read().unwrap().environment;
-        let var = context.read().unwrap().client.post::<_, _, Variant>(
+        let ctx = context.borrow();
+        let env = &ctx.environment;
+        let var = ctx.client.post::<_, _, Variant>(
             format!(
                 "/variants/feature/{feature_name}/env/{}",
                 env.name
@@ -29,8 +30,9 @@ pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 
 pub fn list(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
-        let env = &context.read().unwrap().environment;
-        let variants: Vec<Variant> = context.read().unwrap().client.get(format!(
+        let ctx = context.borrow();
+        let env = &ctx.environment;
+        let variants: Vec<Variant> = ctx.client.get(format!(
             "/variants/feature/{feature_name}/env/{}",
             env.name
         ))?;
@@ -53,8 +55,7 @@ pub fn list(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 pub fn del(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
         context
-            .read()
-            .unwrap()
+            .borrow()
             .client
             .delete(format!("/variants/{variant_id}"))?;
 

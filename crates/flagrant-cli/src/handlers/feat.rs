@@ -7,7 +7,7 @@ use crate::repl::context::ReplContext;
 /// Adds a new feature
 pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some((_, name, value)) = args.iter().collect_tuple() {
-        let feat: Feature = context.read().unwrap().client.post(
+        let feat: Feature = context.borrow().client.post(
             "/features",
             NewFeatureRequestPayload {
                 name: name.to_string(),
@@ -27,7 +27,7 @@ pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 
 /// Lists all features in a project
 pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
-    let feats: Vec<Feature> = context.read().unwrap().client.get("/features")?;
+    let feats: Vec<Feature> = context.borrow().client.get("/features")?;
 
     println!("{:-^60}", "");
     println!(
@@ -48,7 +48,7 @@ pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 /// Changes value of given feature
 pub fn val(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     if let Some((_, name, value)) = args.iter().collect_tuple() {
-        let client = &context.read().unwrap().client;
+        let client = &context.borrow().client;
         if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
             client.put(
                 format!("/features/{name}"),
@@ -88,7 +88,7 @@ pub fn off(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
 /// Switches feature on/off
 fn onoff(args: Vec<&str>, context: &ReplContext, on: bool) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let client = &context.read().unwrap().client;
+        let client = &context.borrow().client;
         if let Ok(feature) = client.get::<_, Feature>(format!("/features/{name}")) {
             if client.put(
                 format!("/features/{name}"),

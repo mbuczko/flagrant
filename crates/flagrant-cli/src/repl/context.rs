@@ -1,10 +1,10 @@
-use std::{rc::Rc, sync::RwLock};
+use std::cell::RefCell;
 
 use anyhow::bail;
 use flagrant_client::blocking::HttpClient;
 use flagrant_types::{Environment, Project};
 
-pub type ReplContext = Rc<RwLock<HttpClientContext>>;
+pub type ReplContext = RefCell<HttpClientContext>;
 
 #[derive(Debug)]
 pub struct HttpClientContext {

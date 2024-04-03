@@ -9,12 +9,12 @@ use super::context::ReplContext;
 use super::tokenizer::split;
 
 #[derive(Debug)]
-pub struct CommandCompleter {
+pub struct CommandCompleter<'a> {
     commands: Vec<&'static str>,
-    context: ReplContext,
+    context: &'a ReplContext,
 }
 
-impl CommandCompleter {
+impl<'a> CommandCompleter<'a> {
     /// Completes main commands.
     ///
     /// As for now only command (like FEAT or ENV) are auto-completed, operations are not.
@@ -44,7 +44,7 @@ impl CommandCompleter {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let client = &self.context.read().unwrap().client;
+        let client = &self.context.borrow().client;
         let envs = client.get::<_, Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
@@ -58,7 +58,7 @@ impl CommandCompleter {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, context: ReplContext) -> CommandCompleter {
+    pub fn new(commands: Vec<&'static str>, context: &'a ReplContext) -> CommandCompleter<'a> {
         Self {
             commands,
             context,
@@ -66,7 +66,7 @@ impl CommandCompleter {
     }
 }
 
-impl Completer for CommandCompleter {
+impl<'a> Completer for CommandCompleter<'a> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {

@@ -18,7 +18,7 @@ struct ReplHelper<'a> {
     #[rustyline(Hinter)]
     hinter: ReplHinter<'a>,
     #[rustyline(Completer)]
-    completer: CommandCompleter,
+    completer: CommandCompleter<'a>,
 }
 
 impl<'a> Highlighter for ReplHelper<'a> {
@@ -28,10 +28,10 @@ impl<'a> Highlighter for ReplHelper<'a> {
     }
 }
 
-pub fn prompt(client: &ReplContext) -> String {
-    let guard = client.read().unwrap();
-    let project = &guard.project;
-    let env = &guard.environment;
+pub fn prompt(context: &ReplContext) -> String {
+    let ctx = context.borrow();
+    let project = &ctx.project;
+    let env = &ctx.environment;
 
     format!("[{}/\x1b[35m{}\x1b[0m] > ", project.name, env.name)
 }
@@ -61,7 +61,7 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
-        completer: CommandCompleter::new(vec!["feat", "env", "var"], context.clone()),
+        completer: CommandCompleter::new(vec!["feat", "env", "var"], &context),
     }));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
