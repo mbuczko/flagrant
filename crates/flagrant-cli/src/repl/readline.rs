@@ -9,9 +9,9 @@ use crate::handlers;
 
 use super::command::{self, Command, Env, Feat, Var};
 use super::completer::CommandCompleter;
-use super::context::ReplContext;
 use super::hinter::ReplHinter;
 use super::tokenizer::split;
+use super::session::ReplSession;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper<'a> {
@@ -28,29 +28,26 @@ impl<'a> Highlighter for ReplHelper<'a> {
     }
 }
 
-pub fn prompt(context: &ReplContext) -> String {
-    let ctx = context.borrow();
-    let project = &ctx.project;
-    let env = &ctx.environment;
-
-    format!("[{}/\x1b[35m{}\x1b[0m] > ", project.name, env.name)
+pub fn prompt(session: &ReplSession) -> String {
+    let ssn = session.borrow();
+    format!("[{}/\x1b[35m{}\x1b[0m] > ", ssn.project.name, ssn.environment.name)
 }
 
 /// Inits a REPL with history, hints and autocompletions
 /// pulled straight from database in context of given project.
-pub fn init(context: ReplContext) -> anyhow::Result<()> {
+pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
         Env::command(None, "add | del | ls | sw", command::no_op),
         Env::command(Some("add"), "env-name description", handlers::env::add),
-        Env::command(Some("ls"), "", handlers::env::ls),
-        Env::command(Some("sw"), "env-name", handlers::env::sw),
+        Env::command(Some("ls"), "", handlers::env::list),
+        Env::command(Some("sw"), "env-name", handlers::env::switch),
         // features
         Feat::command(None, "all | del | ls | val | on | off", command::no_op),
         Feat::command(Some("add"), "feature-name value", handlers::feat::add),
-        Feat::command(Some("val"), "feature-name new-value", handlers::feat::val),
-        Feat::command(Some("ls"), "", handlers::feat::ls),
+        Feat::command(Some("val"), "feature-name new-value", handlers::feat::value),
+        Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
         // Variants
@@ -61,13 +58,13 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
-        completer: CommandCompleter::new(vec!["feat", "env", "var"], &context),
+        completer: CommandCompleter::new(vec!["feat", "env", "var"], &session),
     }));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
     loop {
-        match rl.readline(prompt(&context).as_str()) {
+        match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
                 let mut words = split(&line)?;
                 if words.is_empty() {
@@ -83,7 +80,7 @@ pub fn init(context: ReplContext) -> anyhow::Result<()> {
                 {
                     // handler for a command might not exists
                     if let Some(handler) = cmd.handler {
-                        if let Err(error) = handler(words, &context) {
+                        if let Err(error) = handler(words, &session) {
                             eprintln!("{error}");
                         } else {
                             rl.add_history_entry(line.as_str())?;

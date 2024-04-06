@@ -1,4 +1,5 @@
 pub mod blocking;
+pub mod resource;
 
 use flagrant_types::Project;
 use serde::{de::DeserializeOwned, Serialize};

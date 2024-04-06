@@ -1,56 +1,71 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
-use flagrant::models::{feature, project};
+use flagrant::models::{environment, feature};
 use flagrant_types::{Feature, NewFeatureRequestPayload};
+use serde::Deserialize;
 use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;
 
+#[derive(Debug, Deserialize)]
+pub struct FeatureQueryParams {
+    name: Option<String>,
+}
+
 pub async fn create(
     State(pool): State<SqlitePool>,
-    Path(project_id): Path<u16>,
+    Path(environment_id): Path<u16>,
     Json(feat): Json<NewFeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
-    let feature = feature::create(&pool, &project, feat.name, feat.value, feat.is_enabled).await?;
+    let env = environment::fetch(&pool, environment_id).await?;
+    let feature = feature::create(&pool, &env, feat.name, feat.value, feat.value_type, feat.is_enabled).await?;
 
     Ok(Json(feature))
 }
 
 pub async fn fetch(
     State(pool): State<SqlitePool>,
-    Path((project_id, feature_name)): Path<(u16, String)>,
+    Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(
-        feature::fetch_by_name(&pool, &project, feature_name).await?,
-    ))
+    let env = environment::fetch(&pool, environment_id).await?;
+    let feature = feature::fetch(&pool, &env, feature_id).await?;
+
+    Ok(Json(feature))
 }
 
 pub async fn update(
     State(pool): State<SqlitePool>,
-    Path((project_id, feature_name)): Path<(u16, String)>,
+    Path((environment_id, feature_id)): Path<(u16, u16)>,
     Json(feat): Json<NewFeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
-    feature::update_by_name(
+    let env = environment::fetch(&pool, environment_id).await?;
+    let feature = feature::fetch(&pool, &env, feature_id).await?;
+    feature::update(
         &pool,
-        &project,
-        feature_name,
+        &env,
+        &feature,
         feat.name,
         feat.value,
+        feat.value_type,
         feat.is_enabled,
     )
     .await?;
+
     Ok(Json(()))
 }
 
 pub async fn list(
     State(pool): State<SqlitePool>,
-    Path(project_id): Path<u16>,
+    Query(params): Query<FeatureQueryParams>,
+    Path(environment_id): Path<u16>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(feature::list(&pool, &project).await?))
+    let env = environment::fetch(&pool, environment_id).await?;
+    let features = match params.name {
+        Some(name) => vec![feature::fetch_by_name(&pool, &env, name).await?],
+        _ => feature::list(&pool, &env).await?
+    };
+
+    Ok(Json(features))
 }

@@ -1,5 +1,7 @@
+#![feature(let_chains)]
+
 use flagrant_client::blocking::HttpClient;
-use repl::{context::HttpClientContext, readline};
+use repl::{session::Session, readline};
 use std::cell::RefCell;
 
 mod handlers;
@@ -8,14 +10,17 @@ mod repl;
 const API_HOST: &str = "http://localhost:3030";
 
 fn main() -> anyhow::Result<()> {
-
     // todo: will be taken from args
     let project_id = 295;
-    let environment = "development";
+    let environment_id = 404;
 
-    let client = HttpClient::new(API_HOST.into(), project_id, environment.into());
-    let context = RefCell::new(HttpClientContext::new(client)?);
-    readline::init(context)?;
+    let client = HttpClient::new(API_HOST.into());
+    let session = RefCell::new(Session::init(
+        client,
+        project_id,
+        environment_id,
+    )?);
+    readline::init(session)?;
 
     Ok(())
 }

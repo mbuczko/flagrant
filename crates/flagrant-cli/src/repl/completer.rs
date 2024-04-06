@@ -5,13 +5,13 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::context::ReplContext;
 use super::tokenizer::split;
+use super::session::ReplSession;
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
     commands: Vec<&'static str>,
-    context: &'a ReplContext,
+    session: &'a ReplSession,
 }
 
 impl<'a> CommandCompleter<'a> {
@@ -44,8 +44,8 @@ impl<'a> CommandCompleter<'a> {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let client = &self.context.borrow().client;
-        let envs = client.get::<_, Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
+        let client = &self.session.borrow().client;
+        let envs = client.get::<Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
             .into_iter()
@@ -58,10 +58,10 @@ impl<'a> CommandCompleter<'a> {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, context: &'a ReplContext) -> CommandCompleter<'a> {
+    pub fn new(commands: Vec<&'static str>, session: &'a ReplSession) -> CommandCompleter<'a> {
         Self {
             commands,
-            context,
+            session,
         }
     }
 }

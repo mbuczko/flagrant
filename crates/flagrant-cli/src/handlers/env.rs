@@ -1,31 +1,32 @@
 use anyhow::bail;
 use flagrant_types::{Environment, NewEnvRequestPayload};
 
-use crate::repl::context::ReplContext;
+use crate::repl::session::{ReplSession, Resource};
 
 /// Adds a new Environment
-pub fn add(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
+pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let env = context.borrow().client.post::<_, _, Environment>(
-            "/envs",
+        let ssn = session.borrow();
+        let res = ssn.project.as_resource();
+        let env = ssn.client.post::<_, Environment>(
+            res.to_path("/envs"),
             NewEnvRequestPayload {
                 name: name.to_string(),
                 description: args.get(2).map(|d| d.to_string()),
             },
         )?;
 
-        println!(
-            "Created new environment '{}' (id={})",
-            env.name, env.id
-        );
-        return Ok(())
+        println!("Created new environment '{}' (id={})", env.name, env.id);
+        return Ok(());
     }
     bail!("No environment name provided.")
 }
 
 /// Lists all environments
-pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
-    let envs: Vec<Environment> = context.borrow().client.get("/envs")?;
+pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+    let ssn = session.borrow();
+    let res = ssn.project.as_resource();
+    let envs = ssn.client.get::<Vec<Environment>>(res.to_path("/envs"))?;
 
     println!("{:-^52}", "");
     println!("{0: <4} | {1: <30} | description", "id", "name");
@@ -42,17 +43,18 @@ pub fn ls(_args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Switches REPL context to the other environment
-pub fn sw(args: Vec<&str>, context: &ReplContext) -> anyhow::Result<()> {
+/// Changes current environment in a session
+pub fn switch(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let env: anyhow::Result<Option<Environment>> = context
-            .borrow()
-            .client
-            .get(format!("/envs/{}", name));
+        let ssn = session.borrow();
+        let res = ssn.project.as_resource();
+        let result = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?name={name}")));
 
-        if let Ok(Some(env)) = env {
+        if let Ok(mut envs) = result && !envs.is_empty() {
+            let env = envs.remove(0);
+
             println!("Switched to environment '{}' (id={})", env.name, env.id);
-            context.borrow_mut().environment = env;
+            session.borrow_mut().switch_environment(env);
             return Ok(());
         }
         bail!("No such an environment.")

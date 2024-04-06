@@ -28,35 +28,24 @@ pub fn init_tracing() {
 pub async fn start_api_server() -> anyhow::Result<()> {
     let pool = flagrant::init().await?;
     let app = Router::new()
+        // projects
         .route("/projects/:project_id", get(projects::fetch))
+
+        // environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
-        .route(
-            "/projects/:project_id/envs/:env_name",
-            get(environments::fetch),
-        )
-        .route("/projects/:project_id/features", get(features::list))
-        .route("/projects/:project_id/features", post(features::create))
-        .route(
-            "/projects/:project_id/features/:feature_name",
-            get(features::fetch),
-        )
-        .route(
-            "/projects/:project_id/features/:feature_name",
-            put(features::update),
-        )
-        .route(
-            "/projects/:project_id/variants/feature/:feature_name/env/:env_name",
-            get(variants::list),
-        )
-        .route(
-            "/projects/:project_id/variants/feature/:feature_name/env/:env_name",
-            post(variants::create),
-        )
-        .route(
-            "/projects/:project_id/variants/:variant_id",
-            delete(variants::delete),
-        )
+        .route("/projects/:project_id/envs/:env_id", get(environments::fetch))
+
+        // features
+        .route("/envs/:environment_id/features", get(features::list))
+        .route("/envs/:environment_id/features", post(features::create))
+        .route("/envs/:environment_id/features/:feature_id", get(features::fetch))
+        .route("/envs/:environment_id/features/:feature_id", put(features::update))
+
+        // variants
+        .route("/envs/:environment_id/features/:feature_id/variants", get(variants::list))
+        .route("/envs/:environment_id/features/:feature_id/variants", post(variants::create))
+        .route("/envs/:environment_id/variants/:variant_id", delete(variants::delete))
         .with_state(pool)
         .layer(CompressionLayer::new());
 

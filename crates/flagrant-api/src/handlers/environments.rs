@@ -10,7 +10,8 @@ use sqlx::SqlitePool;
 use crate::errors::ServiceError;
 
 #[derive(Debug, Deserialize)]
-pub struct QueryParams {
+pub struct EnvQueryParams {
+    prefix: Option<String>,
     name: Option<String>,
 }
 
@@ -20,32 +21,31 @@ pub async fn create(
     Json(env): Json<NewEnvRequestPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(
-        environment::create(&pool, &project, env.name, env.description).await?,
-    ))
+    let env = environment::create(&pool, &project, env.name, env.description).await?;
+
+    Ok(Json(env))
 }
 
 pub async fn fetch(
     State(pool): State<SqlitePool>,
-    Path((project_id, env_name)): Path<(u16, String)>,
+    Path((_project_id, env_id)): Path<(u16, u16)>,
 ) -> Result<Json<Environment>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
-    Ok(Json(
-        environment::fetch_by_name(&pool, &project, env_name).await?,
-    ))
+    let env = environment::fetch(&pool, env_id).await?;
+
+    Ok(Json(env))
 }
 
 pub async fn list(
     State(pool): State<SqlitePool>,
-    Query(params): Query<QueryParams>,
+    Query(params): Query<EnvQueryParams>,
     Path(project_id): Path<u16>,
 ) -> Result<Json<Vec<Environment>>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    if let Some(pattern) = params.name {
-        Ok(Json(
-            environment::fetch_by_pattern(&pool, &project, pattern).await?,
-        ))
-    } else {
-        Ok(Json(environment::fetch_for_project(&pool, &project).await?))
-    }
+    let envs = match (params.prefix, params.name) {
+        (Some(prefix), _) => environment::fetch_by_prefix(&pool, &project, prefix).await?,
+        (_, Some(name)) => vec![environment::fetch_by_name(&pool, &project, name).await?],
+        _ => environment::fetch_for_project(&pool, &project).await?
+    };
+
+    Ok(Json(envs))
 }

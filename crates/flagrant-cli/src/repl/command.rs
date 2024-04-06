@@ -1,6 +1,6 @@
-use super::context::ReplContext;
+use super::session::ReplSession;
 
-type CommandHandler = fn(Vec<&str>, &ReplContext) -> anyhow::Result<()>;
+type CommandHandler = fn(Vec<&str>, &ReplSession) -> anyhow::Result<()>;
 
 /// Feature related commands
 pub struct Feat;
@@ -103,6 +103,6 @@ impl Command for Var {
     }
 }
 
-pub fn no_op(_args: Vec<&str>, _ctx: &ReplContext) -> anyhow::Result<()> {
+pub fn no_op(_args: Vec<&str>, _session: &ReplSession) -> anyhow::Result<()> {
     Ok(())
 }
