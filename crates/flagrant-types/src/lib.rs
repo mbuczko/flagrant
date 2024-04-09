@@ -68,6 +68,28 @@ pub struct NewVariantRequestPayload {
     pub weight: u16,
 }
 
+impl fmt::Display for Feature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let vstr = self
+            .value
+            .as_ref()
+            .map(|s| format!("{s} [type={}]", self.value_type))
+            .unwrap_or_else(|| "(missing)".into());
+
+        write!(
+            f,
+            "id={}, name={}, value={vstr}, is_enabled={}",
+            self.id, self.name, self.is_enabled
+        )
+    }
+}
+
+impl fmt::Display for Variant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "id={}, weight={}, value={}", self.id, self.weight, self.value)
+    }
+}
+
 impl fmt::Display for FeatureValueType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)

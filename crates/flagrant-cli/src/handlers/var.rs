@@ -7,11 +7,9 @@ use crate::repl::session::{ReplSession, Resource};
 pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some((_, feature_name, weight, value)) = args.iter().collect_tuple() {
         let ssn = session.borrow();
-        let res = ssn.environment.as_resource();
+        let res = ssn.environment.as_base_resource();
 
-        if let Ok(mut feats) = ssn
-            .client
-            .get::<Vec<Feature>>(res.to_path("/features/list?name={feature_name}"))
+        if let Ok(mut feats) = ssn.client.get::<Vec<Feature>>(res.to_path("/features/list?name={feature_name}"))
             && !feats.is_empty()
         {
             let feat = feats.remove(0);
@@ -23,10 +21,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
                 },
             )?;
 
-            println!(
-                "Created new variants for feature '{feature_name}' (weight={}, value={})",
-                variant.weight, variant.value
-            );
+            println!("Created new variants for feature '{feature_name}' ({variant})");
             return Ok(());
         }
         bail!("Feature not found.")
@@ -37,11 +32,9 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
         let ssn = session.borrow();
-        let res = ssn.environment.as_resource();
+        let res = ssn.environment.as_base_resource();
 
-        if let Ok(mut feats) = ssn
-            .client
-            .get::<Vec<Feature>>(res.to_path(format!("/features/list?name={feature_name}")))
+        if let Ok(mut feats) = ssn.client.get::<Vec<Feature>>(res.to_path(format!("/features/list?name={feature_name}")))
             && !feats.is_empty()
         {
             let feat = feats.remove(0);
@@ -69,10 +62,9 @@ pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 pub fn del(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
         let ssn = session.borrow();
-        let res = ssn.environment.as_resource();
+        let res = ssn.environment.as_base_resource();
 
-        ssn.client
-            .delete(res.to_path(format!("/variants/{variant_id}")))?;
+        ssn.client.delete(res.to_path(format!("/variants/{variant_id}")))?;
 
         println!("Removed variant id={variant_id}");
         return Ok(());

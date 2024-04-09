@@ -7,7 +7,7 @@ use crate::repl::session::{ReplSession, Resource};
 pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
-        let res = ssn.project.as_resource();
+        let res = ssn.project.as_base_resource();
         let env = ssn.client.post::<_, Environment>(
             res.to_path("/envs"),
             NewEnvRequestPayload {
@@ -25,7 +25,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 /// Lists all environments
 pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     let ssn = session.borrow();
-    let res = ssn.project.as_resource();
+    let res = ssn.project.as_base_resource();
     let envs = ssn.client.get::<Vec<Environment>>(res.to_path("/envs"))?;
 
     println!("{:-^52}", "");
@@ -47,13 +47,13 @@ pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 pub fn switch(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
-        let res = ssn.project.as_resource();
+        let res = ssn.project.as_base_resource();
         let result = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?name={name}")));
 
         if let Ok(mut envs) = result && !envs.is_empty() {
             let env = envs.remove(0);
 
-            println!("Switched to environment '{}' (id={})", env.name, env.id);
+            println!("Switching to environment '{}' (id={})", env.name, env.id);
             session.borrow_mut().switch_environment(env);
             return Ok(());
         }

@@ -32,23 +32,24 @@ impl Session {
         }
         bail!("No project of given id found.")
     }
+
     pub fn switch_environment(&mut self, new_environment: Environment) {
         self.environment = new_environment;
     }
 }
 
 pub trait Resource {
-    fn as_resource(&self) -> BaseResource;
+    fn as_base_resource(&self) -> BaseResource;
 }
 
 impl Resource for Project {
-    fn as_resource(&self) -> BaseResource {
+    fn as_base_resource(&self) -> BaseResource {
         BaseResource::Project(self.id)
     }
 }
 
 impl Resource for Environment {
-    fn as_resource(&self) -> BaseResource {
+    fn as_base_resource(&self) -> BaseResource {
         BaseResource::Environment(self.id)
     }
 }
