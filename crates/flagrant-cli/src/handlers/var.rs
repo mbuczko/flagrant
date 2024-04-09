@@ -9,7 +9,9 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
-        if let Ok(mut feats) = ssn.client.get::<Vec<Feature>>(res.to_path("/features/list?name={feature_name}"))
+        if let Ok(mut feats) = ssn
+            .client
+            .get::<Vec<Feature>>(res.to_path("/features/list?name={feature_name}"))
             && !feats.is_empty()
         {
             let feat = feats.remove(0);
@@ -34,13 +36,15 @@ pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
-        if let Ok(mut feats) = ssn.client.get::<Vec<Feature>>(res.to_path(format!("/features/list?name={feature_name}")))
+        if let Ok(mut feats) = ssn
+            .client
+            .get::<Vec<Feature>>(res.to_path(format!("/features/list?name={feature_name}")))
             && !feats.is_empty()
         {
-            let feat = feats.remove(0);
+            let feature = feats.remove(0);
             let variants: Vec<Variant> = ssn
                 .client
-                .get(res.to_path(format!("/features/{}/variants", feat.id)))?;
+                .get(res.to_path(format!("/features/{}/variants", feature.id)))?;
 
             println!("{:-^60}", "");
             println!("{0: <4} | {1: <10} | {2: <50}", "id", "weight", "value");
@@ -64,7 +68,8 @@ pub fn del(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
-        ssn.client.delete(res.to_path(format!("/variants/{variant_id}")))?;
+        ssn.client
+            .delete(res.to_path(format!("/variants/{variant_id}")))?;
 
         println!("Removed variant id={variant_id}");
         return Ok(());
