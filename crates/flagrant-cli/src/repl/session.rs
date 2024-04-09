@@ -20,8 +20,9 @@ impl Session {
     ///
     /// Returns Error in case of any problems with fetching project data.
     pub fn init(client: HttpClient, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
-        if let Ok(project ) = client.get::<Project>(format!("/projects/{project_id}")) {
-            if let Ok(environment) = client.get::<Environment>(format!("/envs/{environment_id}")) {
+        let base_path = format!("/projects/{project_id}");
+        if let Ok(project ) = client.get::<Project>(base_path.clone()) {
+            if let Ok(environment) = client.get::<Environment>(format!("{base_path}/envs/{environment_id}")) {
                 return Ok(Session {
                     client,
                     project,

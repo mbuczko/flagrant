@@ -19,7 +19,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
                 is_enabled: false,
             },
         )?;
-        println!("Created new feature {feature}");
+        println!("Created new feature ({feature})");
         return Ok(());
     }
     bail!("No feature name or value provided.")

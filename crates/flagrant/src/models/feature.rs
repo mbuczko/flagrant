@@ -21,7 +21,7 @@ pub async fn create(
         &mut *tx,
         params!(environment.project_id, name, is_enabled),
         |row| Feature {
-            id: row.get("id"),
+            id: row.get("feature_id"),
             project_id: row.get("project_id"),
             is_enabled: row.get("is_enabled"),
             name: row.get("name"),

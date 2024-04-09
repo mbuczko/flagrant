@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS features_values(
   feature_id INTEGER NOT NULL,
   environment_id INTEGER NOT NULL,
   value TEXT,
-  type TEXT NOT NULL DEFAULT 'text',
+  value_type TEXT NOT NULL DEFAULT 'text',
 
   PRIMARY KEY (feature_id, environment_id),
   FOREIGN KEY (feature_id) REFERENCES features(feature_id),

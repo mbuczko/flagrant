@@ -13,12 +13,12 @@ impl HttpClient {
     }
 
     pub fn get<T: DeserializeOwned>(&self, path: String) -> anyhow::Result<T> {
-        Ok(reqwest::blocking::get(format!("{}/{}", self.api_host, path))?.json::<T>()?)
+        Ok(reqwest::blocking::get(format!("{}{}", self.api_host, path))?.json::<T>()?)
     }
 
     pub fn put<P: Serialize>(&self, path: String, payload: P) -> anyhow::Result<()> {
         self.client
-            .put(format!("{}/{}", self.api_host, path))
+            .put(format!("{}{}", self.api_host, path))
             .json(&payload)
             .send()?;
 
@@ -32,7 +32,7 @@ impl HttpClient {
     ) -> anyhow::Result<T> {
         Ok(self
             .client
-            .post(format!("{}/{}", self.api_host, path))
+            .post(format!("{}{}", self.api_host, path))
             .json(&payload)
             .send()?
             .json::<T>()?)
@@ -40,7 +40,7 @@ impl HttpClient {
 
     pub fn delete(&self, path: String) -> anyhow::Result<()> {
         self.client
-            .delete(format!("{}/{}", self.api_host, path))
+            .delete(format!("{}{}", self.api_host, path))
             .send()?;
 
         Ok(())
