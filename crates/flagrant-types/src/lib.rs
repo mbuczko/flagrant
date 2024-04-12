@@ -1,6 +1,10 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
+use sqlx::database::HasValueRef;
+use sqlx::error::BoxDynError;
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Database, Decode, FromRow, Row};
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
@@ -24,15 +28,15 @@ pub struct Feature {
     pub id: u16,
     pub project_id: u16,
     pub name: String,
-    pub value: Option<String>,
-    pub value_type: FeatureValueType,
+    pub value: Option<(String, FeatureValueType)>,
     pub is_enabled: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[derive(Default, Debug, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "value_type", rename_all = "lowercase")]
 // #[serde(rename_all = "lowercase")]
 pub enum FeatureValueType {
+    #[default]
     Text,
     Json,
     Toml,
@@ -56,8 +60,7 @@ pub struct NewEnvRequestPayload {
 #[derive(Serialize, Deserialize)]
 pub struct NewFeatureRequestPayload {
     pub name: String,
-    pub value: Option<String>,
-    pub value_type: FeatureValueType,
+    pub value: Option<(String, FeatureValueType)>,
     pub description: Option<String>,
     pub is_enabled: bool,
 }
@@ -73,12 +76,12 @@ impl fmt::Display for Feature {
         let vstr = self
             .value
             .as_ref()
-            .map(|s| format!("{s} [type={}]", self.value_type))
-            .unwrap_or_else(|| "(missing)".into());
+            .map(|(v, t)| format!("value={v}, type={t}"))
+            .unwrap_or_else(|| "value=(missing)".into());
 
         write!(
             f,
-            "id={}, name={}, value={vstr}, is_enabled={}",
+            "id={}, name={}, {vstr}, is_enabled={}",
             self.id, self.name, self.is_enabled
         )
     }
@@ -101,7 +104,16 @@ impl From<&str> for FeatureValueType {
         match value {
             "json" => Self::Json,
             "toml" => Self::Toml,
-            _ => Self::Text,
+            _ => Self::default(),
+        }
+    }
+}
+
+impl From<Option<&&str>> for FeatureValueType {
+    fn from(value: Option<&&str>) -> Self {
+        match value {
+            Some(v) => FeatureValueType::from(*v),
+            _ => Self::default()
         }
     }
 }

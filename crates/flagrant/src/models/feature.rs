@@ -1,5 +1,5 @@
 use hugsqlx::{params, HugSqlx};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{sqlite::SqliteRow, Pool, Row, Sqlite};
 
 use crate::errors::DbError;
 use flagrant_types::{Environment, Feature, FeatureValueType};
@@ -12,22 +12,14 @@ pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     name: String,
-    value: Option<String>,
-    value_type: FeatureValueType,
+    value: Option<(String, FeatureValueType)>,
     is_enabled: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = pool.begin().await?;
     let mut feature = Features::create_feature(
         &mut *tx,
         params!(environment.project_id, name, is_enabled),
-        |row| Feature {
-            id: row.get("feature_id"),
-            project_id: row.get("project_id"),
-            is_enabled: row.get("is_enabled"),
-            name: row.get("name"),
-            value: None,
-            value_type: flagrant_types::FeatureValueType::Text,
-        },
+        row_to_feature,
     )
     .await
     .map_err(|e| {
@@ -38,20 +30,14 @@ pub async fn create(
     // store feature value within the same transaction.
     // value may vary depending on environment.
 
-    if let Some(v) = value {
+    if let Some((value, value_type)) = value {
         Features::create_feature_value(
             &mut *tx,
-            params![
-                environment.id,
-                feature.id,
-                &v,
-                value_type.to_string().to_lowercase()
-            ],
+            params![environment.id, feature.id, &value, &value_type],
         )
         .await?;
 
-        feature.value = Some(v);
-        feature.value_type = value_type;
+        feature.value = Some((value, value_type));
     }
     tx.commit().await?;
     Ok(feature)
@@ -63,7 +49,7 @@ pub async fn fetch(
     feature_id: u16,
 ) -> anyhow::Result<Feature> {
     Ok(
-        Features::fetch_feature::<_, Feature>(pool, params![environment.id, feature_id])
+        Features::fetch_feature(pool, params![environment.id, feature_id], row_to_feature)
             .await
             .map_err(|e| {
                 tracing::error!(error = ?e, "Could not fetch a feature");
@@ -77,9 +63,10 @@ pub async fn fetch_by_name(
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
-    Ok(Features::fetch_feature_by_name::<_, Feature>(
+    Ok(Features::fetch_feature_by_name(
         pool,
         params![environment.id, environment.project_id, name],
+        row_to_feature,
     )
     .await
     .map_err(|e| {
@@ -93,42 +80,56 @@ pub async fn update(
     environment: &Environment,
     feature: &Feature,
     new_name: String,
-    new_value: Option<String>,
-    new_value_type: FeatureValueType,
+    new_value: Option<(String, FeatureValueType)>,
     is_enabled: bool,
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
-    Features::update_feature(
-        &mut *tx,
-        params![feature.id, new_name, is_enabled],
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not update a feature");
-        DbError::QueryFailed
-    })?;
+    Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not update a feature");
+            DbError::QueryFailed
+        })?;
 
-    Features::update_feature_value(
-        &mut *tx,
-        params![environment.id, feature.id, new_value,  new_value_type],
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not update a feature value/type");
-        DbError::QueryFailed
-    })?;
+    if let Some((value, value_type)) = new_value {
+        Features::update_feature_value(
+            &mut *tx,
+            params![environment.id, feature.id, value, value_type],
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not update a feature value/type");
+            DbError::QueryFailed
+        })?;
+    }
 
     tx.commit().await?;
     Ok(())
 }
 
 pub async fn list(pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Result<Vec<Feature>> {
-    Ok(
-        Features::fetch_features_for_environment::<_, Feature>(pool, params![environment.id, environment.project_id])
-            .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "Could not fetch features for project");
-                DbError::QueryFailed
-            })?,
+    Ok(Features::fetch_features_for_environment(
+        pool,
+        params![environment.id, environment.project_id],
+        row_to_feature,
     )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch features for project");
+        DbError::QueryFailed
+    })?)
+}
+
+/// Transforms an SqliteRow into a Feature being aware of missing value and/or value_type
+fn row_to_feature(row: SqliteRow) -> Feature {
+    let value: Option<String> = row.try_get("value").ok();
+    let value_type: Option<FeatureValueType> = row.try_get("value_type").ok();
+
+    Feature {
+        id: row.get("feature_id"),
+        project_id: row.get("project_id"),
+        is_enabled: row.get("is_enabled"),
+        name: row.get("name"),
+        value: value.map(|v| (v, value_type.unwrap_or_default())),
+    }
 }

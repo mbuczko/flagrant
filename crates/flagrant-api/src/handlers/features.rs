@@ -20,7 +20,7 @@ pub async fn create(
     Json(feat): Json<NewFeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
-    let feature = feature::create(&pool, &env, feat.name, feat.value, feat.value_type, feat.is_enabled).await?;
+    let feature = feature::create(&pool, &env, feat.name, feat.value, feat.is_enabled).await?;
 
     Ok(Json(feature))
 }
@@ -48,7 +48,6 @@ pub async fn update(
         &feature,
         feat.name,
         feat.value,
-        feat.value_type,
         feat.is_enabled,
     )
     .await?;

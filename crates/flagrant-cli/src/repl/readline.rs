@@ -45,7 +45,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         Env::command(Some("sw"), "env-name", handlers::env::switch),
         // features
         Feat::command(None, "all | del | ls | val | on | off", command::no_op),
-        Feat::command(Some("add"), "feature-name value", handlers::feat::add),
+        Feat::command(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::value),
         Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
