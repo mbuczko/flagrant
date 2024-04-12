@@ -108,9 +108,7 @@ fn onoff(args: Vec<&str>, session: &ReplSession, on: bool) -> anyhow::Result<()>
             .client
             .get::<Vec<Feature>>(res.to_path(format!("/features?name={name}")));
 
-        if let Ok(mut features) = result
-            && !features.is_empty()
-        {
+        if let Ok(mut features) = result && !features.is_empty() {
             let feature = features.remove(0);
 
             ssn.client.put(

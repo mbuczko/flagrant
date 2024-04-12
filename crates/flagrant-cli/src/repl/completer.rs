@@ -6,7 +6,7 @@ use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
 use super::tokenizer::split;
-use super::session::ReplSession;
+use super::session::{ReplSession, Resource};
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
@@ -44,8 +44,9 @@ impl<'a> CommandCompleter<'a> {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let client = &self.session.borrow().client;
-        let envs = client.get::<Vec<Environment>>(format!("/envs?name={arg_prefix}"))?;
+        let ssn = self.session.borrow();
+        let res = ssn.project.as_base_resource();
+        let envs = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?prefix={arg_prefix}")))?;
         let skip_chars = arg_prefix.len() - 1;
         let pairs = envs
             .into_iter()

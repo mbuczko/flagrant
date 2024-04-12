@@ -46,7 +46,7 @@ pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 /// Changes current environment in a session
 pub fn switch(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let ssn = session.borrow();
+        let mut ssn = session.borrow_mut();
         let res = ssn.project.as_base_resource();
         let result = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?name={name}")));
 
@@ -54,7 +54,7 @@ pub fn switch(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
             let env = envs.remove(0);
 
             println!("Switching to environment '{}' (id={})", env.name, env.id);
-            session.borrow_mut().switch_environment(env);
+            ssn.switch_environment(env);
             return Ok(());
         }
         bail!("No such an environment.")

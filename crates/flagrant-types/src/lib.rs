@@ -1,10 +1,5 @@
 use std::fmt;
-
 use serde::{Deserialize, Serialize};
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Database, Decode, FromRow, Row};
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {

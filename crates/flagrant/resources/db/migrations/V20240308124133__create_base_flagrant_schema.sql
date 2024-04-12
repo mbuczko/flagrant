@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS features_values(
 CREATE TABLE IF NOT EXISTS variants (
   variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
   feature_id TEXT NOT NULL,
+  value TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 0,
 
   FOREIGN KEY (feature_id) REFERENCES features(feature_id)

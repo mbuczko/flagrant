@@ -10,20 +10,20 @@ INSERT INTO features_values(environment_id, feature_id, value, value_type) VALUE
 -- :name fetch_feature :|| :1
 -- :doc Returns a feature with value corresponding to given environment_id
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv USING(feature_id)
-WHERE COALESCE(fv.environment_id, $1) = $1 AND f.feature_id = $2
+FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+WHERE f.feature_id = $2
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv USING(feature_id)
-WHERE COALESCE(fv.environment_id, $1) = $1 AND f.project_id = $2 AND f.name = $3
+FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+WHERE f.project_id = $2 AND f.name = $3
 
 -- :name fetch_features_for_environment :|| :*
 -- :doc Fetches all features for given environment
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv USING(feature_id)
-WHERE COALESCE(fv.environment_id, $1) = $1 AND f.project_id = $2
+FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+WHERE f.project_id = $2
 
 -- :name update_feature :<> :!
 -- :doc Updates feature with new values of name and is_enabled flag

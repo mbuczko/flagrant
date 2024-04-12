@@ -11,7 +11,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.to_path("/features/list?name={feature_name}"))
+            .get::<Vec<Feature>>(res.to_path(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
             let feat = feats.remove(0);
@@ -38,7 +38,7 @@ pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.to_path(format!("/features/list?name={feature_name}")))
+            .get::<Vec<Feature>>(res.to_path(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
             let feature = feats.remove(0);
