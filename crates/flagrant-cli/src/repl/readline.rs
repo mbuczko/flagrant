@@ -44,16 +44,16 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         Env::command(Some("ls"), "", handlers::env::list),
         Env::command(Some("sw"), "env-name", handlers::env::switch),
         // features
-        Feat::command(None, "all | del | ls | val | on | off", command::no_op),
+        Feat::command(None, "add | del | ls | val | on | off", command::no_op),
         Feat::command(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::value),
         Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
         // Variants
-        Var::command(None, "add | del | ls", command::no_op),
+        Var::command(None, "add | del | ls | val | weight", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),
-        Var::command(Some("add"), "feature-name var-weight var-value", handlers::var::add),
+        Var::command(Some("add"), "feature-name weight value", handlers::var::add),
         Var::command(Some("del"), "variant-id", handlers::var::del),
     ];
     rl.set_helper(Some(ReplHelper {

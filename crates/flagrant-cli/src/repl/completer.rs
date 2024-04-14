@@ -17,7 +17,7 @@ pub struct CommandCompleter<'a> {
 impl<'a> CommandCompleter<'a> {
     /// Completes main commands.
     ///
-    /// As for now only command (like FEAT or ENV) are auto-completed, operations are not.
+    /// As for now only commands (like FEAT or ENV) are auto-completed, operations are not.
     pub fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let empty = line.trim().is_empty();
         let pairs = self

@@ -27,9 +27,6 @@ pub async fn create(
         DbError::QueryFailed
     })?;
 
-    // store feature value within the same transaction.
-    // value may vary depending on environment.
-
     if let Some((value, value_type)) = value {
         Features::create_feature_value(
             &mut *tx,
@@ -39,6 +36,7 @@ pub async fn create(
 
         feature.value = Some((value, value_type));
     }
+
     tx.commit().await?;
     Ok(feature)
 }
@@ -120,7 +118,8 @@ pub async fn list(pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Res
     })?)
 }
 
-/// Transforms an SqliteRow into a Feature being aware of missing value and/or value_type
+/// Transforms an `SqliteRow` into a `Feature`.
+/// As feature value is optional, transformation takes care of missing value as well.
 fn row_to_feature(row: SqliteRow) -> Feature {
     let value: Option<String> = row.try_get("value").ok();
     let value_type: Option<FeatureValueType> = row.try_get("value_type").ok();
