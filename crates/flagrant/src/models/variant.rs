@@ -16,23 +16,27 @@ pub async fn create(
     value: String,
     weight: u16,
 ) -> anyhow::Result<Variant> {
-    let variant_id =
-        Variants::create_variant(pool, params!(feature.id, &value), |v| v.get("variant_id"))
-            .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "Could not create a variant");
-                DbError::QueryFailed
-            })?;
-
-    let weight = Variants::create_variant_weight(pool, params![env.id, variant_id, weight], |v| {
-        v.get("weight")
+    let mut tx = pool.begin().await?;
+    let variant_id = Variants::create_variant(&mut *tx, params!(feature.id, &value), |v| {
+        v.get("variant_id")
     })
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "Could not set a variant weight");
+        tracing::error!(error = ?e, "Could not create a variant");
         DbError::QueryFailed
     })?;
 
+    let weight =
+        Variants::create_variant_weight(&mut *tx, params![env.id, variant_id, weight], |v| {
+            v.get("weight")
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not set a variant weight");
+            DbError::QueryFailed
+        })?;
+
+    tx.commit().await?;
     Ok(Variant {
         id: variant_id,
         value,
