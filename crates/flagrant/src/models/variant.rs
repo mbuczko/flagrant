@@ -1,5 +1,5 @@
 use hugsqlx::{params, HugSqlx};
-use sqlx::Row;
+use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
 
 use crate::errors::DbError;
@@ -11,7 +11,7 @@ struct Variants {}
 
 pub async fn create(
     pool: &Pool<Sqlite>,
-    env: &Environment,
+    environment: &Environment,
     feature: &Feature,
     value: String,
     weight: i16,
@@ -27,7 +27,7 @@ pub async fn create(
     })?;
 
     let weight =
-        Variants::upsert_variant_weight(&mut *tx, params![env.id, variant_id, weight], |v| {
+        Variants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight], |v| {
             v.get("weight")
         })
         .await
@@ -47,7 +47,7 @@ pub async fn create(
 
 pub async fn update(
     pool: &Pool<Sqlite>,
-    env: &Environment,
+    environment: &Environment,
     variant: &Variant,
     new_value: String,
     new_weight: i16,
@@ -61,7 +61,7 @@ pub async fn update(
             DbError::QueryFailed
         })?;
 
-    Variants::upsert_variant_weight::<_, _, i16>(&mut *tx, params![env.id, variant.id, new_weight], |v| {
+    Variants::upsert_variant_weight::<_, _, i16>(&mut *tx, params![environment.id, variant.id, new_weight], |v| {
             v.get("weight")
         })
         .await
@@ -76,10 +76,10 @@ pub async fn update(
 
 pub async fn fetch(
     pool: &Pool<Sqlite>,
-    env: &Environment,
+    environment: &Environment,
     variant_id: u16,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant::<_, Variant>(pool, params!(env.id, variant_id))
+    let variant = Variants::fetch_variant::<_, Variant>(pool, params!(environment.id, variant_id))
         .await
         .map_err(|e| {
             tracing::error!(error = ?e, "Could fetch a variant");
@@ -91,11 +91,11 @@ pub async fn fetch(
 
 pub async fn list(
     pool: &Pool<Sqlite>,
-    env: &Environment,
+    environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<Variant>> {
     let variants =
-        Variants::fetch_variants_for_feature::<_, Variant>(pool, params!(env.id, feature.id))
+        Variants::fetch_variants_for_feature::<_, Variant>(pool, params!(environment.id, feature.id))
             .await
             .map_err(|e| {
                 tracing::error!(error = ?e, "Could not fetch variants for feature");
@@ -105,8 +105,14 @@ pub async fn list(
     Ok(variants)
 }
 
-pub async fn delete(pool: &Pool<Sqlite>, variant_id: u16) -> anyhow::Result<()> {
-    let mut tx = pool.begin().await?;
+/// Deletes a variant.
+/// This function exceptionally (compared to other functions in this namespace)
+/// takes as argument `SqliteConnection` instead of `Pool`. This is because it's
+/// also being used in feature removal which calls this code in a sub-transaction.
+/// This requires both - outer transaction and subtransaction to operate on same
+/// connection.
+pub async fn delete(conn: &mut SqliteConnection, variant_id: u16) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
 
     Variants::delete_variant_weights(&mut *tx, params!(variant_id))
         .await

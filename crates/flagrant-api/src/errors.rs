@@ -18,7 +18,7 @@ impl IntoResponse for ServiceError {
     fn into_response(self) -> Response<Body> {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Something went wrong: {}", self.0),
+            format!("Error: {}", self.0),
         )
             .into_response()
     }

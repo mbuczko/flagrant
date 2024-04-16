@@ -50,6 +50,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
+        Feat::command(Some("del"), "feature-name", handlers::feat::delete),
         // Variants
         Var::command(None, "add | del | ls | wgt | val", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),

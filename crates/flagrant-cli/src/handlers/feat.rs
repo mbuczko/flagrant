@@ -133,3 +133,27 @@ fn onoff(args: Vec<&str>, session: &ReplSession, on: bool) -> anyhow::Result<()>
     }
     bail!("No feature name provided.")
 }
+
+/// Deletes existing feature
+pub fn delete(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+    if let Some(name) = args.get(1) {
+        let ssn = session.borrow();
+        let res = ssn.environment.as_base_resource();
+        let result = ssn
+            .client
+            .get::<Vec<Feature>>(res.to_path(format!("/features?name={name}")));
+
+        if let Ok(mut features) = result && !features.is_empty() {
+            let feature = features.remove(0);
+
+            ssn.client.delete(
+                res.to_path(format!("/features/{}", feature.id)),
+            )?;
+            println!("Feature removed.");
+            return Ok(());
+        }
+        bail!("No such a feature.")
+
+    }
+    bail!("No feature name or value provided.")
+}

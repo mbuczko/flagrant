@@ -24,7 +24,7 @@ WHERE feature_id = $2
 ORDER by v.variant_id
 
 -- :name upsert_variant_weight :|| :1
--- :doc Creates a weight for feature variant in given environment
+-- :doc Inserts or updates a weight for feature variant in given environment
 INSERT INTO variants_weights(environment_id, variant_id, weight) VALUES($1, $2, $3)
 ON CONFLICT(variant_id, environment_id) DO UPDATE SET weight=$3
 RETURNING weight

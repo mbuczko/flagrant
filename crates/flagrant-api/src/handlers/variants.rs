@@ -62,5 +62,6 @@ pub async fn delete(
     State(pool): State<SqlitePool>,
     Path((_environment_id, variant_id)): Path<(u16, u16)>,
 ) -> Result<Json<()>, ServiceError> {
-    Ok(Json(variant::delete(&pool, variant_id).await?))
+    let mut conn = pool.acquire().await?;
+    Ok(Json(variant::delete(&mut conn, variant_id).await?))
 }

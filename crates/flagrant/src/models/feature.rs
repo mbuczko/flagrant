@@ -1,8 +1,10 @@
 use hugsqlx::{params, HugSqlx};
-use sqlx::{sqlite::SqliteRow, Pool, Row, Sqlite};
+use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite};
 
 use crate::errors::DbError;
 use flagrant_types::{Environment, Feature, FeatureValueType};
+
+use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
@@ -90,7 +92,7 @@ pub async fn update(
         })?;
 
     if let Some((value, value_type)) = new_value {
-        Features::update_feature_value(
+        Features::upsert_feature_value(
             &mut *tx,
             params![environment.id, feature.id, value, value_type],
         )
@@ -100,6 +102,30 @@ pub async fn update(
             DbError::QueryFailed
         })?;
     }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn delete(
+    pool: &Pool<Sqlite>,
+    environment: &Environment,
+    feature: &Feature,
+) -> anyhow::Result<()> {
+    let mut tx = pool.begin().await?;
+    let conn = tx.acquire().await?;
+
+    let variants = variant::list(pool, environment, feature).await?;
+
+    println!("{variants:?}");
+
+    // remove all feature variants first
+    for var in variants {
+        variant::delete(conn, var.id).await?;
+    }
+
+    Features::delete_feature_values(&mut *tx, params![feature.id]).await?;
+    Features::delete_feature(&mut *tx, params![feature.id]).await?;
 
     tx.commit().await?;
     Ok(())

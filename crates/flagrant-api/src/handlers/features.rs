@@ -68,3 +68,19 @@ pub async fn list(
 
     Ok(Json(features))
 }
+
+pub async fn delete(
+    State(pool): State<SqlitePool>,
+    Path((environment_id, feature_id)): Path<(u16, u16)>,
+) -> Result<Json<()>, ServiceError> {
+    let env = environment::fetch(&pool, environment_id).await?;
+    let feature = feature::fetch(&pool, &env, feature_id).await?;
+    feature::delete(
+        &pool,
+        &env,
+        &feature,
+    )
+    .await?;
+
+    Ok(Json(()))
+}

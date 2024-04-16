@@ -1,8 +1,7 @@
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
+use axum::{routing::{delete, get, post, put}, Router
 };
 use tower_http::compression::CompressionLayer;
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::handlers::projects;
@@ -41,6 +40,7 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .route("/envs/:environment_id/features", post(features::create))
         .route("/envs/:environment_id/features/:feature_id", get(features::fetch))
         .route("/envs/:environment_id/features/:feature_id", put(features::update))
+        .route("/envs/:environment_id/features/:feature_id", delete(features::delete))
 
         // variants
         .route("/envs/:environment_id/features/:feature_id/variants", get(variants::list))
@@ -49,7 +49,9 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .route("/envs/:environment_id/variants/:variant_id", put(variants::update))
         .route("/envs/:environment_id/variants/:variant_id", delete(variants::delete))
         .with_state(pool)
-        .layer(CompressionLayer::new());
+        .layer(CompressionLayer::new())
+        .layer(TraceLayer::new_for_http());
+
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
         .await
