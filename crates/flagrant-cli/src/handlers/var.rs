@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_types::{Feature, NewVariantRequestPayload, Variant};
+use flagrant_types::{Feature, VariantRequestPayload, Variant};
 use itertools::Itertools;
 
 use crate::repl::session::{ReplSession, Resource};
@@ -17,9 +17,9 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
             let feat = feats.remove(0);
             let variant = ssn.client.post::<_, Variant>(
                 res.to_path(format!("/features/{}/variants", feat.id)),
-                NewVariantRequestPayload {
+                VariantRequestPayload {
                     value: value.to_string(),
-                    weight: weight.parse::<u16>()?,
+                    weight: weight.parse::<i16>()?,
                 },
             )?;
 
@@ -47,13 +47,15 @@ pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
                 .get(res.to_path(format!("/features/{}/variants", feature.id)))?;
 
             println!("{:-^60}", "");
-            println!("{0: <4} | {1: <10} | {2: <50}", "id", "weight", "value");
+            println!("{0: <4} | {1: <15} | {2: <50}", "id", "weight", "value");
             println!("{:-^60}", "");
 
             for var in variants {
                 println!(
-                    "{0: <4} | {1: <10} | {2: <50}",
-                    var.id, var.weight, var.value
+                    "{0: <4} | {1: <14} | {2: <50}",
+                    var.id,
+                    bar(var.weight, 10),
+                    var.value
                 );
             }
             return Ok(());
@@ -75,4 +77,66 @@ pub fn del(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         return Ok(());
     }
     bail!("No variant-id provided.")
+}
+
+pub fn weight(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+    if let Some((_, variant_id, weight)) = args.iter().collect_tuple() {
+        let ssn = session.borrow();
+        let res = ssn.environment.as_base_resource();
+
+        if let Ok(variant) = ssn
+            .client
+            .get::<Variant>(res.to_path(format!("/variants/{variant_id}")))
+        {
+            let weight = weight.parse::<i16>()?;
+            if weight < 0 {
+                bail!("Variant weight should be positive number in range of <0, 100>.")
+            }
+            ssn.client.put(
+                res.to_path(format!("/variants/{}", variant.id)),
+                VariantRequestPayload {
+                    value: variant.value,
+                    weight
+                },
+            )?;
+            return Ok(());
+        }
+        bail!("No variant of given id found.");
+    }
+    bail!("No variant-id or new weight provided.")
+}
+
+pub fn value(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+    if let Some((_, variant_id, value)) = args.iter().collect_tuple() {
+        let ssn = session.borrow();
+        let res = ssn.environment.as_base_resource();
+
+        if let Ok(variant) = ssn.client.get::<Variant>(res.to_path(format!("/variants/{variant_id}"))) {
+            ssn.client.put(
+                res.to_path(format!("/variants/{}", variant.id)),
+                VariantRequestPayload {
+                    value: value.to_string(),
+                    weight: variant.weight
+                },
+            )?;
+
+            // re-fetch variant to be sure it's updated
+            let variant = ssn.client.get::<Variant>(res.to_path(format!("/variants/{variant_id}")))?;
+            println!("Updated variant ({variant})");
+
+            return Ok(());
+        }
+        bail!("No variant of given id found.");
+    }
+    bail!("No variant-id or new value provided.")
+}
+
+fn bar(weight: i16, width: i16) -> String {
+    let mut bar = vec![' '; width as usize];
+    let progress = weight * width / 100;
+
+    for ch in bar.iter_mut().take(progress as usize) {
+        *ch = '▆';
+    }
+    format!("{0: <3}% {1: <10}", weight, String::from_iter(bar))
 }

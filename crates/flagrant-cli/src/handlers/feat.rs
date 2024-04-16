@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_types::{Feature, FeatureValueType, NewFeatureRequestPayload};
+use flagrant_types::{Feature, FeatureValueType, FeatureRequestPayload};
 use itertools::Itertools;
 
 use crate::repl::session::{ReplSession, Resource};
@@ -14,7 +14,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         let value_type = FeatureValueType::from(args.get(3));
         let feature = ssn.client.post::<_, Feature>(
             res.to_path("/features"),
-            NewFeatureRequestPayload {
+            FeatureRequestPayload {
                 name: name.to_string(),
                 value: value.map(|v| (v, value_type)),
                 description: args.get(3).map(|d| d.to_string()),
@@ -68,7 +68,7 @@ pub fn value(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 
             ssn.client.put(
                 res.to_path(format!("/features/{}", feature.id)),
-                NewFeatureRequestPayload {
+                FeatureRequestPayload {
                     name: name.to_string(),
                     value: Some((value.to_string(), value_type)),
                     description: None,
@@ -113,7 +113,7 @@ fn onoff(args: Vec<&str>, session: &ReplSession, on: bool) -> anyhow::Result<()>
 
             ssn.client.put(
                 res.to_path(format!("/features/{}", feature.id)),
-                NewFeatureRequestPayload {
+                FeatureRequestPayload {
                     name: feature.name,
                     value: feature.value,
                     description: None,

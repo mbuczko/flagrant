@@ -39,10 +39,10 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Env::command(None, "add | del | ls | sw", command::no_op),
+        Env::command(None, "add | del | ls | to", command::no_op),
         Env::command(Some("add"), "env-name description", handlers::env::add),
         Env::command(Some("ls"), "", handlers::env::list),
-        Env::command(Some("sw"), "env-name", handlers::env::switch),
+        Env::command(Some("to"), "env-name", handlers::env::switch),
         // features
         Feat::command(None, "add | del | ls | val | on | off", command::no_op),
         Feat::command(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
@@ -51,14 +51,16 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
         // Variants
-        Var::command(None, "add | del | ls | val | weight", command::no_op),
+        Var::command(None, "add | del | ls | wgt | val", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),
         Var::command(Some("add"), "feature-name weight value", handlers::var::add),
         Var::command(Some("del"), "variant-id", handlers::var::del),
+        Var::command(Some("wgt"), "variant-id new-weight", handlers::var::weight),
+        Var::command(Some("val"), "variant-id new-value", handlers::var::value),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
-        completer: CommandCompleter::new(vec!["feat", "env", "var"], &session),
+        completer: CommandCompleter::new(vec!["feature", "environment", "variant"], &session),
     }));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
@@ -80,10 +82,9 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                 {
                     // handler for a command might not exists
                     if let Some(handler) = cmd.handler {
+                        rl.add_history_entry(line.as_str())?;
                         if let Err(error) = handler(words, &session) {
                             eprintln!("{error}");
-                        } else {
-                            rl.add_history_entry(line.as_str())?;
                         }
                     }
                 } else {

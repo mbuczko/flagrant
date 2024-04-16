@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_types::{Environment, NewEnvRequestPayload};
+use flagrant_types::{Environment, EnvRequestPayload};
 
 use crate::repl::session::{ReplSession, Resource};
 
@@ -10,7 +10,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
         let res = ssn.project.as_base_resource();
         let env = ssn.client.post::<_, Environment>(
             res.to_path("/envs"),
-            NewEnvRequestPayload {
+            EnvRequestPayload {
                 name: name.to_string(),
                 description: args.get(2).map(|d| d.to_string()),
             },

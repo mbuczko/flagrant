@@ -45,6 +45,8 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         // variants
         .route("/envs/:environment_id/features/:feature_id/variants", get(variants::list))
         .route("/envs/:environment_id/features/:feature_id/variants", post(variants::create))
+        .route("/envs/:environment_id/variants/:variant_id", get(variants::fetch))
+        .route("/envs/:environment_id/variants/:variant_id", put(variants::update))
         .route("/envs/:environment_id/variants/:variant_id", delete(variants::delete))
         .with_state(pool)
         .layer(CompressionLayer::new());

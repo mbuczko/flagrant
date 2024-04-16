@@ -42,18 +42,18 @@ pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: u16,
     pub value: String,
-    pub weight: u16,
+    pub weight: i16,
     pub acc: i16,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct NewEnvRequestPayload {
+pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct NewFeatureRequestPayload {
+pub struct FeatureRequestPayload {
     pub name: String,
     pub value: Option<(String, FeatureValueType)>,
     pub description: Option<String>,
@@ -61,9 +61,9 @@ pub struct NewFeatureRequestPayload {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct NewVariantRequestPayload {
+pub struct VariantRequestPayload {
     pub value: String,
-    pub weight: u16,
+    pub weight: i16,
 }
 
 impl fmt::Display for Feature {

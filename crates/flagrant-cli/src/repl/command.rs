@@ -87,19 +87,19 @@ pub trait Command {
 
 impl Command for Env {
     fn triggered_by() -> &'static str {
-        "env"
+        "environment"
     }
 }
 
 impl Command for Feat {
     fn triggered_by() -> &'static str {
-        "feat"
+        "feature"
     }
 }
 
 impl Command for Var {
     fn triggered_by() -> &'static str {
-        "var"
+        "variant"
     }
 }
 

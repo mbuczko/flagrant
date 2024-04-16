@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, feature};
-use flagrant_types::{Feature, NewFeatureRequestPayload};
+use flagrant_types::{Feature, FeatureRequestPayload};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 
@@ -17,7 +17,7 @@ pub struct FeatureQueryParams {
 pub async fn create(
     State(pool): State<SqlitePool>,
     Path(environment_id): Path<u16>,
-    Json(feat): Json<NewFeatureRequestPayload>,
+    Json(feat): Json<FeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::create(&pool, &env, feat.name, feat.value, feat.is_enabled).await?;
@@ -38,7 +38,7 @@ pub async fn fetch(
 pub async fn update(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
-    Json(feat): Json<NewFeatureRequestPayload>,
+    Json(feat): Json<FeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch(&pool, &env, feature_id).await?;

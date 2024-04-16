@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{Environment, NewEnvRequestPayload};
+use flagrant_types::{Environment, EnvRequestPayload};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 
@@ -18,7 +18,7 @@ pub struct EnvQueryParams {
 pub async fn create(
     State(pool): State<SqlitePool>,
     Path(project_id): Path<u16>,
-    Json(env): Json<NewEnvRequestPayload>,
+    Json(env): Json<EnvRequestPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
     let env = environment::create(&pool, &project, env.name, env.description).await?;
