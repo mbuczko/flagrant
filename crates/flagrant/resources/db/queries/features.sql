@@ -19,8 +19,14 @@ SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
 FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
 WHERE f.project_id = $2 AND f.name = $3
 
+-- :name fetch_features_by_pattern :|| :*
+-- :doc Returns a list of features with names matching given pattern
+SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
+FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+WHERE f.project_id = $2 AND f.name LIKE $3
+
 -- :name fetch_features_for_environment :|| :*
--- :doc Fetches all features for given environment
+-- :doc Returns all features for given environment
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
 FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
 WHERE f.project_id = $2

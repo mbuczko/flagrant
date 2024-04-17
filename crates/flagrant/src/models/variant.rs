@@ -26,15 +26,16 @@ pub async fn create(
         DbError::QueryFailed
     })?;
 
-    let weight =
-        Variants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight], |v| {
-            v.get("weight")
-        })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not set a variant weight");
-            DbError::QueryFailed
-        })?;
+    let weight = Variants::upsert_variant_weight(
+        &mut *tx,
+        params![environment.id, variant_id, weight],
+        |v| v.get("weight"),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not set a variant weight");
+        DbError::QueryFailed
+    })?;
 
     tx.commit().await?;
     Ok(Variant {
@@ -61,14 +62,16 @@ pub async fn update(
             DbError::QueryFailed
         })?;
 
-    Variants::upsert_variant_weight::<_, _, i16>(&mut *tx, params![environment.id, variant.id, new_weight], |v| {
-            v.get("weight")
-        })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not set a variant weight");
-            DbError::QueryFailed
-        })?;
+    Variants::upsert_variant_weight::<_, _, i16>(
+        &mut *tx,
+        params![environment.id, variant.id, new_weight],
+        |v| v.get("weight"),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not set a variant weight");
+        DbError::QueryFailed
+    })?;
 
     tx.commit().await?;
     Ok(())
@@ -94,18 +97,21 @@ pub async fn list(
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants =
-        Variants::fetch_variants_for_feature::<_, Variant>(pool, params!(environment.id, feature.id))
-            .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "Could not fetch variants for feature");
-                DbError::QueryFailed
-            })?;
+    let variants = Variants::fetch_variants_for_feature::<_, Variant>(
+        pool,
+        params!(environment.id, feature.id),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch variants for feature");
+        DbError::QueryFailed
+    })?;
 
     Ok(variants)
 }
 
 /// Deletes a variant.
+///
 /// This function exceptionally (compared to other functions in this namespace)
 /// takes as argument `SqliteConnection` instead of `Pool`. This is because it's
 /// also being used in feature removal which calls this code in a sub-transaction.

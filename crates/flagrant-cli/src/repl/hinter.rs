@@ -46,6 +46,7 @@ impl<'a> Hinter for ReplHinter<'a> {
 }
 
 impl<'a> ReplHinter<'a> {
+
     pub fn new(hints: &'a Vec<ReplCommand>) -> ReplHinter<'a> {
         ReplHinter { hints }
     }

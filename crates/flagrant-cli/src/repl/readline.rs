@@ -39,19 +39,19 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Env::command(None, "add | del | ls | to", command::no_op),
+        Env::command(None, "add | del | set | ls", command::no_op),
         Env::command(Some("add"), "env-name description", handlers::env::add),
+        Env::command(Some("set"), "env-name", handlers::env::switch),
         Env::command(Some("ls"), "", handlers::env::list),
-        Env::command(Some("to"), "env-name", handlers::env::switch),
         // features
         Feat::command(None, "add | del | ls | val | on | off", command::no_op),
+        Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
         Feat::command(Some("val"), "feature-name new-value", handlers::feat::value),
-        Feat::command(Some("ls"), "", handlers::feat::list),
         Feat::command(Some("on"), "feature-name", handlers::feat::on),
         Feat::command(Some("off"), "feature-name", handlers::feat::off),
         Feat::command(Some("del"), "feature-name", handlers::feat::delete),
-        // Variants
+        // variants
         Var::command(None, "add | del | ls | wgt | val", command::no_op),
         Var::command(Some("ls"), "feature-name", handlers::var::list),
         Var::command(Some("add"), "feature-name weight value", handlers::var::add),

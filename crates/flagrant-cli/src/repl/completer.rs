@@ -1,12 +1,12 @@
 use std::io;
 
-use flagrant_types::Environment;
+use flagrant_types::{Environment, Feature};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::tokenizer::split;
 use super::session::{ReplSession, Resource};
+use super::tokenizer::split;
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
@@ -40,30 +40,45 @@ impl<'a> CommandCompleter<'a> {
     /// Completes contextual arguments to main command (eg. environments names)
     pub fn complete_argument(
         &self,
-        _command: &str,
+        command: &str,
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         let ssn = self.session.borrow();
-        let res = ssn.project.as_base_resource();
-        let envs = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?prefix={arg_prefix}")))?;
         let skip_chars = arg_prefix.len() - 1;
-        let pairs = envs
-            .into_iter()
-            .map(|c| Pair {
-                replacement: c.name[skip_chars..].to_string(),
-                display: c.name,
-            })
-            .collect::<Vec<_>>();
+        let pairs = match command.to_lowercase().as_str() {
+            "environment" => {
+                let res = ssn.project.as_base_resource();
+                ssn
+                    .client
+                    .get::<Vec<Environment>>(res.to_path(format!("/envs?prefix={arg_prefix}")))?
+                    .into_iter()
+                    .map(|c| Pair {
+                        replacement: c.name[skip_chars..].to_string(),
+                        display: c.name,
+                    })
+                    .collect::<Vec<_>>()
+            },
+            "feature" => {
+                let res = ssn.environment.as_base_resource();
+                ssn
+                    .client
+                    .get::<Vec<Feature>>(res.to_path(format!("/features?prefix={arg_prefix}")))?
+                    .into_iter()
+                    .map(|c| Pair {
+                        replacement: c.name[skip_chars..].to_string(),
+                        display: c.name,
+                    })
+                    .collect::<Vec<_>>()
+            },
+            _ => vec![]
+        };
 
         Ok((pos, pairs))
     }
 
     pub fn new(commands: Vec<&'static str>, session: &'a ReplSession) -> CommandCompleter<'a> {
-        Self {
-            commands,
-            session,
-        }
+        Self { commands, session }
     }
 }
 

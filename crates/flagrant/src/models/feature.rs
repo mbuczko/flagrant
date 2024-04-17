@@ -48,14 +48,15 @@ pub async fn fetch(
     environment: &Environment,
     feature_id: u16,
 ) -> anyhow::Result<Feature> {
-    Ok(
+    let feature =
         Features::fetch_feature(pool, params![environment.id, feature_id], row_to_feature)
             .await
             .map_err(|e| {
                 tracing::error!(error = ?e, "Could not fetch a feature");
                 DbError::QueryFailed
-            })?,
-    )
+            })?;
+
+    Ok(feature)
 }
 
 pub async fn fetch_by_name(
@@ -63,7 +64,7 @@ pub async fn fetch_by_name(
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
-    Ok(Features::fetch_feature_by_name(
+    let feature = Features::fetch_feature_by_name(
         pool,
         params![environment.id, environment.project_id, name],
         row_to_feature,
@@ -72,7 +73,28 @@ pub async fn fetch_by_name(
     .map_err(|e| {
         tracing::error!(error = ?e, "Could not fetch a feature");
         DbError::QueryFailed
-    })?)
+    })?;
+
+    Ok(feature)
+}
+
+pub async fn fetch_by_prefix(
+    pool: &Pool<Sqlite>,
+    environment: &Environment,
+    prefix: String,
+) -> anyhow::Result<Vec<Feature>> {
+    let features = Features::fetch_features_by_pattern(
+        pool,
+        params![environment.id, environment.project_id, format!("{prefix}%")],
+        row_to_feature,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch a feature");
+        DbError::QueryFailed
+    })?;
+
+    Ok(features)
 }
 
 pub async fn update(
@@ -84,6 +106,7 @@ pub async fn update(
     is_enabled: bool,
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
+
     Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
         .await
         .map_err(|e| {
@@ -114,16 +137,14 @@ pub async fn delete(
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
     let conn = tx.acquire().await?;
-
-    let variants = variant::list(pool, environment, feature).await?;
-
-    println!("{variants:?}");
+    let vars = variant::list(pool, environment, feature).await?;
 
     // remove all feature variants first
-    for var in variants {
+    for var in vars {
         variant::delete(conn, var.id).await?;
     }
 
+    // remove feature value and subsequently entire feature definition
     Features::delete_feature_values(&mut *tx, params![feature.id]).await?;
     Features::delete_feature(&mut *tx, params![feature.id]).await?;
 

@@ -12,6 +12,7 @@ use crate::errors::ServiceError;
 #[derive(Debug, Deserialize)]
 pub struct FeatureQueryParams {
     name: Option<String>,
+    prefix: Option<String>,
 }
 
 pub async fn create(
@@ -61,8 +62,9 @@ pub async fn list(
     Path(environment_id): Path<u16>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
-    let features = match params.name {
-        Some(name) => vec![feature::fetch_by_name(&pool, &env, name).await?],
+    let features = match (params.prefix, params.name) {
+        (Some(prefix), _) => feature::fetch_by_prefix(&pool, &env, prefix).await?,
+        (_, Some(name)) => vec![feature::fetch_by_name(&pool, &env, name).await?],
         _ => feature::list(&pool, &env).await?
     };
 
