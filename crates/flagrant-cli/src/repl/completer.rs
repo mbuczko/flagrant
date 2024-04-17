@@ -59,7 +59,7 @@ impl<'a> CommandCompleter<'a> {
                     })
                     .collect::<Vec<_>>()
             },
-            "feature" => {
+            "feature" | "variant" => {
                 let res = ssn.environment.as_base_resource();
                 ssn
                     .client
