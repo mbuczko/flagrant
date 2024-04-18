@@ -1,5 +1,4 @@
 use std::borrow::Cow::{self, Owned};
-
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
@@ -78,20 +77,25 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
-                let mut words = split(&line)?;
-                if words.is_empty() {
+
+                // after a command line split, all the slices form
+                // a vector of following elements:
+                //
+                // [command, operation, arg, arg, ...]
+                //
+                // eg: ["ENVIRONMENT", "set", "development"]
+                let slices = split(&line)?;
+
+                if slices.is_empty() {
                     continue;
                 }
-                let command = words.remove(0).to_lowercase();
-                let op = words.first().as_ref().map(|&s| *s);
-
-                // find the command with provided op and invoke its handler
                 if let Some(cmd) = commands
                     .iter()
-                    .find(|c| c.cmd == command && c.op.as_deref() == op)
+                    .find(|c| c.matches_input_line(&slices))
                 {
                     rl.add_history_entry(line.as_str())?;
-                    if let Err(error) = (cmd.handler)(words, &session) {
+
+                    if let Err(error) = (cmd.handler)(&slices[1..], &session) {
                         eprintln!("{error}");
                     }
                 } else {

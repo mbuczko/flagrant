@@ -30,15 +30,15 @@ impl<'a> Hinter for ReplHinter<'a> {
             return None;
         }
 
-        let words = line.split_whitespace().collect::<Vec<_>>();
+        let slices = line.split_whitespace().collect::<Vec<_>>();
         let command = self
             .hints
             .iter()
-            .find(|candidate| candidate.matches(&words));
+            .find(|candidate| candidate.matches_input_line(&slices));
 
         if let Some(command) = command {
             return Some(CommandHint {
-                display: command.remaining_hint(&words).into(),
+                display: command.remaining_hint(&slices).into(),
             });
         }
         None

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::repl::session::{ReplSession, Resource};
 
 /// Adds a new feature
-pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -28,7 +28,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 }
 
 /// Lists all features in a project
-pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     let ssn = session.borrow();
     let res = ssn.environment.as_base_resource();
     let feats: Vec<Feature> = ssn.client.get(res.to_path("/features"))?;
@@ -54,7 +54,7 @@ pub fn list(_args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 }
 
 /// Changes value of given feature
-pub fn value(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some((_, name, value)) = args.iter().collect_tuple() {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -90,17 +90,17 @@ pub fn value(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
 }
 
 /// Switches feature on
-pub fn on(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn on(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     onoff(args, session, true)
 }
 
 /// Switches feature off
-pub fn off(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn off(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     onoff(args, session, false)
 }
 
 /// Switches feature on/off
-fn onoff(args: Vec<&str>, session: &ReplSession, on: bool) -> anyhow::Result<()> {
+fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -135,7 +135,7 @@ fn onoff(args: Vec<&str>, session: &ReplSession, on: bool) -> anyhow::Result<()>
 }
 
 /// Deletes existing feature
-pub fn delete(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn delete(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();

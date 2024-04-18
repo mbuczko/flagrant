@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::repl::session::{ReplSession, Resource};
 
-pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some((_, feature_name, weight, value)) = args.iter().collect_tuple() {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -31,7 +31,7 @@ pub fn add(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     bail!("No feature name, value or weight provided.")
 }
 
-pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn list(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -65,7 +65,7 @@ pub fn list(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     bail!("No feature name provided.")
 }
 
-pub fn del(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn del(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -79,7 +79,7 @@ pub fn del(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     bail!("No variant-id provided.")
 }
 
-pub fn weight(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn weight(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some((_, variant_id, weight)) = args.iter().collect_tuple() {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
@@ -106,7 +106,7 @@ pub fn weight(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
     bail!("No variant-id or new weight provided.")
 }
 
-pub fn value(args: Vec<&str>, session: &ReplSession) -> anyhow::Result<()> {
+pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some((_, variant_id, value)) = args.iter().collect_tuple() {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
