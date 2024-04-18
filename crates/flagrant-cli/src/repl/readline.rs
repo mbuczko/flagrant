@@ -36,31 +36,31 @@ pub fn prompt(session: &ReplSession) -> String {
     )
 }
 
-/// Inits a REPL with history, hints and autocompletions
-/// pulled straight from database in context of given project.
+/// Initializes a REPL with history, hints and autocompletions pulled straight
+/// from database in context of respective command.
 pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Command::Environment.build(None, "add | del | set | ls", None),
-        Command::Environment.build(Some("add"), "env-name description", Some(handlers::env::add)),
-        Command::Environment.build(Some("set"), "env-name", Some(handlers::env::switch)),
-        Command::Environment.build(Some("ls"), "", Some(handlers::env::list)),
+        Command::Environment.no_op("add | del | set | ls"),
+        Command::Environment.op("add", "env-name description", handlers::env::add),
+        Command::Environment.op("set", "env-name", handlers::env::switch),
+        Command::Environment.op("ls", "", handlers::env::list),
         // features
-        Command::Feature.build(None, "add | del | ls | val | on | off", None),
-        Command::Feature.build(Some("ls"), "", Some(handlers::feat::list)),
-        Command::Feature.build(Some("add"), "feature-name [value] [text | json | toml]", Some(handlers::feat::add)),
-        Command::Feature.build(Some("val"), "feature-name new-value", Some(handlers::feat::value)),
-        Command::Feature.build(Some("on"), "feature-name", Some(handlers::feat::on)),
-        Command::Feature.build(Some("off"), "feature-name", Some(handlers::feat::off)),
-        Command::Feature.build(Some("del"), "feature-name", Some(handlers::feat::delete)),
+        Command::Feature.no_op("add | del | ls | val | on | off"),
+        Command::Feature.op("ls", "", handlers::feat::list),
+        Command::Feature.op("add", "feature-name [value] [text | json | toml]", handlers::feat::add),
+        Command::Feature.op("val", "feature-name new-value", handlers::feat::value),
+        Command::Feature.op("on", "feature-name", handlers::feat::on),
+        Command::Feature.op("off", "feature-name", handlers::feat::off),
+        Command::Feature.op("del", "feature-name", handlers::feat::delete),
         // variants
-        Command::Variant.build(None, "add | del | ls | wgt | val", None),
-        Command::Variant.build(Some("ls"), "feature-name", Some(handlers::var::list)),
-        Command::Variant.build(Some("add"), "feature-name weight value", Some(handlers::var::add)),
-        Command::Variant.build(Some("del"), "variant-id", Some(handlers::var::del)),
-        Command::Variant.build(Some("wgt"), "variant-id new-weight", Some(handlers::var::weight)),
-        Command::Variant.build(Some("val"), "variant-id new-value", Some(handlers::var::value)),
+        Command::Variant.no_op("add | del | ls | wgt | val"),
+        Command::Variant.op("ls", "feature-name", handlers::var::list),
+        Command::Variant.op("add", "feature-name weight value", handlers::var::add),
+        Command::Variant.op("del", "variant-id", handlers::var::del),
+        Command::Variant.op("wgt", "variant-id new-weight", handlers::var::weight),
+        Command::Variant.op("val", "variant-id new-value", handlers::var::value),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),

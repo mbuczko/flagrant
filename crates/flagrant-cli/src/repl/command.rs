@@ -23,12 +23,12 @@ pub struct ReplCommand {
 
 impl ReplCommand {
     /// Returns true if Self matches an array of command line slices.
-    /// `slices` array is expected to be composed of following elements:
+    /// Array is expected to be composed of following elements:
     ///
     /// [command, operation, arg, arg, ...]
     ///
-    /// Command matches such an array only if command and operation match own
-    /// `cmd` and `op` respectively.
+    /// Matching succeeds only if in-array command and operation match
+    /// self's `cmd` and `op` respectively.
     pub fn matches_input_line(&self, slices: &[&str]) -> bool {
         !slices.is_empty()
             && slices.first().unwrap().to_lowercase() == self.cmd
@@ -42,7 +42,7 @@ impl ReplCommand {
             }
     }
 
-    /// Returns a remaining part of hint for already entered command-line slices.
+    /// Returns remaining part of hint for already entered command-line slices.
     /// Depending on how much slices have been already provided, only a part of
     /// the hint may be returned, eg:
     ///
@@ -66,8 +66,7 @@ impl ReplCommand {
         } else {
             let strip_chars = self
                 .hint
-                .chars()
-                .enumerate()
+                .char_indices()
                 .filter(|(_, c)| c.is_whitespace())
                 .map(|(i, _)| i + 1)
                 .nth(slices.len() - slices_to_skip - 1);
@@ -83,17 +82,25 @@ impl ReplCommand {
 impl Command {
 
     /// No-op command handler used to ignore commands called with no required arguments.
-    fn no_op(_args: &[&str], _session: &ReplSession) -> anyhow::Result<()> {
+    fn no_op_handler(_args: &[&str], _session: &ReplSession) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// Creates a new Command with hint digestable by rustyline
-    pub fn build(&self, op: Option<&str>, hint: &str, handler: Option<CommandHandler>) -> ReplCommand {
+    fn build(&self, op: Option<&str>, hint: &str, handler: Option<CommandHandler>) -> ReplCommand {
         ReplCommand {
             cmd: self.to_string(),
             op: op.map(String::from),
             hint: hint.to_owned(),
-            handler: handler.unwrap_or(Self::no_op)
+            handler: handler.unwrap_or(Self::no_op_handler)
         }
+    }
+
+    pub fn op(&self, op: &str, hint: &str, handler: CommandHandler) -> ReplCommand {
+        self.build(Some(op), hint, Some(handler))
+    }
+
+    pub fn no_op(&self, hint: &str) -> ReplCommand {
+        self.build(None, hint, None)
     }
 }
