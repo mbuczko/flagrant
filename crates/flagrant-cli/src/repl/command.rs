@@ -23,7 +23,7 @@ pub struct ReplCommand {
 
 impl ReplCommand {
     /// Returns true if Self matches an array of command line slices.
-    /// Array should be composed of following elements:
+    /// `slices` array is expected to be composed of following elements:
     ///
     /// [command, operation, arg, arg, ...]
     ///
@@ -43,17 +43,21 @@ impl ReplCommand {
     }
 
     /// Returns a remaining part of hint for already entered command-line slices.
-    /// Depending on how much slices have been provided, only a part of the hint
-    /// may be returned, eg:
+    /// Depending on how much slices have been already provided, only a part of
+    /// the hint may be returned, eg:
     ///
-    /// - for "ENV add" - entire hint describing all arguments is returned.
-    /// - for "ENV add dev" - only a part of the hint describing second argument
-    ///   is returned.
+    ///  - for "ENV add" - as no arguments to "add" operation have been provided,
+    ///    a hint describing all missing arguments is returned.
+    ///  - for "ENV add dev" - as first argument ("dev") has been already provided,
+    ///    only a part of the hint describing second argument gets returned.
     pub fn remaining_hint(&self, slices: &[&str]) -> &str {
+
+        // This is to deduce how many slices to ignore initially. Command is skipped
+        // in every case, operation is skipped only when it's available.
         let slices_to_skip = match self.op {
             // skip command and op
             Some(_) => 2,
-            // skip command only
+            // no op, skip command only
             None => 1,
         };
 
@@ -78,6 +82,7 @@ impl ReplCommand {
 
 impl Command {
 
+    /// No-op command handler used to ignore commands called with no required arguments.
     fn no_op(_args: &[&str], _session: &ReplSession) -> anyhow::Result<()> {
         Ok(())
     }
