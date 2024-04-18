@@ -13,7 +13,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
         let value = args.get(2).map(|s| s.to_string());
         let value_type = FeatureValueType::from(args.get(3));
         let feature = ssn.client.post::<_, Feature>(
-            res.subresource_path("/features"),
+            res.subpath("/features"),
             FeatureRequestPayload {
                 name: name.to_string(),
                 value: value.map(|v| (v, value_type)),
@@ -31,7 +31,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     let ssn = session.borrow();
     let res = ssn.environment.as_base_resource();
-    let feats: Vec<Feature> = ssn.client.get(res.subresource_path("/features"))?;
+    let feats: Vec<Feature> = ssn.client.get(res.subpath("/features"))?;
 
     println!("{:─^60}", "");
     println!(
@@ -55,19 +55,19 @@ pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 
 /// Changes value of given feature
 pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
-    if let Some((_, name, value)) = args.iter().collect_tuple() {
+    if let Some((_, name, value)) = args.iter().take(3).collect_tuple() {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
         let result = ssn
             .client
-            .get::<Vec<Feature>>(res.subresource_path(format!("/features?name={name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
         if let Ok(mut features) = result && !features.is_empty() {
             let feature = features.remove(0);
             let value_type = FeatureValueType::from(args.get(3));
 
             ssn.client.put(
-                res.subresource_path(format!("/features/{}", feature.id)),
+                res.subpath(format!("/features/{}", feature.id)),
                 FeatureRequestPayload {
                     name: name.to_string(),
                     value: Some((value.to_string(), value_type)),
@@ -79,7 +79,7 @@ pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
             // re-fetch feature to be sure it's updated
             let feature: Feature = ssn
                 .client
-                .get(res.subresource_path(format!("/features/{}", feature.id)))?;
+                .get(res.subpath(format!("/features/{}", feature.id)))?;
 
             println!("{feature}");
             return Ok(());
@@ -106,13 +106,13 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
         let res = ssn.environment.as_base_resource();
         let result = ssn
             .client
-            .get::<Vec<Feature>>(res.subresource_path(format!("/features?name={name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
         if let Ok(mut features) = result && !features.is_empty() {
             let feature = features.remove(0);
 
             ssn.client.put(
-                res.subresource_path(format!("/features/{}", feature.id)),
+                res.subpath(format!("/features/{}", feature.id)),
                 FeatureRequestPayload {
                     name: feature.name,
                     value: feature.value,
@@ -124,7 +124,7 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
             // re-fetch feature to be sure it's updated
             let feature = ssn
                 .client
-                .get::<Feature>(res.subresource_path(format!("/features/{}", feature.id)))?;
+                .get::<Feature>(res.subpath(format!("/features/{}", feature.id)))?;
 
             println!("{feature}");
             return Ok(());
@@ -141,13 +141,13 @@ pub fn delete(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
         let res = ssn.environment.as_base_resource();
         let result = ssn
             .client
-            .get::<Vec<Feature>>(res.subresource_path(format!("/features?name={name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
         if let Ok(mut features) = result && !features.is_empty() {
             let feature = features.remove(0);
 
             ssn.client.delete(
-                res.subresource_path(format!("/features/{}", feature.id)),
+                res.subpath(format!("/features/{}", feature.id)),
             )?;
             println!("Feature removed.");
             return Ok(());
