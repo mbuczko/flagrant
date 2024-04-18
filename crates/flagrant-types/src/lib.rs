@@ -68,17 +68,17 @@ pub struct VariantRequestPayload {
 
 impl fmt::Display for Feature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let empty = "(missing)";
-        let tick = if self.is_enabled { "✓" } else { "☐" };
+        let missing = "(missing)";
+        let toggled = if self.is_enabled { "✓" } else { "☐" };
         let val = self
             .value
             .as_ref()
             .map(|(v, t)| (v.as_str(), t.to_string().to_lowercase()))
-            .unwrap_or_else(|| (empty, empty.into()));
+            .unwrap_or_else(|| (missing, missing.into()));
 
         write!(
             f,
-            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {tick} {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggled} {}\n│ {:<8}: {}\n│ {:<8}: {}",
             "ID", self.id,
             "NAME", self.name,
             "ENABLED", self.is_enabled,
@@ -92,8 +92,10 @@ impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "id={}, weight={}, value={}",
-            self.id, self.weight, self.value
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "ID", self.id,
+            "WEIGHT", self.weight,
+            "VALUE", self.value
         )
     }
 }
