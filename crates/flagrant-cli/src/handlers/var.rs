@@ -11,12 +11,12 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.to_path(format!("/features?name={feature_name}")))
+            .get::<Vec<Feature>>(res.subresource_path(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
             let feat = feats.remove(0);
             let variant = ssn.client.post::<_, Variant>(
-                res.to_path(format!("/features/{}/variants", feat.id)),
+                res.subresource_path(format!("/features/{}/variants", feat.id)),
                 VariantRequestPayload {
                     value: value.to_string(),
                     weight: weight.parse::<i16>()?,
@@ -38,13 +38,13 @@ pub fn list(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.to_path(format!("/features?name={feature_name}")))
+            .get::<Vec<Feature>>(res.subresource_path(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
             let feature = feats.remove(0);
             let variants: Vec<Variant> = ssn
                 .client
-                .get(res.to_path(format!("/features/{}/variants", feature.id)))?;
+                .get(res.subresource_path(format!("/features/{}/variants", feature.id)))?;
 
             println!("{:-^60}", "");
             println!("{0: <4} | {1: <15} | {2: <50}", "id", "weight", "value");
@@ -71,7 +71,7 @@ pub fn del(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
         let res = ssn.environment.as_base_resource();
 
         ssn.client
-            .delete(res.to_path(format!("/variants/{variant_id}")))?;
+            .delete(res.subresource_path(format!("/variants/{variant_id}")))?;
 
         println!("Removed variant id={variant_id}");
         return Ok(());
@@ -86,14 +86,14 @@ pub fn weight(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 
         if let Ok(variant) = ssn
             .client
-            .get::<Variant>(res.to_path(format!("/variants/{variant_id}")))
+            .get::<Variant>(res.subresource_path(format!("/variants/{variant_id}")))
         {
             let weight = weight.parse::<i16>()?;
             if weight < 0 {
                 bail!("Variant weight should be positive number in range of <0, 100>.")
             }
             ssn.client.put(
-                res.to_path(format!("/variants/{}", variant.id)),
+                res.subresource_path(format!("/variants/{}", variant.id)),
                 VariantRequestPayload {
                     value: variant.value,
                     weight
@@ -111,9 +111,9 @@ pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
-        if let Ok(variant) = ssn.client.get::<Variant>(res.to_path(format!("/variants/{variant_id}"))) {
+        if let Ok(variant) = ssn.client.get::<Variant>(res.subresource_path(format!("/variants/{variant_id}"))) {
             ssn.client.put(
-                res.to_path(format!("/variants/{}", variant.id)),
+                res.subresource_path(format!("/variants/{}", variant.id)),
                 VariantRequestPayload {
                     value: value.to_string(),
                     weight: variant.weight
@@ -121,7 +121,7 @@ pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
             )?;
 
             // re-fetch variant to be sure it's updated
-            let variant = ssn.client.get::<Variant>(res.to_path(format!("/variants/{variant_id}")))?;
+            let variant = ssn.client.get::<Variant>(res.subresource_path(format!("/variants/{variant_id}")))?;
             println!("Updated variant ({variant})");
 
             return Ok(());

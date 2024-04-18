@@ -9,7 +9,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
         let ssn = session.borrow();
         let res = ssn.project.as_base_resource();
         let env = ssn.client.post::<_, Environment>(
-            res.to_path("/envs"),
+            res.subresource_path("/envs"),
             EnvRequestPayload {
                 name: name.to_string(),
                 description: args.get(2).map(|d| d.to_string()),
@@ -26,7 +26,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     let ssn = session.borrow();
     let res = ssn.project.as_base_resource();
-    let envs = ssn.client.get::<Vec<Environment>>(res.to_path("/envs"))?;
+    let envs = ssn.client.get::<Vec<Environment>>(res.subresource_path("/envs"))?;
 
     println!("{:-^52}", "");
     println!("{0: <4} | {1: <30} | description", "id", "name");
@@ -48,7 +48,7 @@ pub fn switch(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ssn = session.borrow_mut();
         let res = ssn.project.as_base_resource();
-        let result = ssn.client.get::<Vec<Environment>>(res.to_path(format!("/envs?name={name}")));
+        let result = ssn.client.get::<Vec<Environment>>(res.subresource_path(format!("/envs?name={name}")));
 
         if let Ok(mut envs) = result && !envs.is_empty() {
             let env = envs.remove(0);

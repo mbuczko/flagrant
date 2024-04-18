@@ -54,7 +54,7 @@ impl<'a> CommandCompleter<'a> {
                 let res = ssn.project.as_base_resource();
                 ssn
                     .client
-                    .get::<Vec<Environment>>(res.to_path(format!("/envs?prefix={arg_prefix}")))?
+                    .get::<Vec<Environment>>(res.subresource_path(format!("/envs?prefix={arg_prefix}")))?
                     .into_iter()
                     .map(|c| Pair {
                         replacement: c.name[skip..].to_string(),
@@ -68,7 +68,7 @@ impl<'a> CommandCompleter<'a> {
                 let res = ssn.environment.as_base_resource();
                 ssn
                     .client
-                    .get::<Vec<Feature>>(res.to_path(format!("/features?prefix={arg_prefix}")))?
+                    .get::<Vec<Feature>>(res.subresource_path(format!("/features?prefix={arg_prefix}")))?
                     .into_iter()
                     .map(|c| Pair {
                         replacement: c.name[skip..].to_string(),
