@@ -45,8 +45,10 @@ impl<'a> CommandCompleter<'a> {
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         let ssn = self.session.borrow();
-        let skip_chars = arg_prefix.len() - 1;
+        let skip = arg_prefix.len() - 1;
         let pairs = match command.to_lowercase().as_str() {
+
+            // auto-complete environment names
             "environment" => {
                 let res = ssn.project.as_base_resource();
                 ssn
@@ -54,11 +56,13 @@ impl<'a> CommandCompleter<'a> {
                     .get::<Vec<Environment>>(res.to_path(format!("/envs?prefix={arg_prefix}")))?
                     .into_iter()
                     .map(|c| Pair {
-                        replacement: c.name[skip_chars..].to_string(),
+                        replacement: c.name[skip..].to_string(),
                         display: c.name,
                     })
                     .collect::<Vec<_>>()
             },
+
+            // auto-complete feature name both for "feature" and "variant" commands
             "feature" | "variant" => {
                 let res = ssn.environment.as_base_resource();
                 ssn
@@ -66,7 +70,7 @@ impl<'a> CommandCompleter<'a> {
                     .get::<Vec<Feature>>(res.to_path(format!("/features?prefix={arg_prefix}")))?
                     .into_iter()
                     .map(|c| Pair {
-                        replacement: c.name[skip_chars..].to_string(),
+                        replacement: c.name[skip..].to_string(),
                         display: c.name,
                     })
                     .collect::<Vec<_>>()
