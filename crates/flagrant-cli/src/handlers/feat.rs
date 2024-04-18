@@ -21,7 +21,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
                 is_enabled: false,
             },
         )?;
-        println!("Created new feature ({feature})");
+        println!("{feature}");
         return Ok(());
     }
     bail!("No feature name or value provided.")
@@ -33,17 +33,17 @@ pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     let res = ssn.environment.as_base_resource();
     let feats: Vec<Feature> = ssn.client.get(res.subresource_path("/features"))?;
 
-    println!("{:-^60}", "");
+    println!("{:─^60}", "");
     println!(
-        "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
-        "id", "name", "enabled?", "value"
+        "{0: <4} │ {1: <30} │ {2: <8} │ {3: <30}",
+        "ID", "NAME", "ENABLED?", "VALUE"
     );
-    println!("{:-^60}", "");
+    println!("{:─^60}", "");
 
     let missing = ("(missing)".into(), FeatureValueType::Text);
     for feat in feats {
         println!(
-            "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
+            "{0: <4} │ {1: <30} │ {2: <8} │ {3: <30}",
             feat.id,
             feat.name,
             feat.is_enabled,
@@ -81,7 +81,7 @@ pub fn value(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
                 .client
                 .get(res.subresource_path(format!("/features/{}", feature.id)))?;
 
-            println!("Updated feature ({feature})");
+            println!("{feature}");
             return Ok(());
         }
         bail!("Feature not found.");
@@ -126,7 +126,7 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
                 .client
                 .get::<Feature>(res.subresource_path(format!("/features/{}", feature.id)))?;
 
-            println!("Updated feature ({feature})");
+            println!("{feature}");
             return Ok(());
         }
         bail!("No such a feature.")

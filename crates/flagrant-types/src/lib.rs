@@ -1,5 +1,5 @@
-use std::fmt;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
@@ -68,23 +68,33 @@ pub struct VariantRequestPayload {
 
 impl fmt::Display for Feature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let vstr = self
+        let empty = "(missing)";
+        let tick = if self.is_enabled { "✓" } else { "☐" };
+        let val = self
             .value
             .as_ref()
-            .map(|(v, t)| format!("value={v}, type={t}"))
-            .unwrap_or_else(|| "value=(missing)".into());
+            .map(|(v, t)| (v.as_str(), t.to_string().to_lowercase()))
+            .unwrap_or_else(|| (empty, empty.into()));
 
         write!(
             f,
-            "id={}, name={}, {vstr}, is_enabled={}",
-            self.id, self.name, self.is_enabled
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {tick} {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "ID", self.id,
+            "NAME", self.name,
+            "ENABLED", self.is_enabled,
+            "TYPE", val.1,
+            "VALUE", val.0
         )
     }
 }
 
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "id={}, weight={}, value={}", self.id, self.weight, self.value)
+        write!(
+            f,
+            "id={}, weight={}, value={}",
+            self.id, self.weight, self.value
+        )
     }
 }
 
@@ -108,7 +118,7 @@ impl From<Option<&&str>> for FeatureValueType {
     fn from(value: Option<&&str>) -> Self {
         match value {
             Some(v) => FeatureValueType::from(*v),
-            _ => Self::default()
+            _ => Self::default(),
         }
     }
 }
