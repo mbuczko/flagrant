@@ -4,14 +4,15 @@ use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Editor, Helper, Hinter, Validator};
+use strum::IntoEnumIterator;
 
 use crate::handlers;
 
-use super::command::{self, Command, Env, Feat, Var};
+use super::command::{self, Command};
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
-use super::tokenizer::split;
 use super::session::ReplSession;
+use super::tokenizer::split;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper<'a> {
@@ -30,7 +31,10 @@ impl<'a> Highlighter for ReplHelper<'a> {
 
 pub fn prompt(session: &ReplSession) -> String {
     let ssn = session.borrow();
-    format!("[{}/\x1b[35m{}\x1b[0m] > ", ssn.project.name, ssn.environment.name)
+    format!(
+        "[{}/\x1b[35m{}\x1b[0m] > ",
+        ssn.project.name, ssn.environment.name
+    )
 }
 
 /// Inits a REPL with history, hints and autocompletions
@@ -39,29 +43,34 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Env::command(None, "add | del | set | ls", command::no_op),
-        Env::command(Some("add"), "env-name description", handlers::env::add),
-        Env::command(Some("set"), "env-name", handlers::env::switch),
-        Env::command(Some("ls"), "", handlers::env::list),
+        Command::Environment.build(None, "add | del | set | ls", command::no_op),
+        Command::Environment.build(Some("add"), "env-name description", handlers::env::add),
+        Command::Environment.build(Some("set"), "env-name", handlers::env::switch),
+        Command::Environment.build(Some("ls"), "", handlers::env::list),
         // features
-        Feat::command(None, "add | del | ls | val | on | off", command::no_op),
-        Feat::command(Some("ls"), "", handlers::feat::list),
-        Feat::command(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
-        Feat::command(Some("val"), "feature-name new-value", handlers::feat::value),
-        Feat::command(Some("on"), "feature-name", handlers::feat::on),
-        Feat::command(Some("off"), "feature-name", handlers::feat::off),
-        Feat::command(Some("del"), "feature-name", handlers::feat::delete),
+        Command::Feature.build(None, "add | del | ls | val | on | off", command::no_op),
+        Command::Feature.build(Some("ls"), "", handlers::feat::list),
+        Command::Feature.build(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
+        Command::Feature.build(Some("val"), "feature-name new-value", handlers::feat::value),
+        Command::Feature.build(Some("on"), "feature-name", handlers::feat::on),
+        Command::Feature.build(Some("off"), "feature-name", handlers::feat::off),
+        Command::Feature.build(Some("del"), "feature-name", handlers::feat::delete),
         // variants
-        Var::command(None, "add | del | ls | wgt | val", command::no_op),
-        Var::command(Some("ls"), "feature-name", handlers::var::list),
-        Var::command(Some("add"), "feature-name weight value", handlers::var::add),
-        Var::command(Some("del"), "variant-id", handlers::var::del),
-        Var::command(Some("wgt"), "variant-id new-weight", handlers::var::weight),
-        Var::command(Some("val"), "variant-id new-value", handlers::var::value),
+        Command::Variant.build(None, "add | del | ls | wgt | val", command::no_op),
+        Command::Variant.build(Some("ls"), "feature-name", handlers::var::list),
+        Command::Variant.build(Some("add"), "feature-name weight value", handlers::var::add),
+        Command::Variant.build(Some("del"), "variant-id", handlers::var::del),
+        Command::Variant.build(Some("wgt"), "variant-id new-weight", handlers::var::weight),
+        Command::Variant.build(Some("val"), "variant-id new-value", handlers::var::value),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
-        completer: CommandCompleter::new(vec!["feature", "environment", "variant"], &session),
+        completer: CommandCompleter::new(
+            // collect all variants of Command enum and turn them into
+            // lower-cased strings. This is what CommandCompleter expects.
+            Command::iter().map(|c| c.to_string()).collect::<Vec<_>>(),
+            &session,
+        ),
     }));
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");

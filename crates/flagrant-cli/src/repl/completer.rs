@@ -10,7 +10,7 @@ use super::tokenizer::split;
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
-    commands: Vec<&'static str>,
+    commands: Vec<String>,
     session: &'a ReplSession,
 }
 
@@ -81,7 +81,7 @@ impl<'a> CommandCompleter<'a> {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<&'static str>, session: &'a ReplSession) -> CommandCompleter<'a> {
+    pub fn new(commands: Vec<String>, session: &'a ReplSession) -> CommandCompleter<'a> {
         Self { commands, session }
     }
 }

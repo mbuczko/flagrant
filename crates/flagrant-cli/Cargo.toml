@@ -16,6 +16,8 @@ rustyline = {version = "14.0.0", features = ["derive"]}
 
 clap = "4.5.1"
 itertools = "0.12.1"
+strum = "0.26.2"
+strum_macros = "0.26.2"
 
 [[bin]]
 name = "flagrant-cli"

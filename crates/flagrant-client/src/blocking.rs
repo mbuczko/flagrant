@@ -1,3 +1,4 @@
+use reqwest::blocking::Response;
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
@@ -38,11 +39,12 @@ impl HttpClient {
             .json::<T>()?)
     }
 
-    pub fn delete(&self, path: String) -> anyhow::Result<()> {
-        self.client
+    pub fn delete(&self, path: String) -> anyhow::Result<Response> {
+        let response = self.client
             .delete(format!("{}{}", self.api_host, path))
-            .send()?;
+            .send()?
+            .error_for_status()?;
 
-        Ok(())
+        Ok(response)
     }
 }

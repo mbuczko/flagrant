@@ -1,15 +1,18 @@
+use strum_macros::{EnumIter, EnumString, Display};
 use super::session::ReplSession;
 
 type CommandHandler = fn(Vec<&str>, &ReplSession) -> anyhow::Result<()>;
 
-/// Feature related commands
-pub struct Feat;
-
-/// Variants related commands
-pub struct Var;
-
-/// Environment related commands
-pub struct Env;
+// pub struct Command(pub &'static str);
+#[derive(Debug, Display, EnumIter, EnumString)]
+pub enum Command {
+    #[strum(to_string = "environment")]
+    Environment,
+    #[strum(to_string = "feature")]
+    Feature,
+    #[strum(to_string = "variant")]
+    Variant,
+}
 
 #[derive(Debug)]
 pub struct ReplCommand {
@@ -70,36 +73,16 @@ impl ReplCommand {
     }
 }
 
-pub trait Command {
-    /// A case-insensitive command which triggers invokable action
-    fn triggered_by() -> &'static str;
+impl Command {
 
     /// Creates a new Command with hint digestable by rustyline
-    fn command(op: Option<&str>, hint: &str, handler: CommandHandler) -> ReplCommand {
+    pub fn build(&self, op: Option<&str>, hint: &str, handler: CommandHandler) -> ReplCommand {
         ReplCommand {
-            cmd: Self::triggered_by().into(),
+            cmd: self.to_string(),
             op: op.map(String::from),
             hint: hint.to_owned(),
             handler: Some(handler),
         }
-    }
-}
-
-impl Command for Env {
-    fn triggered_by() -> &'static str {
-        "environment"
-    }
-}
-
-impl Command for Feat {
-    fn triggered_by() -> &'static str {
-        "feature"
-    }
-}
-
-impl Command for Var {
-    fn triggered_by() -> &'static str {
-        "variant"
     }
 }
 
