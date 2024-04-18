@@ -15,10 +15,11 @@ pub struct Session {
 
 impl Session {
     /// Creates a struct shared among all the commands.
-    /// Context contains a project/environment information and
-    /// HTTP client configured to communicate with API server.
+    /// Session contains a project/environment information and HTTP client
+    /// configured to communicate with API server.
     ///
-    /// Returns Error in case of any problems with fetching project data.
+    /// Returns Error in case of any problems with getting project or environment
+    /// data from API server.
     pub fn init(client: HttpClient, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
         let base_path = format!("/projects/{project_id}");
         if let Ok(project ) = client.get::<Project>(base_path.clone()) {

@@ -2,7 +2,7 @@ fn whitespace(ch: char) -> bool {
     ch == ' ' || ch == '\r' || ch == '\n' || ch == '\t'
 }
 
-pub fn split(input: &str) -> anyhow::Result<Vec<&str>> {
+pub fn split_command_line(input: &str) -> anyhow::Result<Vec<&str>> {
     let mut chars = input.char_indices();
     let mut output = Vec::new();
     let mut start: Option<usize> = None;
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn unquoted_string() {
-        let result = split("Ala ma kotkę").unwrap();
+        let result = split_command_line("Ala ma kotkę").unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result.first(), Some(&"Ala"));
         assert_eq!(result.get(1), Some(&"ma"));
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn unquoted_string_with_whitechars() {
-        let result = split("  Ala ma   kotkę  ").unwrap();
+        let result = split_command_line("  Ala ma   kotkę  ").unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result.first(), Some(&"Ala"));
         assert_eq!(result.get(1), Some(&"ma"));
@@ -67,13 +67,13 @@ mod tests {
 
     #[test]
     fn quoted_string() {
-        let result = split("Ala \"ma kota\" a kot ma Alę").unwrap();
+        let result = split_command_line("Ala \"ma kota\" a kot ma Alę").unwrap();
         assert_eq!(result.len(), 6);
     }
 
     #[test]
     fn quoted_string_with_whitechars() {
-        let result = split("Ala  \"  ma  kota \"   a kot ma Alę  ").unwrap();
+        let result = split_command_line("Ala  \"  ma  kota \"   a kot ma Alę  ").unwrap();
         assert_eq!(result.len(), 6);
         assert_eq!(result.first(), Some(&"Ala"));
         assert_eq!(result.get(1), Some(&"  ma  kota "));
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn quoted_string_with_whitechars_and_utfs() {
-        let result = split("Żółty ryś \"  ma  jaskrę\"   a kot ma Alę  ").unwrap();
+        let result = split_command_line("Żółty ryś \"  ma  jaskrę\"   a kot ma Alę  ").unwrap();
         assert_eq!(result.len(), 7);
         assert_eq!(result.first(), Some(&"Żółty"));
         assert_eq!(result.get(1), Some(&"ryś"));
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn open_ended_quotation() {
-        let result = split("Żółty ryś \"  ma  jaskrę").unwrap();
+        let result = split_command_line("Żółty ryś \"  ma  jaskrę").unwrap();
         assert_eq!(result.len(), 3);
         assert_eq!(result.first(), Some(&"Żółty"));
         assert_eq!(result.get(1), Some(&"ryś"));

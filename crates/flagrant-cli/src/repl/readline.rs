@@ -11,7 +11,7 @@ use super::command::Command;
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
 use super::session::ReplSession;
-use super::tokenizer::split;
+use super::tokenizer::split_command_line;
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct ReplHelper<'a> {
@@ -37,7 +37,7 @@ pub fn prompt(session: &ReplSession) -> String {
 }
 
 /// Initializes a REPL with history, hints and autocompletions pulled straight
-/// from database in context of respective command.
+/// from application API in context of respective command.
 pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
@@ -84,17 +84,16 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                 // [command, operation, arg, arg, ...]
                 //
                 // eg: ["ENVIRONMENT", "set", "development"]
-                let slices = split(&line)?;
+                let slices = split_command_line(&line)?;
 
                 if slices.is_empty() {
                     continue;
                 }
                 if let Some(cmd) = commands
                     .iter()
-                    .find(|c| c.matches_input_line(&slices))
+                    .find(|c| c.matches_slices(&slices))
                 {
                     rl.add_history_entry(line.as_str())?;
-
                     if let Err(error) = (cmd.handler)(&slices[1..], &session) {
                         eprintln!("{error}");
                     }

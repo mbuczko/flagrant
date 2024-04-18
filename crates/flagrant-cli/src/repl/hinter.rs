@@ -16,7 +16,6 @@ impl Hint for CommandHint {
     fn display(&self) -> &str {
         &self.display
     }
-
     fn completion(&self) -> Option<&str> {
         None
     }
@@ -34,7 +33,7 @@ impl<'a> Hinter for ReplHinter<'a> {
         let command = self
             .hints
             .iter()
-            .find(|candidate| candidate.matches_input_line(&slices));
+            .find(|candidate| candidate.matches_slices(&slices));
 
         if let Some(command) = command {
             return Some(CommandHint {
@@ -46,7 +45,6 @@ impl<'a> Hinter for ReplHinter<'a> {
 }
 
 impl<'a> ReplHinter<'a> {
-
     pub fn new(hints: &'a Vec<ReplCommand>) -> ReplHinter<'a> {
         ReplHinter { hints }
     }

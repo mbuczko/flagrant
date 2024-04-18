@@ -29,7 +29,7 @@ impl ReplCommand {
     ///
     /// Matching succeeds only if in-array command and operation match
     /// self's `cmd` and `op` respectively.
-    pub fn matches_input_line(&self, slices: &[&str]) -> bool {
+    pub fn matches_slices(&self, slices: &[&str]) -> bool {
         !slices.is_empty()
             && slices.first().unwrap().to_lowercase() == self.cmd
             && match (&self.op, slices.get(1)) {

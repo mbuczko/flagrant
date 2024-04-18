@@ -6,7 +6,7 @@ use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
 use super::session::{ReplSession, Resource};
-use super::tokenizer::split;
+use super::tokenizer::split_command_line;
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
@@ -15,10 +15,10 @@ pub struct CommandCompleter<'a> {
 }
 
 impl<'a> CommandCompleter<'a> {
-    /// Completes main commands.
-    ///
-    /// As for now only commands (like FEAT or ENV) are auto-completed, operations are not.
-    pub fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
+    /// Completes REPL commands.
+    /// As for now only command names (like FEATURE or ENVIRONMENT) are auto-completed,
+    /// operations are not.
+    fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let empty = line.trim().is_empty();
         let pairs = self
             .commands
@@ -37,8 +37,9 @@ impl<'a> CommandCompleter<'a> {
         Ok((0, pairs))
     }
 
-    /// Completes contextual arguments to main command (eg. environments names)
-    pub fn complete_argument(
+    /// Completes contextual arguments to commands (eg. environments for ENVIRONMENT
+    /// command or feature names for FEATURE command).
+    fn complete_argument(
         &self,
         command: &str,
         arg_prefix: &str,
@@ -90,11 +91,11 @@ impl<'a> Completer for CommandCompleter<'a> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
-        let args = split(line).unwrap();
+        let args = split_command_line(line).unwrap();
         match args.len() {
             // 0 - nothing entered
-            // 1 - command not finished with whitespace yet
-            // 2 - operation not finished with whitespace yet
+            // 1 - command provided, but not finished with whitespace yet
+            // 2 - operation provided, but not finished with whitespace yet
             0..=2 => self.complete_command(line).map_err(|e| {
                 ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
             }),
