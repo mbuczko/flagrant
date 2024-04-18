@@ -3,7 +3,6 @@ use super::session::ReplSession;
 
 type CommandHandler = fn(Vec<&str>, &ReplSession) -> anyhow::Result<()>;
 
-// pub struct Command(pub &'static str);
 #[derive(Debug, Display, EnumIter, EnumString)]
 pub enum Command {
     #[strum(to_string = "environment")]
@@ -19,7 +18,7 @@ pub struct ReplCommand {
     pub cmd: String,
     pub op: Option<String>,
     pub hint: String,
-    pub handler: Option<CommandHandler>,
+    pub handler: CommandHandler,
 }
 
 impl ReplCommand {
@@ -75,17 +74,17 @@ impl ReplCommand {
 
 impl Command {
 
+    fn no_op(_args: Vec<&str>, _session: &ReplSession) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     /// Creates a new Command with hint digestable by rustyline
-    pub fn build(&self, op: Option<&str>, hint: &str, handler: CommandHandler) -> ReplCommand {
+    pub fn build(&self, op: Option<&str>, hint: &str, handler: Option<CommandHandler>) -> ReplCommand {
         ReplCommand {
             cmd: self.to_string(),
             op: op.map(String::from),
             hint: hint.to_owned(),
-            handler: Some(handler),
+            handler: handler.unwrap_or(Self::no_op)
         }
     }
-}
-
-pub fn no_op(_args: Vec<&str>, _session: &ReplSession) -> anyhow::Result<()> {
-    Ok(())
 }

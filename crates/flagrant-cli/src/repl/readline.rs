@@ -8,7 +8,7 @@ use strum::IntoEnumIterator;
 
 use crate::handlers;
 
-use super::command::{self, Command};
+use super::command::Command;
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
 use super::session::ReplSession;
@@ -43,25 +43,25 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Command::Environment.build(None, "add | del | set | ls", command::no_op),
-        Command::Environment.build(Some("add"), "env-name description", handlers::env::add),
-        Command::Environment.build(Some("set"), "env-name", handlers::env::switch),
-        Command::Environment.build(Some("ls"), "", handlers::env::list),
+        Command::Environment.build(None, "add | del | set | ls", None),
+        Command::Environment.build(Some("add"), "env-name description", Some(handlers::env::add)),
+        Command::Environment.build(Some("set"), "env-name", Some(handlers::env::switch)),
+        Command::Environment.build(Some("ls"), "", Some(handlers::env::list)),
         // features
-        Command::Feature.build(None, "add | del | ls | val | on | off", command::no_op),
-        Command::Feature.build(Some("ls"), "", handlers::feat::list),
-        Command::Feature.build(Some("add"), "feature-name [value] [text | json | toml]", handlers::feat::add),
-        Command::Feature.build(Some("val"), "feature-name new-value", handlers::feat::value),
-        Command::Feature.build(Some("on"), "feature-name", handlers::feat::on),
-        Command::Feature.build(Some("off"), "feature-name", handlers::feat::off),
-        Command::Feature.build(Some("del"), "feature-name", handlers::feat::delete),
+        Command::Feature.build(None, "add | del | ls | val | on | off", None),
+        Command::Feature.build(Some("ls"), "", Some(handlers::feat::list)),
+        Command::Feature.build(Some("add"), "feature-name [value] [text | json | toml]", Some(handlers::feat::add)),
+        Command::Feature.build(Some("val"), "feature-name new-value", Some(handlers::feat::value)),
+        Command::Feature.build(Some("on"), "feature-name", Some(handlers::feat::on)),
+        Command::Feature.build(Some("off"), "feature-name", Some(handlers::feat::off)),
+        Command::Feature.build(Some("del"), "feature-name", Some(handlers::feat::delete)),
         // variants
-        Command::Variant.build(None, "add | del | ls | wgt | val", command::no_op),
-        Command::Variant.build(Some("ls"), "feature-name", handlers::var::list),
-        Command::Variant.build(Some("add"), "feature-name weight value", handlers::var::add),
-        Command::Variant.build(Some("del"), "variant-id", handlers::var::del),
-        Command::Variant.build(Some("wgt"), "variant-id new-weight", handlers::var::weight),
-        Command::Variant.build(Some("val"), "variant-id new-value", handlers::var::value),
+        Command::Variant.build(None, "add | del | ls | wgt | val", None),
+        Command::Variant.build(Some("ls"), "feature-name", Some(handlers::var::list)),
+        Command::Variant.build(Some("add"), "feature-name weight value", Some(handlers::var::add)),
+        Command::Variant.build(Some("del"), "variant-id", Some(handlers::var::del)),
+        Command::Variant.build(Some("wgt"), "variant-id new-weight", Some(handlers::var::weight)),
+        Command::Variant.build(Some("val"), "variant-id new-value", Some(handlers::var::value)),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
@@ -90,12 +90,9 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                     .iter()
                     .find(|c| c.cmd == command && c.op.as_deref() == op)
                 {
-                    // handler for a command might not exists
-                    if let Some(handler) = cmd.handler {
-                        rl.add_history_entry(line.as_str())?;
-                        if let Err(error) = handler(words, &session) {
-                            eprintln!("{error}");
-                        }
+                    rl.add_history_entry(line.as_str())?;
+                    if let Err(error) = (cmd.handler)(words, &session) {
+                        eprintln!("{error}");
                     }
                 } else {
                     eprintln!("Action or its argument not supported");
