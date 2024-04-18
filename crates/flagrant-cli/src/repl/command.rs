@@ -86,7 +86,8 @@ impl Command {
         Ok(())
     }
 
-    /// Creates a new Command with hint digestable by rustyline
+    /// Generic command builder.
+    /// Creates a new Command with or without operation and command handler function.
     fn build(&self, op: Option<&str>, hint: &str, handler: Option<CommandHandler>) -> ReplCommand {
         ReplCommand {
             cmd: self.to_string(),
@@ -96,10 +97,13 @@ impl Command {
         }
     }
 
+    /// Builds a command handling provided operation with `handler` function.
     pub fn op(&self, op: &str, hint: &str, handler: CommandHandler) -> ReplCommand {
         self.build(Some(op), hint, Some(handler))
     }
 
+    /// Builds a no-op (no-operation) version of command.
+    /// When invoked, command will be handled by `no_op_handler` which does nothing.
     pub fn no_op(&self, hint: &str) -> ReplCommand {
         self.build(None, hint, None)
     }
