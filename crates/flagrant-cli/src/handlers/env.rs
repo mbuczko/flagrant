@@ -28,13 +28,13 @@ pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
     let res = ssn.project.as_base_resource();
     let envs = ssn.client.get::<Vec<Environment>>(res.subpath("/envs"))?;
 
-    println!("{:-^52}", "");
-    println!("{0: <4} | {1: <30} | description", "id", "name");
-    println!("{:-^52}", "");
+    println!("{:─^60}", "");
+    println!("{0: <4} │ {1: <30} │ DESCRIPTION", "ID", "NAME");
+    println!("{:─^60}", "");
 
     for env in envs {
         println!(
-            "{0: <4} | {1: <30} | {2: <30}",
+            "{0: <4} │ {1: <30} │ {2: <30}",
             env.id,
             env.name,
             env.description.unwrap_or_default()
