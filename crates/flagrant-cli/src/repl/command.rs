@@ -1,7 +1,7 @@
 use strum_macros::{EnumIter, EnumString, Display};
-use super::session::ReplSession;
+use super::{readline::ReplEditor, session::ReplSession};
 
-type CommandHandler = fn(&[&str], &ReplSession) -> anyhow::Result<()>;
+type CommandHandler = fn(&[&str], &ReplSession, &mut ReplEditor) -> anyhow::Result<()>;
 
 #[derive(Debug, Display, EnumIter, EnumString)]
 pub enum Command {
@@ -82,7 +82,7 @@ impl ReplCommand {
 impl Command {
 
     /// No-op command handler used to ignore commands called with no required arguments.
-    fn no_op_handler(_args: &[&str], _session: &ReplSession) -> anyhow::Result<()> {
+    fn no_op_handler(_args: &[&str], _session: &ReplSession, _editor: &mut ReplEditor) -> anyhow::Result<()> {
         Ok(())
     }
 

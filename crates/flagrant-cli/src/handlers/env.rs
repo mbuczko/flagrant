@@ -1,10 +1,10 @@
 use anyhow::bail;
 use flagrant_types::{Environment, EnvRequestPayload};
 
-use crate::repl::session::{ReplSession, Resource};
+use crate::repl::{readline::ReplEditor, session::{ReplSession, Resource}};
 
 /// Adds a new Environment
-pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
+pub fn add(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.project.as_base_resource();
@@ -23,7 +23,7 @@ pub fn add(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 }
 
 /// Lists all environments
-pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
+pub fn list(_args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
     let ssn = session.borrow();
     let res = ssn.project.as_base_resource();
     let envs = ssn.client.get::<Vec<Environment>>(res.subpath("/envs"))?;
@@ -44,7 +44,7 @@ pub fn list(_args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
 }
 
 /// Changes current environment in a session
-pub fn switch(args: &[&str], session: &ReplSession) -> anyhow::Result<()> {
+pub fn switch(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ssn = session.borrow_mut();
         let res = ssn.project.as_base_resource();

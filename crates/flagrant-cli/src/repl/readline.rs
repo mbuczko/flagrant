@@ -14,12 +14,14 @@ use super::session::ReplSession;
 use super::tokenizer::split_command_line;
 
 #[derive(Helper, Completer, Hinter, Validator)]
-struct ReplHelper<'a> {
+pub struct ReplHelper<'a> {
     #[rustyline(Hinter)]
     hinter: ReplHinter<'a>,
     #[rustyline(Completer)]
     completer: CommandCompleter<'a>,
 }
+
+pub type ReplEditor<'a> = Editor<ReplHelper<'a>, DefaultHistory>;
 
 impl<'a> Highlighter for ReplHelper<'a> {
     /// Hint in a dark gray
@@ -27,6 +29,7 @@ impl<'a> Highlighter for ReplHelper<'a> {
         Owned("\x1b[38;5;8m".to_owned() + hint + "\x1b[0m")
     }
 }
+
 
 pub fn prompt(session: &ReplSession) -> String {
     let ssn = session.borrow();
@@ -49,7 +52,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         // features
         Command::Feature.no_op("add | del | ls | val | on | off"),
         Command::Feature.op("ls", "", handlers::feat::list),
-        Command::Feature.op("add", "feature-name [value] [text | json | toml]", handlers::feat::add),
+        Command::Feature.op("add", "feature-name [type] [value]", handlers::feat::add),
         Command::Feature.op("val", "feature-name new-value", handlers::feat::value),
         Command::Feature.op("on", "feature-name", handlers::feat::on),
         Command::Feature.op("off", "feature-name", handlers::feat::off),
@@ -94,7 +97,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                     .find(|c| c.matches_slices(&slices))
                 {
                     rl.add_history_entry(line.as_str())?;
-                    if let Err(error) = (cmd.handler)(&slices[1..], &session) {
+                    if let Err(error) = (cmd.handler)(&slices[1..], &session, &mut rl) {
                         eprintln!("{error}");
                     }
                 } else {

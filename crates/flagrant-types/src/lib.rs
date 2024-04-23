@@ -115,12 +115,3 @@ impl From<&str> for FeatureValueType {
         }
     }
 }
-
-impl From<Option<&&str>> for FeatureValueType {
-    fn from(value: Option<&&str>) -> Self {
-        match value {
-            Some(v) => FeatureValueType::from(*v),
-            _ => Self::default(),
-        }
-    }
-}
