@@ -107,6 +107,7 @@ pub async fn update(
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
 
+    // in transaction, update feature definition first
     Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
         .await
         .map_err(|e| {
@@ -114,6 +115,7 @@ pub async fn update(
             DbError::QueryFailed
         })?;
 
+    // ...and then the feature value, if one was provided
     if let Some((value, value_type)) = new_value {
         Features::upsert_feature_value(
             &mut *tx,
@@ -139,12 +141,12 @@ pub async fn delete(
     let conn = tx.acquire().await?;
     let vars = variant::list(pool, environment, feature).await?;
 
-    // remove all feature variants first
+    // in transaction, remove all feature variants first
     for var in vars {
         variant::delete(conn, var.id).await?;
     }
 
-    // remove feature value and subsequently entire feature definition
+    // ...and then feature value and entire feature definition
     Features::delete_feature_values(&mut *tx, params![feature.id]).await?;
     Features::delete_feature(&mut *tx, params![feature.id]).await?;
 

@@ -13,7 +13,7 @@ pub fn add(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> any
 
         // Having value-type provided, two following cases may happen:
         //
-        //  - enter was pressed right after type identifier hence no value was provided
+        //  - enter was pressed right after type identifier hence no value was entered
         //  - value has been provided alongside with value-type
         //
         // First case enables multiline edit which allows to input more complicated text
@@ -54,9 +54,9 @@ pub fn add(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> any
             res.subpath("/features"),
             FeatureRequestPayload {
                 name: name.to_string(),
-                value,
                 description: args.get(3).map(|d| d.to_string()),
                 is_enabled: false,
+                value,
             },
         )?;
         println!("{feature}");
