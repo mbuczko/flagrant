@@ -10,25 +10,38 @@ INSERT INTO features_values(environment_id, feature_id, value, value_type) VALUE
 -- :name fetch_feature :|| :1
 -- :doc Returns a feature with value corresponding to given environment_id
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+FROM features f 
+LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
 WHERE f.feature_id = $2
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+FROM features f
+LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+WHERE f.project_id = $2 AND f.name = $3
+
+-- :name fetch_feature_with_variants_by_name :|| :*
+-- :doc Returns a feature with provided name
+SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled, v.value AS variant_value, vw.weight as variant_weight
+FROM features f 
+LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+LEFT OUTER JOIN variants v ON v.feature_id = f.feature_id
+JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $1
 WHERE f.project_id = $2 AND f.name = $3
 
 -- :name fetch_features_by_pattern :|| :*
 -- :doc Returns a list of features with names matching given pattern
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+FROM features f
+LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
 WHERE f.project_id = $2 AND f.name LIKE $3
 
 -- :name fetch_features_for_environment :|| :*
 -- :doc Returns all features for given environment
 SELECT f.feature_id, f.project_id, f.name, fv.value, fv.value_type, is_enabled
-FROM features f LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
+FROM features f
+LEFT OUTER JOIN features_values fv ON f.feature_id = fv.feature_id AND fv.environment_id = $1
 WHERE f.project_id = $2
 
 -- :name update_feature :<> :!
@@ -49,5 +62,3 @@ DELETE FROM features WHERE feature_id = $1
 -- :name delete_feature_values :<> :!
 -- :doc Removes a feature value.
 DELETE FROM features_values WHERE feature_id = $1
-
-

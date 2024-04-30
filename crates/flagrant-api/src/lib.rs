@@ -7,6 +7,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::handlers::projects;
 use crate::handlers::{environments, features, variants};
 
+mod api;
 mod errors;
 mod extractors;
 mod handlers;
@@ -48,6 +49,12 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .route("/envs/:environment_id/variants/:variant_id", get(variants::fetch))
         .route("/envs/:environment_id/variants/:variant_id", put(variants::update))
         .route("/envs/:environment_id/variants/:variant_id", delete(variants::delete))
+
+        // public API
+        .nest("/api/v1",
+              Router::new()
+                .route("/envs/:environment_id/features/:feature_name", get(api::get_feature)))
+
         .with_state(pool)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http());
