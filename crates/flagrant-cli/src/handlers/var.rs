@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use anyhow::bail;
 use flagrant_types::{Feature, VariantRequestPayload, Variant};
 use itertools::Itertools;
@@ -11,10 +13,10 @@ pub fn add(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={feature_name}")))
+            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
-            let feat = feats.remove(0);
+            let feat = feats.pop_front().unwrap();
             let variant = ssn.client.post::<_, Variant>(
                 res.subpath(format!("/features/{}/variants", feat.id)),
                 VariantRequestPayload {
@@ -38,10 +40,10 @@ pub fn list(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow:
 
         if let Ok(mut feats) = ssn
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={feature_name}")))
+            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
-            let feature = feats.remove(0);
+            let feature = feats.pop_front().unwrap();
             let variants: Vec<Variant> = ssn
                 .client
                 .get(res.subpath(format!("/features/{}/variants", feature.id)))?;

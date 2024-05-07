@@ -23,11 +23,12 @@ pub struct Feature {
     pub id: u16,
     pub project_id: u16,
     pub name: String,
-    pub value: Option<(String, FeatureValueType)>,
+    pub variants: Vec<Variant>,
+    pub value_type: FeatureValueType,
     pub is_enabled: bool,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "value_type", rename_all = "lowercase")]
 // #[serde(rename_all = "lowercase")]
 pub enum FeatureValueType {
@@ -37,25 +38,29 @@ pub enum FeatureValueType {
     Toml,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FeatureValue(pub String, pub FeatureValueType);
+
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, sqlx::FromRow)]
 pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: u16,
     pub value: String,
     pub weight: i16,
-    pub acc: i16,
+    pub accumulator: i16,
+    pub is_control: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureRequestPayload {
     pub name: String,
-    pub value: Option<(String, FeatureValueType)>,
+    pub value: Option<FeatureValue>,
     pub description: Option<String>,
     pub is_enabled: bool,
 }
@@ -66,24 +71,76 @@ pub struct VariantRequestPayload {
     pub weight: i16,
 }
 
+impl From<Feature> for FeatureRequestPayload {
+    fn from(feature: Feature) -> Self {
+        FeatureRequestPayload {
+            name: feature.name,
+            value: feature
+                .variants
+                .first()
+                .map(|v| FeatureValue(v.value.clone(), feature.value_type)),
+            description: None,
+            is_enabled: feature.is_enabled,
+        }
+    }
+}
+
+impl Feature {
+    pub fn get_default_variant(&self) -> Option<&Variant> {
+        self.variants.first()
+    }
+    pub fn set_default_variant(&mut self, variant: Variant) {
+        self.variants.insert(0, variant)
+    }
+    pub fn with_variants(mut self, variants: Vec<Variant>) -> Self {
+        self.variants = variants;
+        self
+    }
+}
+
+impl Variant {
+    pub fn build(id: u16, value: String, weight: i16) -> Variant {
+        Variant {
+            id,
+            value,
+            weight,
+            accumulator: 100,
+            is_control: false,
+        }
+    }
+    pub fn build_default(id: u16, value: String) -> Variant {
+        Variant {
+            id,
+            value,
+            weight: 100,
+            accumulator: 100,
+            is_control: true,
+        }
+    }
+}
+
 impl fmt::Display for Feature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let missing = "(missing)";
         let toggled = if self.is_enabled { "✓" } else { "☐" };
-        let val = self
-            .value
-            .as_ref()
-            .map(|(v, t)| (v.as_str(), t.to_string().to_lowercase()))
-            .unwrap_or_else(|| (missing, missing.into()));
+        let value = self
+            .get_default_variant()
+            .map(|v| v.value.as_str())
+            .unwrap_or_else(|| missing);
 
         write!(
             f,
             "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggled} {}\n│ {:<8}: {}\n│ {:<8}: {}",
-            "ID", self.id,
-            "NAME", self.name,
-            "ENABLED", self.is_enabled,
-            "TYPE", val.1,
-            "VALUE", val.0
+            "ID",
+            self.id,
+            "NAME",
+            self.name,
+            "ENABLED",
+            self.is_enabled,
+            "TYPE",
+            self.value_type,
+            "VALUE",
+            value
         )
     }
 }
@@ -93,9 +150,7 @@ impl fmt::Display for Variant {
         write!(
             f,
             "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {}",
-            "ID", self.id,
-            "WEIGHT", self.weight,
-            "VALUE", self.value
+            "ID", self.id, "WEIGHT", self.weight, "VALUE", self.value
         )
     }
 }

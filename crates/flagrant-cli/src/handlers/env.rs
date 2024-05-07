@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use anyhow::bail;
 use flagrant_types::{Environment, EnvRequestPayload};
 
@@ -48,10 +50,10 @@ pub fn switch(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
     if let Some(name) = args.get(1) {
         let mut ssn = session.borrow_mut();
         let res = ssn.project.as_base_resource();
-        let result = ssn.client.get::<Vec<Environment>>(res.subpath(format!("/envs?name={name}")));
+        let result = ssn.client.get::<VecDeque<Environment>>(res.subpath(format!("/envs?name={name}")));
 
         if let Ok(mut envs) = result && !envs.is_empty() {
-            let env = envs.remove(0);
+            let env = envs.pop_front().unwrap();
 
             println!("Switching to environment '{}' (id={})", env.name, env.id);
             ssn.switch_environment(env);

@@ -9,6 +9,39 @@ use flagrant_types::{Environment, Feature, Variant};
 #[queries = "resources/db/queries/variants.sql"]
 struct Variants {}
 
+/// Creates or updates default (control) variant of given feature.
+///
+/// Default variant represents environment-specific feature control value ie. a value which may
+/// differ across environments. There is also no weight information assigned as default variant's
+/// weight is calculated dynamically based on sum of other variants weights.
+///
+/// Weight is used to determine how to prioritize given variant during request balancing process.
+pub async fn upsert_default(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &Feature,
+    value: String,
+) -> anyhow::Result<Variant> {
+    let variant_id =
+        Variants::upsert_default_variant(conn, params![environment.id, feature.id, &value], |v| {
+            v.get("variant_id")
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not upsert default variant");
+            DbError::QueryFailed
+        })?;
+
+    Ok(Variant::build_default(variant_id, value))
+}
+
+/// Creates standard variant with weight and value common for all environments.
+///
+/// In oppose to default (control) one, standard variant holds an alternative value which is
+/// common across all environments, ie. once changed, it's changed immediately for all environments.
+///
+/// Weight on the other hand is environment-specific, so the change impacts given environment only
+/// and is used to determine how to prioritize given variant during request balancing process.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -17,14 +50,15 @@ pub async fn create(
     weight: i16,
 ) -> anyhow::Result<Variant> {
     let mut tx = pool.begin().await?;
-    let variant_id = Variants::create_variant(&mut *tx, params!(feature.id, &value), |v| {
-        v.get("variant_id")
-    })
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not create a variant");
-        DbError::QueryFailed
-    })?;
+    let variant_id =
+        Variants::create_standard_variant(&mut *tx, params!(feature.id, &value), |v| {
+            v.get("variant_id")
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not create a variant");
+            DbError::QueryFailed
+        })?;
 
     let weight = Variants::upsert_variant_weight(
         &mut *tx,
@@ -38,14 +72,13 @@ pub async fn create(
     })?;
 
     tx.commit().await?;
-    Ok(Variant {
-        id: variant_id,
-        value,
-        weight,
-        acc: 100,
-    })
+    Ok(Variant::build(variant_id, value, weight))
 }
 
+/// Updates standard variant.
+///
+/// Standard variant represents alternative feature value common across environments and is chosen
+/// based on environment-specific weight during request balancing process.
 pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -69,7 +102,7 @@ pub async fn update(
     )
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "Could not set a variant weight");
+        tracing::error!(error = ?e, "Could not set a variant's weight");
         DbError::QueryFailed
     })?;
 
@@ -137,3 +170,14 @@ pub async fn delete(conn: &mut SqliteConnection, variant_id: u16) -> anyhow::Res
     tx.commit().await?;
     Ok(())
 }
+
+// Transforms database result serialized as `SqliteRow` into a `Variant` model.
+// pub(crate) fn row_to_variant(row: SqliteRow) -> Variant {
+//     Variant {
+//         id: row.get("variant_id"),
+//         value: row.get("value"),
+//         weight: row.get("weight"),
+//         accumulator: row.get("accumulator"),
+//         is_control: row.get("is_control")
+//     }
+// }

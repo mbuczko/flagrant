@@ -81,7 +81,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
         match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
 
-                // after a command line split, all the slices form
+                // after a command line split, all the slices turn into
                 // a vector of following elements:
                 //
                 // [command, operation, arg, arg, ...]
