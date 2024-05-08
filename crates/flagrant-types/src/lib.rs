@@ -48,7 +48,6 @@ pub struct Variant {
     pub value: String,
     pub weight: i16,
     pub accumulator: i16,
-    pub is_control: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,32 +104,29 @@ impl Variant {
             value,
             weight,
             accumulator: 100,
-            is_control: false,
         }
     }
     pub fn build_default(id: u16, value: String) -> Variant {
         Variant {
             id,
             value,
-            weight: 100,
+            weight: 0,
             accumulator: 100,
-            is_control: true,
         }
     }
 }
 
 impl fmt::Display for Feature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let missing = "(missing)";
-        let toggled = if self.is_enabled { "✓" } else { "☐" };
+        let toggle = if self.is_enabled { "▣" } else { "▢" };
         let value = self
             .get_default_variant()
             .map(|v| v.value.as_str())
-            .unwrap_or_else(|| missing);
+            .unwrap_or_else(|| "");
 
         write!(
             f,
-            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggled} {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggle} {}\n│ {:<8}: {}\n│ {:<8}: {}",
             "ID",
             self.id,
             "NAME",

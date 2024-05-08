@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
@@ -15,7 +17,7 @@ struct Variants {}
 /// differ across environments. There is also no weight information assigned as default variant's
 /// weight is calculated dynamically based on sum of other variants weights.
 ///
-/// Weight is used to determine how to prioritize given variant during request balancing process.
+/// Weight is used to determine how to prioritize variant during request balancing process.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -41,7 +43,7 @@ pub async fn upsert_default(
 /// common across all environments, ie. once changed, it's changed immediately for all environments.
 ///
 /// Weight on the other hand is environment-specific, so the change impacts given environment only
-/// and is used to determine how to prioritize given variant during request balancing process.
+/// and is used to determine how to prioritize variant during request balancing process.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -130,7 +132,7 @@ pub async fn list(
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants = Variants::fetch_variants_for_feature::<_, Variant>(
+    let mut variants = Variants::fetch_variants_for_feature::<_, Variant>(
         pool,
         params!(environment.id, feature.id),
     )
@@ -140,6 +142,10 @@ pub async fn list(
         DbError::QueryFailed
     })?;
 
+    let sum_weights = variants.iter().fold(0, |acc, v| acc + v.weight);
+    if let Some(v) = variants.first_mut() {
+        v.weight = max(0, 100 - sum_weights)
+    }
     Ok(variants)
 }
 

@@ -13,6 +13,7 @@ serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = {version = "14.0.0", features = ["derive"]}
+ascii_table = {version = "4.0.3", features = ["auto_table_width"]}
 
 clap = "4.5.1"
 itertools = "0.12.1"

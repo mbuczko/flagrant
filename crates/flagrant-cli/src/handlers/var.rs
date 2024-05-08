@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::bail;
+use ascii_table::AsciiTable;
 use flagrant_types::{Feature, VariantRequestPayload, Variant};
 use itertools::Itertools;
 
@@ -48,18 +49,17 @@ pub fn list(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow:
                 .client
                 .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
-            println!("{:─^60}", "");
-            println!("{0: <4} │ {1: <15} │ {2: <50}", "ID", "WEIGHT", "VALUE");
-            println!("{:─^60}", "");
+            let mut ascii_table = AsciiTable::default();
+            let mut vecs = Vec::with_capacity(variants.len()+1);
+
+            ascii_table.column(0).set_header("ID");
+            ascii_table.column(1).set_header("WEIGHT");
+            ascii_table.column(2).set_header("VALUE");
 
             for var in variants {
-                println!(
-                    "{0: <4} │ {1: <14} │ {2: <50}",
-                    var.id,
-                    bar(var.weight, 10),
-                    var.value
-                );
+                vecs.push(vec![var.id.to_string(), bar(var.weight, 10), var.value])
             }
+            ascii_table.print(vecs);
             return Ok(());
         }
         bail!("Feature not found.")

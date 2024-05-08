@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::bail;
+use ascii_table::{Align, AsciiTable};
 use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType};
 use itertools::Itertools;
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
@@ -78,24 +79,28 @@ pub fn list(_args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
     let res = ssn.environment.as_base_resource();
     let feats: Vec<Feature> = ssn.client.get(res.subpath("/features"))?;
 
-    println!(
-        "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
-        "ID", "NAME", "ENABLED?", "VALUE"
-    );
-    println!("{:-^60}", "");
+    let mut ascii_table = AsciiTable::default();
+    let mut vecs = Vec::with_capacity(feats.len() + 1);
 
-    let missing = "(missing)";
-    for feat in feats {
-        println!(
-            "{0: <4} | {1: <30} | {2: <8} | {3: <30}",
-            feat.id,
-            feat.name,
-            feat.is_enabled,
-            feat.get_default_variant()
-                .map(|v| v.value.as_str())
-                .unwrap_or(missing)
-        );
+    ascii_table.column(0).set_header("ID");
+    ascii_table.column(1).set_header("NAME");
+    ascii_table.column(2).set_header("ENABLED?").set_align(Align::Center);
+    ascii_table.column(3).set_header("VALUE");
+
+    for mut feat in feats {
+        let toggle = if feat.is_enabled { "▣" } else { "▢" };
+        let val = match feat.variants.len() {
+            0 => String::default(),
+            _ => feat.variants.swap_remove(0).value
+        };
+        vecs.push(vec![
+            feat.id.to_string(),
+            feat.name.clone(),
+            toggle.to_string(),
+            val
+        ]);
     }
+    ascii_table.print(vecs);
     Ok(())
 }
 
@@ -108,7 +113,9 @@ pub fn value(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(mut features) = result && !features.is_empty() {
+        if let Ok(mut features) = result
+            && !features.is_empty()
+        {
             let feature = features.pop_front().unwrap();
             let subpath = format!("/features/{}", feature.id);
             let value = FeatureValue(value.to_string(), feature.value_type.clone());
@@ -118,9 +125,7 @@ pub fn value(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
             ssn.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature: Feature = ssn
-                .client
-                .get(res.subpath(&subpath))?;
+            let feature: Feature = ssn.client.get(res.subpath(&subpath))?;
 
             println!("{feature}");
             return Ok(());
@@ -149,7 +154,9 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(mut features) = result && !features.is_empty() {
+        if let Ok(mut features) = result
+            && !features.is_empty()
+        {
             let feature = features.pop_front().unwrap();
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
@@ -158,9 +165,7 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
             ssn.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature = ssn
-                .client
-                .get::<Feature>(res.subpath(&subpath))?;
+            let feature = ssn.client.get::<Feature>(res.subpath(&subpath))?;
 
             println!("{feature}");
             return Ok(());
@@ -179,10 +184,13 @@ pub fn delete(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(mut features) = result && !features.is_empty() {
+        if let Ok(mut features) = result
+            && !features.is_empty()
+        {
             let feature = features.pop_front().unwrap();
 
-            ssn.client.delete(res.subpath(format!("/features/{}", feature.id)))?;
+            ssn.client
+                .delete(res.subpath(format!("/features/{}", feature.id)))?;
 
             println!("Feature removed.");
             return Ok(());
