@@ -176,14 +176,3 @@ pub async fn delete(conn: &mut SqliteConnection, variant_id: u16) -> anyhow::Res
     tx.commit().await?;
     Ok(())
 }
-
-// Transforms database result serialized as `SqliteRow` into a `Variant` model.
-// pub(crate) fn row_to_variant(row: SqliteRow) -> Variant {
-//     Variant {
-//         id: row.get("variant_id"),
-//         value: row.get("value"),
-//         weight: row.get("weight"),
-//         accumulator: row.get("accumulator"),
-//         is_control: row.get("is_control")
-//     }
-// }

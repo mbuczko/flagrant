@@ -3,12 +3,11 @@ use std::collections::VecDeque;
 use anyhow::bail;
 use ascii_table::AsciiTable;
 use flagrant_types::{Feature, VariantRequestPayload, Variant};
-use itertools::Itertools;
 
 use crate::repl::{readline::ReplEditor, session::{ReplSession, Resource}};
 
 pub fn add(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
-    if let Some((_, feature_name, weight, value)) = args.iter().take(4).collect_tuple() {
+    if let Some(feature_name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
@@ -17,21 +16,25 @@ pub fn add(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")))
             && !feats.is_empty()
         {
-            let feat = feats.pop_front().unwrap();
-            let variant = ssn.client.post::<_, Variant>(
-                res.subpath(format!("/features/{}/variants", feat.id)),
-                VariantRequestPayload {
-                    value: value.to_string(),
-                    weight: weight.parse::<i16>()?,
-                },
-            )?;
-
+            let variant = match (args.get(2), args.get(3)) {
+                (Some(&weight), Some(&value)) => {
+                    let feat = feats.pop_front().unwrap();
+                    ssn.client.post::<_, Variant>(
+                        res.subpath(format!("/features/{}/variants", feat.id)),
+                        VariantRequestPayload {
+                            value: value.to_string(),
+                            weight: weight.parse::<i16>()?,
+                        },
+                    )?
+                }
+                _ => bail!("No weight or value provided.")
+            };
             println!("{variant}");
             return Ok(());
         }
         bail!("Feature not found.")
     }
-    bail!("No feature name, value or weight provided.")
+    bail!("No feature name provided.")
 }
 
 pub fn list(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
@@ -81,15 +84,17 @@ pub fn del(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::
     bail!("No variant-id provided.")
 }
 
-pub fn weight(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
-    if let Some((_, variant_id, weight)) = args.iter().take(3).collect_tuple() {
+pub fn update(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
+    if let Some(variant_id) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
 
-        if let Ok(variant) = ssn
-            .client
-            .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))
-        {
+        if let Ok(variant) = ssn.client.get::<Variant>(res.subpath(format!("/variants/{variant_id}"))) {
+            let (weight, value) = match (args.get(2), args.get(3)) {
+                (Some(&weight), Some(&value)) => (weight, value.to_string()),
+                (Some(&weight), _) => (weight, variant.value),
+                _ => bail!("No weight provided.")
+            };
             let weight = weight.parse::<i16>()?;
             if weight < 0 {
                 bail!("Variant weight should be positive number in range of <0, 100>.")
@@ -97,28 +102,8 @@ pub fn weight(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
             ssn.client.put(
                 res.subpath(format!("/variants/{}", variant.id)),
                 VariantRequestPayload {
-                    value: variant.value,
+                    value,
                     weight
-                },
-            )?;
-            return Ok(());
-        }
-        bail!("No variant of given id found.");
-    }
-    bail!("No variant-id or new weight provided.")
-}
-
-pub fn value(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
-    if let Some((_, variant_id, value)) = args.iter().take(3).collect_tuple() {
-        let ssn = session.borrow();
-        let res = ssn.environment.as_base_resource();
-
-        if let Ok(variant) = ssn.client.get::<Variant>(res.subpath(format!("/variants/{variant_id}"))) {
-            ssn.client.put(
-                res.subpath(format!("/variants/{}", variant.id)),
-                VariantRequestPayload {
-                    value: value.to_string(),
-                    weight: variant.weight
                 },
             )?;
 
@@ -130,7 +115,7 @@ pub fn value(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
         }
         bail!("No variant of given id found.");
     }
-    bail!("No variant-id or new value provided.")
+    bail!("No variant-id provided.")
 }
 
 fn bar(weight: i16, width: i16) -> String {

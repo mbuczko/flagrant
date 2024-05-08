@@ -682,7 +682,6 @@ dependencies = [
  "clap",
  "flagrant-client",
  "flagrant-types",
- "itertools",
  "reqwest",
  "rustyline",
  "serde",

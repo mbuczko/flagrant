@@ -22,7 +22,7 @@ WHERE environment_id IS NULL AND variant_id = $1
 
 -- :name fetch_variant :<> :1
 -- :doc Fetches a variant of given id
-SELECT v.variant_id, feature_id, value, COALESCE(weight, 0) AS weight, acc
+SELECT v.variant_id, feature_id, value, COALESCE(weight, 0) AS weight, accumulator
 FROM variants v LEFT JOIN variants_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
 WHERE v.variant_id = $2
 

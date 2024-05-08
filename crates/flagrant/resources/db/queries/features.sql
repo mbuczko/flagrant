@@ -32,7 +32,7 @@ WHERE f.project_id = $1
 -- :name update_feature :<> :!
 -- :doc Updates feature with new values of name and is_enabled flag
 UPDATE features
-SET name = $2, is_enabled = $3
+SET name = $2, value_type = $3, is_enabled = $4
 WHERE feature_id = $1
 
 -- :name delete_feature :<> :!

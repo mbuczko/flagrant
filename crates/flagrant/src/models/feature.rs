@@ -42,7 +42,6 @@ pub async fn create(
     })?;
 
     if let Some(FeatureValue(value, _)) = value {
-
         // if default value was provided, turn it into a control variant.
         // note, value type is stored at feature level, variants hold purely
         // stringified values only which should eventually conform to that type.
@@ -138,23 +137,30 @@ pub async fn update(
     is_enabled: bool,
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
+    let new_value_type = new_value
+        .as_ref()
+        .map(|FeatureValue(_, t)| t)
+        .unwrap_or_else(|| &feature.value_type);
 
-    // in transaction, update feature definition first
-    Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not update a feature");
-            DbError::QueryFailed
-        })?;
+    // in transaction, update feature properties first
+    Features::update_feature(
+        &mut *tx,
+        params![feature.id, new_name, new_value_type, is_enabled],
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not update a feature");
+        DbError::QueryFailed
+    })?;
 
     // ...and then the feature value which is stored as default variant
     if let Some(FeatureValue(value, _)) = new_value {
         variant::upsert_default(&mut tx, environment, feature, value)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not update a feature value/type");
-            DbError::QueryFailed
-        })?;
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "Could not update a feature value/type");
+                DbError::QueryFailed
+            })?;
     }
 
     tx.commit().await?;
