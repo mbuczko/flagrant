@@ -13,11 +13,16 @@ struct Variants {}
 
 /// Creates or updates default (control) variant of given feature.
 ///
-/// Default variant represents environment-specific feature control value ie. a value which may
-/// differ across environments. There is also no weight information assigned as default variant's
-/// weight is calculated dynamically based on sum of other variants weights.
+/// Default variant represents environment-specific feature control value ie. a value returned
+/// when no other variants have been defined or, having multiple other variants already added,
+/// when distributor decides to prioritize it over other variants based on weight and underlaying
+/// distributing strategy.
 ///
-/// Weight is used to determine how to prioritize variant during request balancing process.
+/// Default variant, similar to standard variants is optional. No such a variant means that feature
+/// has no value defined. Also, having no default variant it's impossible to create other variants.
+///
+/// Note that control variant is special when it comes to its weight - it has no weight information
+/// persisted in database. Instead, weight is calculated dynamically on feature featch operations.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -39,11 +44,10 @@ pub async fn upsert_default(
 
 /// Creates standard variant with weight and value common for all environments.
 ///
-/// In oppose to default (control) one, standard variant holds an alternative value which is
-/// common across all environments, ie. once changed, it's changed immediately for all environments.
-///
-/// Weight on the other hand is environment-specific, so the change impacts given environment only
-/// and is used to determine how to prioritize variant during request balancing process.
+/// In oppose to default (control) one, standard variants hold an alternative value common across all
+/// environments, ie. once changed, value is propagated immediately to all environments. Weight on the
+/// other hand is environment-specific, so the change impacts given environment only and, similarly to
+/// default variant, is used to determine how to prioritize variant during distribution process.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -77,10 +81,11 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
-/// Updates standard variant.
+/// Updates standard variant with `new_value` and `new_weight`.
 ///
-/// Standard variant represents alternative feature value common across environments and is chosen
-/// based on environment-specific weight during request balancing process.
+/// Standard variant represents alternative feature value which is common across environments
+/// and, based on weight and distribution strategy, may be prioritized over other variants
+/// during distribution process.
 pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -112,6 +117,11 @@ pub async fn update(
     Ok(())
 }
 
+/// Returns variant of given id.
+///
+/// Variant is returned along with its value and weight. Control variant is a minor exception as its
+/// weight is not persisted - it's calculated dynamically during feature fetch operations.
+/// When fetched  directly, control variant's weight becomes 0.
 pub async fn fetch(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -127,6 +137,11 @@ pub async fn fetch(
     Ok(variant)
 }
 
+/// Returns all variants of given feature.
+///
+/// Variants are returned along with their values and weights. Note that control variant's weight
+/// is calculated dynamically based on the sum of the other variants, it's not persisted directy
+/// in database.
 pub async fn list(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -151,11 +166,9 @@ pub async fn list(
 
 /// Deletes a variant.
 ///
-/// This function exceptionally (compared to other functions in this namespace)
-/// takes as argument `SqliteConnection` instead of `Pool`. This is because it's
-/// also being used in feature removal which calls this code in a sub-transaction.
-/// This requires both - outer transaction and subtransaction to operate on same
-/// connection.
+/// Removes permanently variant of given `variant_id`. This function is supposed to be called
+/// within the outer transaction when entire feature is being removed, hence it takes a connection
+/// (instead of pool) as argument.
 pub async fn delete(conn: &mut SqliteConnection, variant_id: u16) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
 

@@ -12,8 +12,8 @@ struct Features {}
 
 /// Creates a new on/off feature with given `name` and optional `value`.
 ///
-/// Feature values are stored per `environment` and so may differ or be
-/// even missing across all other environments.
+/// Feature value is stored as default variant and is environment-specific
+/// which means it may differ across all other environments.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
