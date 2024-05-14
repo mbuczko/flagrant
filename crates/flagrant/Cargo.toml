@@ -20,6 +20,9 @@ semver = "1.0.14"
 rust-embed = "6.4.1"
 lazy_static = "1.4.0"
 
+[build-dependencies]
+notify-debouncer-mini = "0.4.1"
+
 [lib]
 doctest = false
 test = false
