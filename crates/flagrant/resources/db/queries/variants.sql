@@ -21,9 +21,10 @@ UPDATE variants SET value = $2
 WHERE environment_id IS NULL AND variant_id = $1
 
 -- :name fetch_variant :<> :1
--- :doc Fetches a variant of given id
-SELECT v.variant_id, feature_id, value, COALESCE(weight, 0) AS weight, accumulator
-FROM variants v LEFT JOIN variants_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
+-- :doc Fetches a variant of given id. Control variant value is automatically calculated.
+SELECT v.variant_id, feature_id, value, COALESCE(weight, (select 100-sum(weight) from variants_weights w join variants using(variant_id) where feature_id = v.feature_id and w.environment_id = $1)) AS weight, accumulator
+FROM variants v
+LEFT JOIN variants_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
 WHERE v.variant_id = $2
 
 -- :name fetch_variants_for_feature :<> :*

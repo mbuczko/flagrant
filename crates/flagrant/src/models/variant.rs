@@ -119,9 +119,8 @@ pub async fn update(
 
 /// Returns variant of given id.
 ///
-/// Variant is returned along with its value and weight. Control variant is a minor exception as its
-/// weight is not persisted - it's calculated dynamically during feature fetch operations.
-/// When fetched  directly, control variant's weight becomes 0.
+/// Variant is returned along with its value and weight. Control variant weight is auto-calculated
+/// based on sum of other feature variants within given environment.
 pub async fn fetch(
     pool: &Pool<Sqlite>,
     environment: &Environment,
