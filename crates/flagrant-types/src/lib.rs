@@ -48,6 +48,7 @@ pub struct Variant {
     pub value: String,
     pub weight: i16,
     pub accumulator: i16,
+    pub is_control: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,7 +65,7 @@ pub struct FeatureRequestPayload {
     pub is_enabled: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VariantRequestPayload {
     pub value: String,
     pub weight: i16,
@@ -104,6 +105,7 @@ impl Variant {
             value,
             weight,
             accumulator: 100,
+            is_control: false,
         }
     }
     pub fn build_default(id: u16, value: String) -> Variant {
@@ -112,6 +114,7 @@ impl Variant {
             value,
             weight: 0,
             accumulator: 100,
+            is_control: true,
         }
     }
 }

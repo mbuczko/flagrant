@@ -35,6 +35,12 @@ UPDATE features
 SET name = $2, value_type = $3, is_enabled = $4
 WHERE feature_id = $1
 
+-- :name update_feature_variants_accumulators :<> :!
+-- :doc Updates feature variants accumulators by given value
+UPDATE variants_weights
+SET accumulator = accumulator + $3
+WHERE environment_id = $1 AND variant_id IN (select variant_id from variants where feature_id = $2)
+
 -- :name delete_feature :<> :!
 -- :doc Removes a feature. Note that feature value and variants need to be removed before.
 DELETE FROM features WHERE feature_id = $1

@@ -41,31 +41,34 @@ pub fn list(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow:
     if let Some(feature_name) = args.get(1) {
         let ssn = session.borrow();
         let res = ssn.environment.as_base_resource();
-
-        if let Ok(mut feats) = ssn
+        let response = ssn
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")))
-            && !feats.is_empty()
-        {
-            let feature = feats.pop_front().unwrap();
-            let variants: Vec<Variant> = ssn
-                .client
-                .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
+            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")));
 
-            let mut ascii_table = AsciiTable::default();
-            let mut vecs = Vec::with_capacity(variants.len()+1);
+        match response {
+            Ok(mut feats) => {
+                let feature = feats.pop_front().unwrap();
+                let variants: Vec<Variant> = ssn
+                    .client
+                    .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
-            ascii_table.column(0).set_header("ID");
-            ascii_table.column(1).set_header("WEIGHT");
-            ascii_table.column(2).set_header("VALUE");
+                let mut ascii_table = AsciiTable::default();
+                let mut vecs = Vec::with_capacity(variants.len()+1);
 
-            for var in variants {
-                vecs.push(vec![var.id.to_string(), bar(var.weight, 10), var.value])
+                ascii_table.column(0).set_header("ID");
+                ascii_table.column(1).set_header("WEIGHT");
+                ascii_table.column(2).set_header("VALUE");
+
+                for var in variants {
+                    vecs.push(vec![var.id.to_string(), bar(var.weight, 10), var.value.trim().to_string()])
+                }
+                ascii_table.print(vecs);
+                return Ok(());
             }
-            ascii_table.print(vecs);
-            return Ok(());
+            Err(error) => {
+                bail!(error)
+            }
         }
-        bail!("Feature not found.")
     }
     bail!("No feature name provided.")
 }

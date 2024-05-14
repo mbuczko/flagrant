@@ -1,5 +1,5 @@
 use hugsqlx::{params, HugSqlx};
-use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite};
+use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite, SqliteConnection};
 
 use crate::errors::DbError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
@@ -66,7 +66,10 @@ pub async fn fetch(
             DbError::QueryFailed
         })?;
 
-    let variants = variant::list(pool, environment, &feature).await?;
+    let variants = variant::list(pool, environment, &feature)
+        .await
+        .unwrap_or_default();
+
     Ok(feature.with_variants(variants))
 }
 
@@ -88,7 +91,10 @@ pub async fn fetch_by_name(
         DbError::QueryFailed
     })?;
 
-    let variants = variant::list(pool, environment, &feature).await?;
+    let variants = variant::list(pool, environment, &feature)
+        .await
+        .unwrap_or_default();
+
     Ok(feature.with_variants(variants))
 }
 
@@ -167,6 +173,25 @@ pub async fn update(
     Ok(())
 }
 
+pub async fn bump_up_accumulators(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &Feature,
+    by_value: i16,
+) -> anyhow::Result<()> {
+    Features::update_feature_variants_accumulators(
+        conn,
+        params![environment.id, feature.id, by_value],
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not bump up feature variants accumulators");
+        DbError::QueryFailed
+    })?;
+
+    Ok(())
+}
+
 pub async fn delete(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -178,7 +203,7 @@ pub async fn delete(
 
     // in transaction, remove all feature variants first
     for var in vars {
-        variant::delete(conn, var.id).await?;
+        variant::delete(conn, environment, var.id).await?;
     }
 
     // ...and then feature value and entire feature definition

@@ -1,5 +1,4 @@
-use std::cmp::max;
-
+use anyhow::bail;
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
@@ -20,24 +19,26 @@ struct Variants {}
 ///
 /// Default variant, similar to standard variants is optional. No such a variant means that feature
 /// has no value defined. Also, having no default variant it's impossible to create other variants.
-///
-/// Note that control variant is special when it comes to its weight - it has no weight information
-/// persisted in database. Instead, weight is calculated dynamically on feature featch operations.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
     value: String,
 ) -> anyhow::Result<Variant> {
-    let variant_id =
-        Variants::upsert_default_variant(conn, params![environment.id, feature.id, &value], |v| {
-            v.get("variant_id")
-        })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not upsert default variant");
-            DbError::QueryFailed
-        })?;
+    let mut tx = conn.begin().await?;
+    let variant_id = Variants::upsert_default_variant(
+        &mut *tx,
+        params![environment.id, feature.id, &value],
+        |v| v.get("variant_id"),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not upsert default variant");
+        DbError::QueryFailed
+    })?;
+
+    upsert_default_weight(&mut tx, environment, feature.id).await?;
+    tx.commit().await?;
 
     Ok(Variant::build_default(variant_id, value))
 }
@@ -56,16 +57,14 @@ pub async fn create(
     weight: i16,
 ) -> anyhow::Result<Variant> {
     let mut tx = pool.begin().await?;
-    let variant_id =
-        Variants::create_standard_variant(&mut *tx, params!(feature.id, &value), |v| {
-            v.get("variant_id")
-        })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not create a variant");
-            DbError::QueryFailed
-        })?;
-
+    let variant_id = Variants::create_variant(&mut *tx, params!(feature.id, &value), |v| {
+        v.get("variant_id")
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not create a variant");
+        DbError::QueryFailed
+    })?;
     let weight = Variants::upsert_variant_weight(
         &mut *tx,
         params![environment.id, variant_id, weight],
@@ -73,11 +72,13 @@ pub async fn create(
     )
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "Could not set a variant weight");
+        tracing::error!(error = ?e, "Could not insert a variant weight");
         DbError::QueryFailed
     })?;
 
+    upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
+
     Ok(Variant::build(variant_id, value, weight))
 }
 
@@ -94,8 +95,10 @@ pub async fn update(
     new_weight: i16,
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
-
-    Variants::update_variant_value(&mut *tx, params!(variant.id, new_value))
+    let feature_id: u16 =
+        Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
+            v.get("feature_id")
+        })
         .await
         .map_err(|e| {
             tracing::error!(error = ?e, "Could not update variant value");
@@ -113,7 +116,9 @@ pub async fn update(
         DbError::QueryFailed
     })?;
 
+    upsert_default_weight(&mut tx, environment, feature_id).await?;
     tx.commit().await?;
+
     Ok(())
 }
 
@@ -146,7 +151,7 @@ pub async fn list(
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<Variant>> {
-    let mut variants = Variants::fetch_variants_for_feature::<_, Variant>(
+    let variants = Variants::fetch_variants_for_feature::<_, Variant>(
         pool,
         params!(environment.id, feature.id),
     )
@@ -156,9 +161,12 @@ pub async fn list(
         DbError::QueryFailed
     })?;
 
-    let sum_weights = variants.iter().fold(0, |acc, v| acc + v.weight);
-    if let Some(v) = variants.first_mut() {
-        v.weight = max(0, 100 - sum_weights)
+    // Be sure that feature has default value set within given environment.
+    // No default value makes any additional variants pointless, even if they
+    // already exist for other environments, and hence the Error as result.
+
+    if variants.is_empty() || !variants.first().unwrap().is_control {
+        bail!("No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.", feature.name);
     }
     Ok(variants)
 }
@@ -168,23 +176,63 @@ pub async fn list(
 /// Removes permanently variant of given `variant_id`. This function is supposed to be called
 /// within the outer transaction when entire feature is being removed, hence it takes a connection
 /// (instead of pool) as argument.
-pub async fn delete(conn: &mut SqliteConnection, variant_id: u16) -> anyhow::Result<()> {
+pub async fn delete(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    variant_id: u16,
+) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
 
-    Variants::delete_variant_weights(&mut *tx, params!(variant_id))
+    Variants::delete_variant_weights(&mut *tx, params![variant_id])
         .await
         .map_err(|e| {
             tracing::error!(error = ?e, "Could not remove variant weights");
             DbError::QueryFailed
         })?;
 
-    Variants::delete_variant(&mut *tx, params!(variant_id))
+    let feature_id: u16 =
+        Variants::delete_variant(&mut *tx, params![variant_id], |v| v.get("feature_id"))
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "Could not remove variant");
+                DbError::QueryFailed
+            })?;
+
+    upsert_default_weight(&mut tx, environment, feature_id).await?;
+    tx.commit().await?;
+
+    Ok(())
+}
+
+pub async fn update_accumulator(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    variant: &Variant,
+    accumulator: i16,
+) -> anyhow::Result<()> {
+    Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await
         .map_err(|e| {
-            tracing::error!(error = ?e, "Could not remove variant");
+            tracing::error!(error = ?e, "Could not update variant accumulator");
             DbError::QueryFailed
         })?;
 
-    tx.commit().await?;
+    Ok(())
+}
+
+/// Inserts or updates feature default variant weight.
+/// Weight is calculated based on sum of all the other feature variants weights within given environment.
+async fn upsert_default_weight(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: u16,
+) -> anyhow::Result<()> {
+    Variants::upsert_default_variant_weight(conn, params![environment.id, feature_id])
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not upsert default variant weight");
+            DbError::QueryFailed
+        })?;
+
     Ok(())
 }

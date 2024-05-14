@@ -53,7 +53,7 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         // public API
         .nest("/api/v1",
               Router::new()
-                .route("/envs/:environment_id/features/:feature_name", get(api::get_feature)))
+                .route("/envs/:environment_id/ident/:ident/features/:feature_name", get(api::get_feature)))
 
         .with_state(pool)
         .layer(CompressionLayer::new())
