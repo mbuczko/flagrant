@@ -163,7 +163,7 @@ pub async fn list(
 
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
-    // already exist for other environments, and hence the Error as result.
+    // already exist for other environments. Hence the Error as result.
 
     if variants.is_empty() || !variants.first().unwrap().is_control {
         bail!("No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.", feature.name);

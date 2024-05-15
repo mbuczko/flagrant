@@ -132,7 +132,7 @@ pub fn list(_args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
-            val
+            val.trim().to_string()
         ]);
     }
     ascii_table.print(vecs);

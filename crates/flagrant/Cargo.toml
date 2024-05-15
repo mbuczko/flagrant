@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 flagrant-types = {path = "../flagrant-types"}
+flagrant-macros = {path = "../flagrant-macros"}
 
 sqlx = {workspace = true}
 hugsqlx = {workspace = true}

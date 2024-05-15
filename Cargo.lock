@@ -661,6 +661,7 @@ name = "flagrant"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "flagrant-macros",
  "flagrant-types",
  "hugsqlx",
  "lazy_static",
@@ -719,6 +720,15 @@ dependencies = [
  "flagrant-types",
  "reqwest",
  "serde",
+]
+
+[[package]]
+name = "flagrant-macros"
+version = "0.0.1"
+dependencies = [
+ "quote",
+ "semver",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1753,9 +1763,9 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.78"
+version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2422ad645d89c99f8f3e6b88a9fdeca7fabeac836b1002371c4367c8f984aae"
+checksum = "8ad3d49ab951a01fbaafe34f2ec74122942fe18a3f9814c3268f1bb72042131b"
 dependencies = [
  "unicode-ident",
 ]
@@ -2131,9 +2141,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.22"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
+checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 
 [[package]]
 name = "serde"

@@ -13,7 +13,7 @@ impl Distributor {
         Self { feature }
     }
 
-    /// Distributes hit among defined variants in respect to associated weights.
+    /// Distributes hit among defined featured variants in respect to associated weights.
     /// On every call:
     ///  - choose the variation with the largest `accum`
     ///  - subtract 100 from the `accum` for the chosen variation

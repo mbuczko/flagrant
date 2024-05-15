@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS variants (
 CREATE TABLE IF NOT EXISTS variants_weights (
   variant_id INTEGER NOT NULL,
   environment_id INTEGER NOT NULL,
-  weight INTEGER NOT NULL DEFAULT 0,
+  weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0),
   accumulator INTEGER NOT NULL DEFAULT 100,
   
   PRIMARY KEY (variant_id, environment_id),  

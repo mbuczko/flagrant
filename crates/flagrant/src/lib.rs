@@ -2,10 +2,12 @@ use anyhow::Result;
 use semver::Version;
 use sqlx::{Pool, Sqlite};
 
-mod db;
+pub mod db;
 pub mod distributor;
 pub mod errors;
 pub mod models;
+
+pub use flagrant_macros::test;
 
 pub async fn init() -> Result<Pool<Sqlite>> {
     let pool = db::init_pool()
