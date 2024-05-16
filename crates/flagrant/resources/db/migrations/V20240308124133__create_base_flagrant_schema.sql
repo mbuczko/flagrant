@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS features (
   value_type TEXT NOT NULL DEFAULT 'text',
   version INTEGER NOT NULL DEFAULT 0,
 
+  UNIQUE(project_id, name),
   FOREIGN KEY (project_id) REFERENCES projects(project_id)
 );
 
