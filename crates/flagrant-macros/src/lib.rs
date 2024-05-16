@@ -38,6 +38,7 @@ fn parse_args(attr_args: syn::AttributeArgs) -> syn::Result<Args> {
 pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(args as syn::AttributeArgs);
     let input = parse_macro_input!(item as ItemFn);
+
     let function_name = input.sig.ident.clone();
     let arguments = input.sig.inputs;
     let return_type = input.sig.output.clone();

@@ -13,13 +13,16 @@ hugsqlx = {workspace = true}
 tracing = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
+serde_valid = {workspace = true}
 anyhow = {workspace = true}
 thiserror = {workspace = true}
-ulid = {workspace = true}
 
 semver = "1.0.14"
 rust-embed = "6.4.1"
 lazy_static = "1.4.0"
+
+# [dev-dependencies]
+# rstest = "0.19.0"
 
 [build-dependencies]
 notify-debouncer-mini = "0.4.1"

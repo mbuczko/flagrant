@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
+use serde_valid::Validate;
 use std::fmt;
+
+extern crate regex;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
@@ -17,11 +20,12 @@ pub struct Environment {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate)]
 pub struct Feature {
     #[sqlx(rename = "feature_id")]
     pub id: u16,
     pub project_id: u16,
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
     pub name: String,
     pub variants: Vec<Variant>,
     pub value_type: FeatureValueType,

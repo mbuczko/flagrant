@@ -45,8 +45,30 @@ async fn create_feature(pool: SqlitePool) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[flagrant::test]
+async fn create_feature_with_invalid_name(pool: SqlitePool) -> sqlx::Result<()> {
+    let (_, environment) = create_environment(&pool).await;
+    for name in [
+        " ble",
+        "123",
+        "💕333",
+        "foo-bar"
+    ] {
+        let feature = feature::create(
+            &pool,
+            &environment,
+            name.into(),
+            Some(FeatureValue("foo".into(), FeatureValueType::Text)),
+            false,
+        )
+        .await;
+        assert!(feature.is_err())
+    }
+    Ok(())
+}
+
 #[flagrant::test(should_fail = true)]
-async fn feature_unique_name(pool: SqlitePool) {
+async fn create_feature_with_non_unique_name(pool: SqlitePool) {
     let (_, environment) = create_environment(&pool).await;
     let name = "should_be_unique";
 

@@ -1,6 +1,6 @@
 use hugsqlx::{params, HugSqlx};
 use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite, SqliteConnection};
-
+use serde_valid::Validate;
 use crate::errors::DbError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 
@@ -49,7 +49,10 @@ pub async fn create(
         let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
         feature.set_default_variant(variant);
     }
+
+    feature.validate()?;
     tx.commit().await?;
+
     Ok(feature)
 }
 
