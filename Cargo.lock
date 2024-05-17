@@ -666,6 +666,7 @@ dependencies = [
  "hugsqlx",
  "lazy_static",
  "notify-debouncer-mini",
+ "rand",
  "rust-embed",
  "semver",
  "serde",

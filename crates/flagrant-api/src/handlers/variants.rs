@@ -64,6 +64,7 @@ pub async fn delete(
 ) -> Result<Json<()>, ServiceError> {
     let mut conn = pool.acquire().await?;
     let env = environment::fetch(&pool, environment_id).await?;
+    let var = variant::fetch(&pool, &env, variant_id).await?;
 
-    Ok(Json(variant::delete(&mut conn, &env, variant_id).await?))
+    Ok(Json(variant::delete(&mut conn, &env, &var).await?))
 }

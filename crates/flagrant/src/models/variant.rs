@@ -166,7 +166,10 @@ pub async fn list(
     // already exist for other environments. Hence the Error as result.
 
     if variants.is_empty() || !variants.first().unwrap().is_control {
-        bail!("No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.", feature.name);
+        bail!(
+            "No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.",
+            feature.name
+        );
     }
     Ok(variants)
 }
@@ -179,11 +182,21 @@ pub async fn list(
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    variant_id: u16,
+    variant: &Variant,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
+    let variants_count: u16 = Variants::fetch_count_of_feature_variants(
+        &mut *tx,
+        params![environment.id, variant.id],
+        |r| r.get("count"),
+    )
+    .await?;
 
-    Variants::delete_variant_weights(&mut *tx, params![variant_id])
+    if variants_count > 1 && variant.is_control {
+        bail!("Could not remove a default variant as there still exist other variant for given feature");
+    }
+
+    Variants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| {
             tracing::error!(error = ?e, "Could not remove variant weights");
@@ -191,14 +204,16 @@ pub async fn delete(
         })?;
 
     let feature_id: u16 =
-        Variants::delete_variant(&mut *tx, params![variant_id], |v| v.get("feature_id"))
+        Variants::delete_variant(&mut *tx, params![variant.id], |v| v.get("feature_id"))
             .await
             .map_err(|e| {
                 tracing::error!(error = ?e, "Could not remove variant");
                 DbError::QueryFailed
             })?;
 
-    upsert_default_weight(&mut tx, environment, feature_id).await?;
+    if !variant.is_control {
+        upsert_default_weight(&mut tx, environment, feature_id).await?;
+    }
     tx.commit().await?;
 
     Ok(())

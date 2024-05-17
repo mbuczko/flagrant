@@ -60,6 +60,12 @@ LEFT JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment
 WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
 ORDER BY is_control DESC
 
+-- :name fetch_count_of_feature_variants :|| :1
+-- :doc Having a variant id, fetch count of all the variants that belong to same feature, including one of known id.
+SELECT count(v2.variant_id) AS count
+FROM variants v1 JOIN variants v2 USING(feature_id)
+WHERE COALESCE(v2.environment_id, $1) = $1 AND v1.variant_id = $2
+
 -- :name delete_variant :|| :1
 -- :doc Removes variant of given id
 DELETE FROM variants WHERE variant_id = $1

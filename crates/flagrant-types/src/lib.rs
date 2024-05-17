@@ -32,7 +32,7 @@ pub struct Feature {
     pub is_enabled: bool,
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, sqlx::Type)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "value_type", rename_all = "lowercase")]
 // #[serde(rename_all = "lowercase")]
 pub enum FeatureValueType {
@@ -42,7 +42,7 @@ pub enum FeatureValueType {
     Toml,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FeatureValue(pub String, pub FeatureValueType);
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, sqlx::FromRow)]
@@ -100,6 +100,12 @@ impl Feature {
         self.variants = variants;
         self
     }
+    pub fn get_default_value(&self) -> Option<FeatureValue> {
+        if let Some(variant) = self.get_default_variant() {
+            return Some(FeatureValue(variant.value.clone(), self.value_type.clone()));
+        }
+        None
+    }
 }
 
 impl Variant {
@@ -116,7 +122,7 @@ impl Variant {
         Variant {
             id,
             value,
-            weight: 0,
+            weight: 100,
             accumulator: 100,
             is_control: true,
         }

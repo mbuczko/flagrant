@@ -204,13 +204,14 @@ pub async fn delete(
     let conn = tx.acquire().await?;
     let vars = variant::list(pool, environment, feature).await?;
 
-    // in transaction, remove all feature variants first
-    for var in vars {
-        variant::delete(conn, environment, var.id).await?;
+    // in transaction, remove all feature variants first.
+    // remove default variant (which is first in vec) as last one.
+    for var in vars.into_iter().rev() {
+        variant::delete(conn, environment, &var).await?;
     }
 
     // ...and then feature value and entire feature definition
-    Features::delete_feature_values(&mut *tx, params![feature.id]).await?;
+    Features::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     Features::delete_feature(&mut *tx, params![feature.id]).await?;
 
     tx.commit().await?;
@@ -218,13 +219,15 @@ pub async fn delete(
 }
 
 /// Transforms database result serialized as `SqliteRow` into a `Feature` model.
-/// If there is a control value detected, creates a default variant accordinly
+/// If there is a control variant detected, creates a default variant accordinly
 /// stored within feature's `variants` vector.
 pub(crate) fn row_to_feature(row: SqliteRow) -> Feature {
     let mut variants = Vec::with_capacity(1);
 
-    if let Ok(Some(variant_id)) = row.try_get::<Option<u16>, _>("variant_id") {
-        variants.push(Variant::build_default(variant_id, row.get("value")))
+    if let Ok(Some(variant_id)) = row.try_get("variant_id") {
+        if let Ok(Some(variant_value)) = row.try_get("value") {
+            variants.push(Variant::build_default(variant_id, variant_value))
+        }
     }
     Feature {
         id: row.get("feature_id"),

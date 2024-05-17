@@ -45,6 +45,6 @@ WHERE environment_id = $1 AND variant_id IN (select variant_id from variants whe
 -- :doc Removes a feature. Note that feature value and variants need to be removed before.
 DELETE FROM features WHERE feature_id = $1
 
--- :name delete_feature_values :<> :!
+-- :name delete_variants_for_feature :<> :!
 -- :doc Removes a feature value.
-DELETE FROM features_variants WHERE feature_id = $1
+DELETE FROM variants WHERE feature_id = $1
