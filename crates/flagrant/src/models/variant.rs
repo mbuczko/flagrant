@@ -193,7 +193,7 @@ pub async fn delete(
     .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
-        bail!("Could not remove a default variant as there still exist other variant for given feature");
+        bail!("Could not remove a default variant as there still exist other variants for given feature");
     }
 
     Variants::delete_variant_weights(&mut *tx, params![variant.id])

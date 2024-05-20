@@ -58,6 +58,7 @@ SELECT v.variant_id, v.environment_id, v.value, COALESCE(vw.weight, 0) AS weight
 FROM variants v
 LEFT JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $1
 WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
+ORDER BY weight DESC
 
 -- :name fetch_count_of_feature_variants :|| :1
 -- :doc Having a variant id, fetch count of all the variants that belong to same feature, including one of known id.
