@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{Environment, Feature, FeatureValue, FeatureValueType, Project};
 use rand::Rng;
