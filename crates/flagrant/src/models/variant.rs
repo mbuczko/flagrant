@@ -40,7 +40,7 @@ pub async fn upsert_default(
     upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
 
-    Ok(Variant::build_default(variant_id, value))
+    Ok(Variant::build_default(environment, variant_id, value))
 }
 
 /// Creates standard variant with weight and value common for all environments.
@@ -153,7 +153,7 @@ pub async fn list(
 ) -> anyhow::Result<Vec<Variant>> {
     let variants = Variants::fetch_variants_for_feature::<_, Variant>(
         pool,
-        params!(environment.id, feature.id),
+        params![environment.id, feature.id],
     )
     .await
     .map_err(|e| {
@@ -165,7 +165,7 @@ pub async fn list(
     // No default value makes any additional variants pointless, even if they
     // already exist for other environments. Hence the Error as result.
 
-    if variants.is_empty() || !variants.first().unwrap().is_control {
+    if !variants.iter().any(|v| is_default(environment, v)) {
         bail!(
             "No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.",
             feature.name
@@ -192,7 +192,7 @@ pub async fn delete(
     )
     .await?;
 
-    if variants_count > 1 && variant.is_control {
+    if variants_count > 1 && is_default(environment, variant) {
         bail!("Could not remove a default variant as there still exist other variant for given feature");
     }
 
@@ -211,7 +211,7 @@ pub async fn delete(
                 DbError::QueryFailed
             })?;
 
-    if !variant.is_control {
+    if !is_default(environment, variant) {
         upsert_default_weight(&mut tx, environment, feature_id).await?;
     }
     tx.commit().await?;
@@ -250,4 +250,10 @@ async fn upsert_default_weight(
         })?;
 
     Ok(())
+}
+
+/// Returns true if variant is default one within given environment.
+/// Returns false otherwise.
+fn is_default(environment: &Environment, variant: &Variant) -> bool {
+    variant.environment_id.map(|id| id == environment.id).unwrap_or(false)
 }

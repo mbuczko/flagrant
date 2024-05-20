@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::AsciiTable;
-use flagrant_types::{Feature, VariantRequestPayload, Variant};
+use flagrant_types::{Feature, Tabular, Variant, VariantRequestPayload};
 
 use crate::repl::{readline::ReplEditor, session::{ReplSession, Resource}};
 
@@ -29,7 +29,8 @@ pub fn add(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::
                 }
                 _ => bail!("No weight or value provided.")
             };
-            println!("{variant}");
+
+            variant.tabular_print();
             return Ok(());
         }
         bail!("Feature not found.")
@@ -112,8 +113,8 @@ pub fn update(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
 
             // re-fetch variant to be sure it's updated
             let variant = ssn.client.get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
-            println!("{variant}");
 
+            variant.tabular_print();
             return Ok(());
         }
         bail!("No variant of given id found.");

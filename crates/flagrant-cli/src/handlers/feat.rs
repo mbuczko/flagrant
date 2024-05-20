@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
-use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType};
+use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType, Tabular};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
 use crate::repl::{
@@ -29,7 +29,8 @@ pub fn add(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> any
                 value,
             },
         )?;
-        println!("{feature}");
+
+        feature.tabular_print();
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -60,7 +61,7 @@ pub fn value(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> a
             // re-fetch feature to be sure it's updated
             let feature: Feature = ssn.client.get(res.subpath(&subpath))?;
 
-            println!("{feature}");
+            feature.tabular_print();
             return Ok(());
         }
         bail!("Feature not found.");
@@ -100,7 +101,7 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
             // re-fetch feature to be sure it's updated
             let feature = ssn.client.get::<Feature>(res.subpath(&subpath))?;
 
-            println!("{feature}");
+            feature.tabular_print();
             return Ok(());
         }
         bail!("No such a feature.")

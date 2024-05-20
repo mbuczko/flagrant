@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS environments (
 CREATE TABLE IF NOT EXISTS features (
   feature_id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
+  name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
+  description TEXT CHECK(LENGTH(description) <= 2048),
   is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   value_type TEXT NOT NULL DEFAULT 'text',
   version INTEGER NOT NULL DEFAULT 0,

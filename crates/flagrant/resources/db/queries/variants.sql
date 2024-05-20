@@ -47,18 +47,17 @@ WHERE environment_id = $1 AND variant_id = $2
 
 -- :name fetch_variant :<> :1
 -- :doc Fetches a variant of given id. Control variant value is automatically calculated.
-SELECT v.variant_id, feature_id, value, v.environment_id IS NOT NULL AS is_control, COALESCE(weight, 0) AS weight, accumulator
+SELECT v.variant_id, v.environment_id, feature_id, value, COALESCE(weight, 0) AS weight, accumulator
 FROM variants v
 LEFT JOIN variants_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
 WHERE v.variant_id = $2
 
 -- :name fetch_variants_for_feature :<> :*
 -- :doc Fetches all variants for given feature
-SELECT v.variant_id, v.value, v.environment_id IS NOT NULL AS is_control, COALESCE(vw.weight, 0) AS weight, vw.accumulator
+SELECT v.variant_id, v.environment_id, v.value, COALESCE(vw.weight, 0) AS weight, vw.accumulator
 FROM variants v
 LEFT JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $1
 WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
-ORDER BY is_control DESC
 
 -- :name fetch_count_of_feature_variants :|| :1
 -- :doc Having a variant id, fetch count of all the variants that belong to same feature, including one of known id.

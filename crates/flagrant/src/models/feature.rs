@@ -1,8 +1,10 @@
-use hugsqlx::{params, HugSqlx};
-use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite, SqliteConnection};
-use serde_valid::Validate;
+use std::cmp::Ordering;
+
 use crate::errors::DbError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
+use hugsqlx::{params, HugSqlx};
+use serde_valid::Validate;
+use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite, SqliteConnection};
 
 use super::variant;
 
@@ -33,7 +35,7 @@ pub async fn create(
                 .map(|FeatureValue(_, value_type)| value_type.clone())
                 .unwrap_or_default()
         ],
-        row_to_feature,
+        |row| row_to_feature(row, environment),
     )
     .await
     .map_err(|e| {
@@ -41,13 +43,9 @@ pub async fn create(
         DbError::QueryFailed
     })?;
 
+    // if default value was provided, turn it into a control variant.
     if let Some(FeatureValue(value, _)) = value {
-        // if default value was provided, turn it into a control variant.
-        // note, value type is stored at feature level, variants hold purely
-        // stringified values only which should eventually conform to that type.
-
-        let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
-        feature.set_default_variant(variant);
+        set_default_value(&mut tx, environment, &mut feature, value).await?;
     }
 
     feature.validate()?;
@@ -56,18 +54,34 @@ pub async fn create(
     Ok(feature)
 }
 
+/// Sets default feature value for given environment.
+/// Value type is stored at feature level, however value itself is stored as a String
+/// in variant. This is to enforce same type for all the variant values.
+pub async fn set_default_value(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &mut Feature,
+    value: String,
+) -> anyhow::Result<()> {
+    let variant = variant::upsert_default(conn, environment, feature, value).await?;
+    feature.variants.insert(0, variant);
+    Ok(())
+}
+
 /// Returns feature of given `feature_id` or Error if no feature was found.
 pub async fn fetch(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     feature_id: u16,
 ) -> anyhow::Result<Feature> {
-    let feature = Features::fetch_feature(pool, params![feature_id], row_to_feature)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not fetch a feature");
-            DbError::QueryFailed
-        })?;
+    let feature = Features::fetch_feature(pool, params![feature_id], |row| {
+        row_to_feature(row, environment)
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "Could not fetch a feature");
+        DbError::QueryFailed
+    })?;
 
     let variants = variant::list(pool, environment, &feature)
         .await
@@ -83,16 +97,15 @@ pub async fn fetch_by_name(
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
-    let feature = Features::fetch_feature_by_name(
-        pool,
-        params![environment.project_id, name],
-        row_to_feature,
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch a feature");
-        DbError::QueryFailed
-    })?;
+    let feature =
+        Features::fetch_feature_by_name(pool, params![environment.project_id, name], |row| {
+            row_to_feature(row, environment)
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Could not fetch a feature");
+            DbError::QueryFailed
+        })?;
 
     let variants = variant::list(pool, environment, &feature)
         .await
@@ -111,7 +124,7 @@ pub async fn fetch_by_prefix(
     let features = Features::fetch_features_by_pattern(
         pool,
         params![environment.project_id, environment.id, format!("{prefix}%")],
-        row_to_feature,
+        |row| row_to_feature(row, environment),
     )
     .await
     .map_err(|e| {
@@ -128,7 +141,7 @@ pub async fn list(pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Res
     Ok(Features::fetch_features_for_environment(
         pool,
         params![environment.project_id, environment.id],
-        row_to_feature,
+        |row| row_to_feature(row, environment),
     )
     .await
     .map_err(|e| {
@@ -202,11 +215,20 @@ pub async fn delete(
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
     let conn = tx.acquire().await?;
-    let vars = variant::list(pool, environment, feature).await?;
+    let mut vars = variant::list(pool, environment, feature).await?;
+
+    // sort variants in a way that control values are the last ones in a vector.
+    // this is necessary, as deleting a control variant where the other variants
+    // still exist is forbidded.
+
+    vars.sort_by(|a, _| match a.is_control() {
+        true => Ordering::Greater,
+        false => Ordering::Less,
+    });
 
     // in transaction, remove all feature variants first.
     // remove default variant (which is first in vec) as last one.
-    for var in vars.into_iter().rev() {
+    for var in vars {
         variant::delete(conn, environment, &var).await?;
     }
 
@@ -221,12 +243,16 @@ pub async fn delete(
 /// Transforms database result serialized as `SqliteRow` into a `Feature` model.
 /// If there is a control variant detected, creates a default variant accordinly
 /// stored within feature's `variants` vector.
-pub(crate) fn row_to_feature(row: SqliteRow) -> Feature {
+pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Feature {
     let mut variants = Vec::with_capacity(1);
 
     if let Ok(Some(variant_id)) = row.try_get("variant_id") {
         if let Ok(Some(variant_value)) = row.try_get("value") {
-            variants.push(Variant::build_default(variant_id, variant_value))
+            variants.push(Variant::build_default(
+                environment,
+                variant_id,
+                variant_value,
+            ))
         }
     }
     Feature {

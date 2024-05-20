@@ -26,6 +26,7 @@ pub struct Feature {
     pub id: u16,
     pub project_id: u16,
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
     pub variants: Vec<Variant>,
     pub value_type: FeatureValueType,
@@ -52,7 +53,7 @@ pub struct Variant {
     pub value: String,
     pub weight: i16,
     pub accumulator: i16,
-    pub is_control: bool,
+    pub environment_id: Option<u16>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,20 +92,17 @@ impl From<Feature> for FeatureRequestPayload {
 
 impl Feature {
     pub fn get_default_variant(&self) -> Option<&Variant> {
-        self.variants.first()
-    }
-    pub fn set_default_variant(&mut self, variant: Variant) {
-        self.variants.insert(0, variant)
-    }
-    pub fn with_variants(mut self, variants: Vec<Variant>) -> Self {
-        self.variants = variants;
-        self
+        self.variants.iter().find(|v| v.is_control())
     }
     pub fn get_default_value(&self) -> Option<FeatureValue> {
         if let Some(variant) = self.get_default_variant() {
             return Some(FeatureValue(variant.value.clone(), self.value_type.clone()));
         }
         None
+    }
+    pub fn with_variants(mut self, variants: Vec<Variant>) -> Self {
+        self.variants = variants;
+        self
     }
 }
 
@@ -115,52 +113,20 @@ impl Variant {
             value,
             weight,
             accumulator: 100,
-            is_control: false,
+            environment_id: None,
         }
     }
-    pub fn build_default(id: u16, value: String) -> Variant {
+    pub fn build_default(environment: &Environment, id: u16, value: String) -> Variant {
         Variant {
             id,
             value,
             weight: 100,
             accumulator: 100,
-            is_control: true,
+            environment_id: Some(environment.id),
         }
     }
-}
-
-impl fmt::Display for Feature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let toggle = if self.is_enabled { "▣" } else { "▢" };
-        let value = self
-            .get_default_variant()
-            .map(|v| v.value.as_str())
-            .unwrap_or_else(|| "");
-
-        write!(
-            f,
-            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggle} {}\n│ {:<8}: {}\n│ {:<8}: {}",
-            "ID",
-            self.id,
-            "NAME",
-            self.name,
-            "ENABLED",
-            self.is_enabled,
-            "TYPE",
-            self.value_type,
-            "VALUE",
-            value
-        )
-    }
-}
-
-impl fmt::Display for Variant {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {}",
-            "ID", self.id, "WEIGHT", self.weight, "VALUE", self.value
-        )
+    pub fn is_control(&self) -> bool {
+        self.environment_id.is_some()
     }
 }
 
@@ -177,5 +143,42 @@ impl From<&str> for FeatureValueType {
             "toml" => Self::Toml,
             _ => Self::default(),
         }
+    }
+}
+
+pub trait Tabular {
+    fn tabular_print(&self);
+}
+
+impl Tabular for Feature {
+    fn tabular_print(&self) {
+        let toggle = if self.is_enabled { "▣" } else { "▢" };
+        let value = self
+            .get_default_variant()
+            .map(|v| v.value.as_str())
+            .unwrap_or_else(|| "");
+
+        println!(
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {toggle} {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "ID",
+            self.id,
+            "NAME",
+            self.name,
+            "ENABLED",
+            self.is_enabled,
+            "TYPE",
+            self.value_type,
+            "VALUE",
+            value
+        )
+    }
+}
+
+impl Tabular for Variant {
+    fn tabular_print(&self) {
+        println!(
+            "│ {:<8}: {}\n│ {:<8}: {}\n│ {:<8}: {}",
+            "ID", self.id, "WEIGHT", self.weight, "VALUE", self.value
+        )
     }
 }
