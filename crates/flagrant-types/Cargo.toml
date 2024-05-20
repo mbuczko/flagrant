@@ -5,7 +5,8 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+regex = "1.10.4"
 serde = {workspace = true}
+serde_valid = {workspace = true}
 sqlx = {workspace = true}
-ulid = {workspace = true}
 

@@ -1,4 +1,7 @@
+use std::collections::VecDeque;
+
 use anyhow::bail;
+use ascii_table::AsciiTable;
 use flagrant_types::{Environment, EnvRequestPayload};
 
 use crate::repl::{readline::ReplEditor, session::{ReplSession, Resource}};
@@ -28,18 +31,17 @@ pub fn list(_args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow
     let res = ssn.project.as_base_resource();
     let envs = ssn.client.get::<Vec<Environment>>(res.subpath("/envs"))?;
 
-    println!("{:─^60}", "");
-    println!("{0: <4} │ {1: <30} │ DESCRIPTION", "ID", "NAME");
-    println!("{:─^60}", "");
+    let mut ascii_table = AsciiTable::default();
+    let mut vecs = Vec::with_capacity(envs.len() + 1);
+
+    ascii_table.column(0).set_header("ID");
+    ascii_table.column(1).set_header("NAME");
+    ascii_table.column(2).set_header("DESCRIPTION");
 
     for env in envs {
-        println!(
-            "{0: <4} │ {1: <30} │ {2: <30}",
-            env.id,
-            env.name,
-            env.description.unwrap_or_default()
-        );
+        vecs.push(vec![env.id.to_string(), env.name, env.description.unwrap_or_default()]);
     }
+    ascii_table.print(vecs);
     Ok(())
 }
 
@@ -48,10 +50,10 @@ pub fn switch(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
     if let Some(name) = args.get(1) {
         let mut ssn = session.borrow_mut();
         let res = ssn.project.as_base_resource();
-        let result = ssn.client.get::<Vec<Environment>>(res.subpath(format!("/envs?name={name}")));
+        let result = ssn.client.get::<VecDeque<Environment>>(res.subpath(format!("/envs?name={name}")));
 
         if let Ok(mut envs) = result && !envs.is_empty() {
-            let env = envs.remove(0);
+            let env = envs.pop_front().unwrap();
 
             println!("Switching to environment '{}' (id={})", env.name, env.id);
             ssn.switch_environment(env);

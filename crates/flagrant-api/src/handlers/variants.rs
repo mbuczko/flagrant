@@ -32,8 +32,8 @@ pub async fn update(
 ) -> Result<Json<()>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let var = variant::fetch(&pool, &env, variant_id).await?;
-    variant::update(&pool, &env, &var, variant.value, variant.weight).await?;
 
+    variant::update(&pool, &env, &var, variant.value, variant.weight).await?;
     Ok(Json(()))
 }
 
@@ -60,8 +60,11 @@ pub async fn list(
 
 pub async fn delete(
     State(pool): State<SqlitePool>,
-    Path((_environment_id, variant_id)): Path<(u16, u16)>,
+    Path((environment_id, variant_id)): Path<(u16, u16)>,
 ) -> Result<Json<()>, ServiceError> {
     let mut conn = pool.acquire().await?;
-    Ok(Json(variant::delete(&mut conn, variant_id).await?))
+    let env = environment::fetch(&pool, environment_id).await?;
+    let var = variant::fetch(&pool, &env, variant_id).await?;
+
+    Ok(Json(variant::delete(&mut conn, &env, &var).await?))
 }

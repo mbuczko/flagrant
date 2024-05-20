@@ -3,7 +3,7 @@ members = [ "crates/*" ]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Michal Buczko <michal@buczko.pl>"]
 edition = "2021"
 
@@ -12,11 +12,11 @@ tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7" }
 axum-extra = {version = "0.9.2", features = ["typed-header"]}
 tower = {version = "0.4.13", features = ["util", "timeout", "load-shed", "limit"]}
-ulid = {version = "1.1.2", features = ["serde"]}
 sqlx = { version = "0.7.4", features = [ "sqlite", "macros", "runtime-tokio-rustls" ]}
 hugsqlx = {version = "0.3.0", features = ["sqlite"]}
 serde = "1.0"
 serde_json = "1.0"
+serde_valid = "0.20.0"
 tracing = "0.1.36"
 tracing-log = "0.1.3"
 tracing-subscriber = {version = "0.3.15", features = ["registry", "env-filter"]}
