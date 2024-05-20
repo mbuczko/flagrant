@@ -1,115 +1,40 @@
-use anyhow::{anyhow, bail};
-use core::fmt::Debug;
-use ulid::Ulid;
+use flagrant_types::{Environment, Feature, Variant};
+use sqlx::{Pool, Sqlite};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct Variation {
-    pub id: Ulid,
-    pub value: String,
-    pub weight: i16,
+use crate::models::{feature, variant};
+
+
+pub struct Distributor {
+    feature: Feature,
 }
 
-#[derive(Debug)]
-pub(crate) struct AccumulativeDistributor {
-    requests: usize,
-    variations: Vec<AccumulatedVar>,
-}
-
-#[derive(Clone, Debug)]
-struct AccumulatedVar {
-    accum: i16,
-    variation: Variation,
-}
-
-pub trait Distributor<'a> {
-    fn distribute(&mut self) -> &Variation;
-    fn variations(&self) -> Vec<&Variation>;
-
-    fn set_control_value(&mut self, value: String) -> anyhow::Result<()>;
-    fn set_variations(&mut self, variations: Vec<Variation>) -> anyhow::Result<()>;
-}
-
-impl<'a> Debug for dyn Distributor<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Distributor {{ {:?} }}", self.variations())
-    }
-}
-
-impl AccumulativeDistributor {
-    pub fn new(control_value: String) -> Self {
-        let accumulated = AccumulatedVar {
-            accum: 100,
-            variation: Variation {
-                id: Ulid::new(),
-                value: control_value,
-                weight: 100,
-            },
-        };
-        Self {
-            requests: 0,
-            variations: vec![accumulated],
-        }
-    }
-}
-
-impl<'a> Distributor<'a> for AccumulativeDistributor {
-    fn set_control_value(&mut self, value: String) -> anyhow::Result<()> {
-        if let Some(v) = self.variations.last_mut() {
-            v.variation.value = value;
-            return Ok(());
-        }
-        Err(anyhow!("No control value found...?"))
-    }
-    fn set_variations(&mut self, variations: Vec<Variation>) -> anyhow::Result<()> {
-        let mut accumulated = Vec::<AccumulatedVar>::with_capacity(variations.len() + 1);
-        let mut weight_sum: i16 = 0;
-
-        for var in variations {
-            let weight = var.weight;
-
-            accumulated.push(AccumulatedVar {
-                accum: weight,
-                variation: var,
-            });
-            weight_sum += weight;
-        }
-        if weight_sum > 100 {
-            bail!("Environmental weights greater than 100%")
-        }
-
-        let mut control = self.variations.pop().unwrap();
-        control.variation.weight = 100 - weight_sum;
-        control.accum = 100 - weight_sum;
-        accumulated.push(control);
-
-        let _ = std::mem::replace(&mut self.variations, accumulated);
-        Ok(())
+impl Distributor {
+    pub fn new(feature: Feature) -> Self {
+        Self { feature }
     }
 
-    fn variations(&self) -> Vec<&Variation> {
-        self.variations.iter().map(|acc| &acc.variation).collect()
-    }
-
-    /// Distributes hit among defined variations keeping in mind associated weights.
+    /// Distributes hit among defined featured variants in respect to associated weights.
     /// On every call:
     ///  - choose the variation with the largest `accum`
     ///  - subtract 100 from the `accum` for the chosen variation
     ///  - add `weight` to `accum` for all variations, including the chosen one
-    fn distribute(&mut self) -> &Variation {
-        let max_accum = self
-            .variations
-            .iter_mut()
+    pub async fn distribute(&self, pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Result<Variant> {
+        let mut variants = variant::list(pool, environment, &self.feature).await?;
+        let max_accum = variants
+            .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.accum.cmp(&b.accum));
+            .max_by(|(_, a), (_, b)| a.accumulator.cmp(&b.accumulator));
 
-        // there should be always at least one variation - a control value
-        let (idx, var) = max_accum.unwrap();
+        // there should be always at least one variation with a control value
+        let (idx, _) = max_accum.unwrap();
+        let var = variants.swap_remove(idx);
 
-        var.accum -= 100;
+        let mut tx = pool.begin().await?;
+        variant::update_accumulator(&mut tx, environment, &var, var.accumulator - 100).await?;
+        feature::bump_up_accumulators(&mut tx, environment, &self.feature, var.weight).await?;
 
-        for var in self.variations.iter_mut() {
-            var.accum += var.variation.weight;
-        }
-        self.variations.get(idx).map(|v| &v.variation).unwrap()
+        tx.commit().await?;
+        Ok(var)
     }
+
 }

@@ -6,19 +6,26 @@ edition.workspace = true
 
 [dependencies]
 flagrant-types = {path = "../flagrant-types"}
+flagrant-macros = {path = "../flagrant-macros"}
 
 sqlx = {workspace = true}
 hugsqlx = {workspace = true}
 tracing = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
+serde_valid = {workspace = true}
 anyhow = {workspace = true}
 thiserror = {workspace = true}
-ulid = {workspace = true}
 
 semver = "1.0.14"
 rust-embed = "6.4.1"
 lazy_static = "1.4.0"
+
+[dev-dependencies]
+rand = "0.8.5"
+
+[build-dependencies]
+notify-debouncer-mini = "0.4.1"
 
 [lib]
 doctest = false

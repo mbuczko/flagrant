@@ -1,0 +1,13 @@
+[package]
+name = "flagrant-macros"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+syn = {version="1.0.57", features = ["full", "fold"]}
+quote = "1.0.8"
+semver = "1.0.23"
+
+[lib]
+proc-macro = true

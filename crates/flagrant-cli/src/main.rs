@@ -11,8 +11,8 @@ const API_HOST: &str = "http://localhost:3030";
 
 fn main() -> anyhow::Result<()> {
     // todo: will be taken from args
-    let project_id = 295;
-    let environment_id = 404;
+    let project_id = 1;
+    let environment_id = 1;
 
     let client = HttpClient::new(API_HOST.into());
     let session = RefCell::new(Session::init(
