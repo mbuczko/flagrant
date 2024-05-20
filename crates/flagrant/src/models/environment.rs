@@ -1,7 +1,7 @@
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Pool, Sqlite};
 
-use crate::errors::DbError;
+use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Project};
 
 #[derive(HugSqlx)]
@@ -16,17 +16,10 @@ pub async fn create(
 ) -> anyhow::Result<Environment> {
     let env = Environments::create_environment::<_, Environment>(
         pool,
-        params![
-            project.id,
-            name,
-            description
-        ],
+        params![project.id, name, description],
     )
     .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not create an environment");
-        DbError::QueryFailed
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e.to_string()))?;
 
     Ok(env)
 }
@@ -34,10 +27,7 @@ pub async fn create(
 pub async fn fetch(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
     let env = Environments::fetch_environment::<_, Environment>(pool, params![environment_id])
         .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not fetch environment");
-            DbError::QueryFailed
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e.to_string()))?;
 
     Ok(env)
 }
@@ -47,15 +37,12 @@ pub async fn fetch_by_name(
     project: &Project,
     name: String,
 ) -> anyhow::Result<Environment> {
-    let env = Environments::fetch_environment_by_name::<_, Environment>(
-        pool,
-        params![project.id, name],
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch environment");
-        DbError::QueryFailed
-    })?;
+    let env =
+        Environments::fetch_environment_by_name::<_, Environment>(pool, params![project.id, name])
+            .await
+            .map_err(|e| {
+                FlagrantError::QueryFailed("Could not fetch environment", e.to_string())
+            })?;
 
     Ok(env)
 }
@@ -71,8 +58,7 @@ pub async fn fetch_by_prefix(
     )
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch list of environments");
-        DbError::QueryFailed
+        FlagrantError::QueryFailed("Could not fetch list of environments", e.to_string())
     })?;
 
     Ok(envs)
@@ -86,8 +72,7 @@ pub async fn fetch_for_project(
         Environments::fetch_environments_for_project::<_, Environment>(pool, params![project.id])
             .await
             .map_err(|e| {
-                tracing::error!(error = ?e, "Could not fetch environments for project");
-                DbError::QueryFailed
+                FlagrantError::QueryFailed("Could not fetch list of environments", e.to_string())
             })?;
 
     Ok(envs)

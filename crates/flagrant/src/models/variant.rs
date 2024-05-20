@@ -3,7 +3,7 @@ use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
 
-use crate::errors::DbError;
+use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Feature, Variant};
 
 #[derive(HugSqlx)]
@@ -32,10 +32,7 @@ pub async fn upsert_default(
         |v| v.get("variant_id"),
     )
     .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not upsert default variant");
-        DbError::QueryFailed
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e.to_string()))?;
 
     upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
@@ -61,20 +58,14 @@ pub async fn create(
         v.get("variant_id")
     })
     .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not create a variant");
-        DbError::QueryFailed
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e.to_string()))?;
     let weight = Variants::upsert_variant_weight(
         &mut *tx,
         params![environment.id, variant_id, weight],
         |v| v.get("weight"),
     )
     .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not insert a variant weight");
-        DbError::QueryFailed
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e.to_string()))?;
 
     upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
@@ -100,10 +91,7 @@ pub async fn update(
             v.get("feature_id")
         })
         .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could not update variant value");
-            DbError::QueryFailed
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e.to_string()))?;
 
     Variants::upsert_variant_weight::<_, _, i16>(
         &mut *tx,
@@ -111,10 +99,7 @@ pub async fn update(
         |v| v.get("weight"),
     )
     .await
-    .map_err(|e| {
-        tracing::error!(error = ?e, "Could not set a variant's weight");
-        DbError::QueryFailed
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e.to_string()))?;
 
     upsert_default_weight(&mut tx, environment, feature_id).await?;
     tx.commit().await?;
@@ -133,10 +118,7 @@ pub async fn fetch(
 ) -> anyhow::Result<Variant> {
     let variant = Variants::fetch_variant::<_, Variant>(pool, params!(environment.id, variant_id))
         .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Could fetch a variant");
-            DbError::QueryFailed
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e.to_string()))?;
 
     Ok(variant)
 }
@@ -157,8 +139,7 @@ pub async fn list(
     )
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "Could not fetch variants for feature");
-        DbError::QueryFailed
+        FlagrantError::QueryFailed("Could not fetch variants for feature", e.to_string())
     })?;
 
     // Be sure that feature has default value set within given environment.
@@ -166,10 +147,9 @@ pub async fn list(
     // already exist for other environments. Hence the Error as result.
 
     if !variants.iter().any(|v| is_default(environment, v)) {
-        bail!(
-            "No feature value set. Use \"FEATURE val {} <value>\" to set default feature value.",
-            feature.name
-        );
+        bail!(FlagrantError::BadRequest(
+            "No feature value set. Use \"FEATURE val ...\" to set default feature value."
+        ));
     }
     Ok(variants)
 }
@@ -193,23 +173,19 @@ pub async fn delete(
     .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
-        bail!("Could not remove a default variant as there still exist other variants for given feature");
+        bail!(FlagrantError::BadRequest("Could not remove a default variant as there still exist other variants for given feature"));
     }
 
     Variants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| {
-            tracing::error!(error = ?e, "Could not remove variant weights");
-            DbError::QueryFailed
+            FlagrantError::QueryFailed("Could not remove variant weights", e.to_string())
         })?;
 
     let feature_id: u16 =
         Variants::delete_variant(&mut *tx, params![variant.id], |v| v.get("feature_id"))
             .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "Could not remove variant");
-                DbError::QueryFailed
-            })?;
+            .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e.to_string()))?;
 
     if !is_default(environment, variant) {
         upsert_default_weight(&mut tx, environment, feature_id).await?;
@@ -228,8 +204,7 @@ pub async fn update_accumulator(
     Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await
         .map_err(|e| {
-            tracing::error!(error = ?e, "Could not update variant accumulator");
-            DbError::QueryFailed
+            FlagrantError::QueryFailed("Could not update variant accumulator", e.to_string())
         })?;
 
     Ok(())
@@ -245,8 +220,7 @@ async fn upsert_default_weight(
     Variants::upsert_default_variant_weight(conn, params![environment.id, feature_id])
         .await
         .map_err(|e| {
-            tracing::error!(error = ?e, "Could not upsert default variant weight");
-            DbError::QueryFailed
+            FlagrantError::QueryFailed("Could not upsert default variant weight", e.to_string())
         })?;
 
     Ok(())
@@ -255,5 +229,8 @@ async fn upsert_default_weight(
 /// Returns true if variant is default one within given environment.
 /// Returns false otherwise.
 fn is_default(environment: &Environment, variant: &Variant) -> bool {
-    variant.environment_id.map(|id| id == environment.id).unwrap_or(false)
+    variant
+        .environment_id
+        .map(|id| id == environment.id)
+        .unwrap_or(false)
 }

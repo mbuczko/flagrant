@@ -3,24 +3,28 @@ use axum::{
     http::{Response, StatusCode},
     response::IntoResponse,
 };
-use thiserror::Error;
+use flagrant::errors::FlagrantError;
 
 // Make our own error that wraps `anyhow::Error`.
 pub struct ServiceError(anyhow::Error);
 
-#[derive(Error, Debug)]
-pub enum InternalError {
-    // #[error("Malformed cookie")]
-    // MalformedCookie,
-}
-
 impl IntoResponse for ServiceError {
     fn into_response(self) -> Response<Body> {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error: {}", self.0),
-        )
-            .into_response()
+        match self.0.downcast_ref::<FlagrantError>() {
+            Some(FlagrantError::BadRequest(error)) => {
+                tracing::warn!("{error}");
+                (StatusCode::BAD_REQUEST, error.to_string())
+            }
+            Some(FlagrantError::QueryFailed(error, cause)) => {
+                tracing::error!(cause = cause, error);
+                (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            }
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error: {}", self.0),
+            ),
+        }
+        .into_response()
     }
 }
 
