@@ -1,9 +1,0 @@
-* Variants
-** Default variant is assumed to be a default feature value.
-This is to keep request distribution consistent - default feature value (with its special weight) is treated as one more variant during request distribution process.
-** Control variant is retured as first one in a list
-This is to simplify lookups for default variants. Instead of unnecessary filtering in a code, an SQL query prioritizes default variant and returns is always as a first one.
-** Feature with no default value cannot be extended by additional variants
-This is to avoid distributing request among variants having no control value. However, this situation may arise anyway when default- and some other variants have been already created for other environment. Having switched to newly created environment we'll endup with some variants and no control variant case. Hence a new decision...
-** No default (control) variant is identical to situation where no variants have been created for the feature yet, even if some variants may already exist in other environment.
-This is because there is no point in distributing request among variants created for other environments (only those may exist in this case) having no control value. Hence, when asked for feature variants, an empty list is returned. Once control variant is added, both the control variant and variants defined for other environments are returned.

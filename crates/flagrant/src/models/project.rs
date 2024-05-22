@@ -9,17 +9,17 @@ use flagrant_types::Project;
 struct Projects {}
 
 pub async fn create(pool: &Pool<Sqlite>, name: String) -> anyhow::Result<Project> {
-    let project = Projects::create_project::<_, Project>(pool, params!(name))
+    let project = Projects::create_project(pool, params!(name))
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could create a project", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could create a project", e))?;
 
     Ok(project)
 }
 
 pub async fn fetch(pool: &Pool<Sqlite>, project_id: u16) -> anyhow::Result<Project> {
-    let project = Projects::fetch_project::<_, Project>(pool, params!(project_id))
+    let project = Projects::fetch_project(pool, params!(project_id))
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could fetch project", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could fetch project", e))?;
 
     Ok(project)
 }

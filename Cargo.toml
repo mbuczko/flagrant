@@ -4,7 +4,13 @@ resolver = "2"
 
 [workspace.package]
 version = "0.0.2"
+description = "CLI powered feature-flagging"
+repository = "https://github.com/mbuczko/flagrant"
 authors = ["Michal Buczko <michal@buczko.pl>"]
+readme = "README.md"
+keywords = ["feature-flags", "cli", "sqlite", "hugsql"]
+categories = ["feature-flags", "cli"]
+license = "MIT"
 edition = "2021"
 
 [workspace.dependencies]
