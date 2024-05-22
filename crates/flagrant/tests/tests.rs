@@ -431,3 +431,16 @@ async fn forbid_removing_default_variant_when_other_variants_exist(mut pool: Sql
         .is_err());
     assert!(feature.get_default_variant().is_some())
 }
+
+#[flagrant::test]
+async fn allow_removing_default_variant_when_no_other_variants_exist(mut pool: SqlitePool) {
+    let (_, environment) = create_context(&pool).await;
+    let feature = create_feature(&pool, &environment, Some("bar")).await;
+
+    let variant = feature.get_default_variant().unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    assert!(variant::delete(&mut conn, &environment, variant)
+        .await
+        .is_ok());
+}
