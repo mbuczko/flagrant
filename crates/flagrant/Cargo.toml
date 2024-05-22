@@ -1,12 +1,18 @@
 [package]
 name = "flagrant"
 version.workspace = true
+description.workspace = true
+repository.workspace = true
 authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types"}
-flagrant-macros = {path = "../flagrant-macros"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
+flagrant-macros = {path = "../flagrant-macros", version = "0.0.2"}
 
 sqlx = {workspace = true}
 hugsqlx = {workspace = true}

@@ -1,12 +1,18 @@
 [package]
 name = "flagrant-api"
 version.workspace = true
+description.workspace = true
+repository.workspace = true
 authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant = {path = "../flagrant"}
-flagrant-types = {path = "../flagrant-types"}
+flagrant = {path = "../flagrant", version = "0.0.2"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
 
 tokio = {workspace = true}
 axum = {workspace = true}
@@ -21,7 +27,7 @@ serde_json = {workspace = true}
 thiserror = {workspace = true}
 
 [dependencies.tower-http]
-version = "*"
+version = "0.5.2"
 features = ["add-extension", "compression-full", "trace"]
 
 [[bin]]

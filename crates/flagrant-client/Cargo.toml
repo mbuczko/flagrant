@@ -1,11 +1,17 @@
 [package]
 name = "flagrant-client"
 version.workspace = true
+description.workspace = true
+repository.workspace = true
 authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
 
 # common dependencies
 serde = {workspace = true}
