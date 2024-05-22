@@ -11,13 +11,17 @@ pub struct ServiceError(anyhow::Error);
 impl IntoResponse for ServiceError {
     fn into_response(self) -> Response<Body> {
         match self.0.downcast_ref::<FlagrantError>() {
-            Some(FlagrantError::BadRequest(error)) => {
-                tracing::warn!("{error}");
-                (StatusCode::BAD_REQUEST, error.to_string())
+            Some(FlagrantError::UnexpectedFailure(error, cause)) => {
+                tracing::error!(cause = ?cause, error);
+                (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
             Some(FlagrantError::QueryFailed(error, cause)) => {
                 tracing::error!(cause = ?cause, error);
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            }
+            Some(FlagrantError::BadRequest(error)) => {
+                tracing::error!(error);
+                (StatusCode::BAD_REQUEST, error.to_string())
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

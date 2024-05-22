@@ -164,7 +164,7 @@ pub async fn update(
             .map_err(|e|
                      match e.downcast::<sqlx::Error>() {
                          Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
-                         _ => FlagrantError::BadRequest("Unexpected error while updating a feature")
+                         Err(e) => FlagrantError::UnexpectedFailure("Unexpected error while updating a feature", e)
                      }
             )?;
     }
