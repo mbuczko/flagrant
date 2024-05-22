@@ -38,7 +38,7 @@ pub async fn create(
         |row| row_to_feature(row, environment),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
     // if default value was provided, turn it into a control variant.
     if let Some(FeatureValue(value, _)) = value {
@@ -75,7 +75,7 @@ pub async fn fetch(
         row_to_feature(row, environment)
     })
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
     let variants = variant::list(pool, environment, &feature)
         .await
@@ -96,7 +96,7 @@ pub async fn fetch_by_name(
             row_to_feature(row, environment)
         })
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
     let variants = variant::list(pool, environment, &feature)
         .await
@@ -118,7 +118,7 @@ pub async fn fetch_by_prefix(
         |row| row_to_feature(row, environment),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
     Ok(features)
 }
@@ -132,7 +132,7 @@ pub async fn list(pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Res
         |row| row_to_feature(row, environment),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e.to_string()))?)
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?)
 }
 
 pub async fn update(
@@ -155,13 +155,18 @@ pub async fn update(
         params![feature.id, new_name, new_value_type, is_enabled],
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
     // ...and then the feature value which is stored as default variant
     if let Some(FeatureValue(value, _)) = new_value {
         variant::upsert_default(&mut tx, environment, feature, value)
             .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e.to_string()))?;
+            .map_err(|e|
+                     match e.downcast::<sqlx::Error>() {
+                         Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
+                         _ => FlagrantError::BadRequest("Unexpected error while updating a feature")
+                     }
+            )?;
     }
 
     tx.commit().await?;
@@ -180,7 +185,7 @@ pub async fn bump_up_accumulators(
     )
     .await
     .map_err(|e| {
-        FlagrantError::QueryFailed("Could not bump up variants accumulators", e.to_string())
+        FlagrantError::QueryFailed("Could not bump up variants accumulators", e)
     })?;
 
     Ok(())

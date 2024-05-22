@@ -19,7 +19,7 @@ pub async fn create(
         params![project.id, name, description],
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e))?;
 
     Ok(env)
 }
@@ -27,7 +27,7 @@ pub async fn create(
 pub async fn fetch(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
     let env = Environments::fetch_environment::<_, Environment>(pool, params![environment_id])
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e))?;
 
     Ok(env)
 }
@@ -41,7 +41,7 @@ pub async fn fetch_by_name(
         Environments::fetch_environment_by_name::<_, Environment>(pool, params![project.id, name])
             .await
             .map_err(|e| {
-                FlagrantError::QueryFailed("Could not fetch environment", e.to_string())
+                FlagrantError::QueryFailed("Could not fetch environment", e)
             })?;
 
     Ok(env)
@@ -58,7 +58,7 @@ pub async fn fetch_by_prefix(
     )
     .await
     .map_err(|e| {
-        FlagrantError::QueryFailed("Could not fetch list of environments", e.to_string())
+        FlagrantError::QueryFailed("Could not fetch list of environments", e)
     })?;
 
     Ok(envs)
@@ -72,7 +72,7 @@ pub async fn fetch_for_project(
         Environments::fetch_environments_for_project::<_, Environment>(pool, params![project.id])
             .await
             .map_err(|e| {
-                FlagrantError::QueryFailed("Could not fetch list of environments", e.to_string())
+                FlagrantError::QueryFailed("Could not fetch list of environments", e)
             })?;
 
     Ok(envs)

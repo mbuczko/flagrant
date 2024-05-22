@@ -32,7 +32,7 @@ pub async fn upsert_default(
         |v| v.get("variant_id"),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e))?;
 
     upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
@@ -58,14 +58,14 @@ pub async fn create(
         v.get("variant_id")
     })
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e))?;
     let weight = Variants::upsert_variant_weight(
         &mut *tx,
         params![environment.id, variant_id, weight],
         |v| v.get("weight"),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
     upsert_default_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
@@ -91,7 +91,7 @@ pub async fn update(
             v.get("feature_id")
         })
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e))?;
 
     Variants::upsert_variant_weight::<_, _, i16>(
         &mut *tx,
@@ -99,7 +99,7 @@ pub async fn update(
         |v| v.get("weight"),
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e.to_string()))?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
 
     upsert_default_weight(&mut tx, environment, feature_id).await?;
     tx.commit().await?;
@@ -118,7 +118,7 @@ pub async fn fetch(
 ) -> anyhow::Result<Variant> {
     let variant = Variants::fetch_variant::<_, Variant>(pool, params!(environment.id, variant_id))
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e.to_string()))?;
+        .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variant)
 }
@@ -138,9 +138,7 @@ pub async fn list(
         params![environment.id, feature.id],
     )
     .await
-    .map_err(|e| {
-        FlagrantError::QueryFailed("Could not fetch variants for feature", e.to_string())
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
@@ -178,14 +176,12 @@ pub async fn delete(
 
     Variants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
-        .map_err(|e| {
-            FlagrantError::QueryFailed("Could not remove variant weights", e.to_string())
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;
 
     let feature_id: u16 =
         Variants::delete_variant(&mut *tx, params![variant.id], |v| v.get("feature_id"))
             .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e.to_string()))?;
+            .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
 
     if !is_default(environment, variant) {
         upsert_default_weight(&mut tx, environment, feature_id).await?;
@@ -203,9 +199,7 @@ pub async fn update_accumulator(
 ) -> anyhow::Result<()> {
     Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await
-        .map_err(|e| {
-            FlagrantError::QueryFailed("Could not update variant accumulator", e.to_string())
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not update variant accumulator", e))?;
 
     Ok(())
 }
@@ -219,9 +213,7 @@ async fn upsert_default_weight(
 ) -> anyhow::Result<()> {
     Variants::upsert_default_variant_weight(conn, params![environment.id, feature_id])
         .await
-        .map_err(|e| {
-            FlagrantError::QueryFailed("Could not upsert default variant weight", e.to_string())
-        })?;
+        .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant weight", e))?;
 
     Ok(())
 }

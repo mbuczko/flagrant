@@ -7,5 +7,5 @@ pub enum FlagrantError {
     BadRequest(&'static str),
 
     #[error("Query failed ({0}). Cause: {1}")]
-    QueryFailed(&'static str, String),
+    QueryFailed(&'static str, sqlx::Error),
 }

@@ -16,7 +16,7 @@ impl IntoResponse for ServiceError {
                 (StatusCode::BAD_REQUEST, error.to_string())
             }
             Some(FlagrantError::QueryFailed(error, cause)) => {
-                tracing::error!(cause = cause, error);
+                tracing::error!(cause = ?cause, error);
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
             _ => (
