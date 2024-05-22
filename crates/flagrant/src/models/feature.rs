@@ -62,6 +62,7 @@ pub async fn set_default_value(
 ) -> anyhow::Result<()> {
     let variant = variant::upsert_default(conn, environment, feature, value).await?;
     feature.variants.insert(0, variant);
+
     Ok(())
 }
 
@@ -161,12 +162,10 @@ pub async fn update(
     if let Some(FeatureValue(value, _)) = new_value {
         variant::upsert_default(&mut tx, environment, feature, value)
             .await
-            .map_err(|e|
-                     match e.downcast::<sqlx::Error>() {
-                         Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
-                         Err(e) => FlagrantError::UnexpectedFailure("Unexpected error while updating a feature", e)
-                     }
-            )?;
+            .map_err(|e| match e.downcast::<sqlx::Error>() {
+                Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
+                Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
+            })?;
     }
 
     tx.commit().await?;
@@ -184,9 +183,7 @@ pub async fn bump_up_accumulators(
         params![environment.id, feature.id, by_value],
     )
     .await
-    .map_err(|e| {
-        FlagrantError::QueryFailed("Could not bump up variants accumulators", e)
-    })?;
+    .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
     Ok(())
 }
@@ -200,22 +197,22 @@ pub async fn delete(
     let conn = tx.acquire().await?;
     let mut vars = variant::list(pool, environment, feature).await?;
 
-    // sort variants in a way that control values are the last ones in a vector.
-    // this is necessary, as deleting a control variant where the other variants
-    // still exist is forbidded.
-
+    // sort variants so, that control ones go last in a vector.
+    // this is required because of the strict deletion policy - control variants
+    // cannot be deleted when the other variants still exist.
     vars.sort_by(|a, _| match a.is_control() {
         true => Ordering::Greater,
         false => Ordering::Less,
     });
 
     // in transaction, remove all feature variants first.
-    // remove default variant (which is first in vec) as last one.
+    // because of the sorting done before, control variants will be deleted at as
+    // last ones.
     for var in vars {
         variant::delete(conn, environment, &var).await?;
     }
 
-    // ...and then feature value and entire feature definition
+    // ...and then remove feature value and entire feature definition
     Features::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     Features::delete_feature(&mut *tx, params![feature.id]).await?;
 
@@ -224,8 +221,10 @@ pub async fn delete(
 }
 
 /// Transforms database result serialized as `SqliteRow` into a `Feature` model.
-/// If there is a control variant detected, creates a default variant accordinly
-/// stored within feature's `variants` vector.
+/// If there is a control variant detected, creates a default variant stored
+/// stores inside feature's `variants` vector.
+///
+/// Default variant is what the "default" feature values is meant to be.
 pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Feature {
     let mut variants = Vec::with_capacity(1);
 
