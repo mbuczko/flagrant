@@ -1,6 +1,6 @@
 # Flagrant - CLI-driven feature flagging system
 
-Feature flagging niche is long time filled in with excellent solutions like [https://www.getunleash.io/](Unleash) or [https://www.flagsmith.com/](Flagsmith), so why yet another app on top of this cake? Flagrant has an ambition to become a Redis of feature flagging - small, reliable and completely CLI driven server providing all that's needed to keep features under control. Namely, it's supposed to bring in:
+Feature flagging niche is long time filled in with excellent solutions like [Unleash](https://www.getunleash.io/) or [Flagsmith](https://www.flagsmith.com/), so why yet another app on top of this cake? Flagrant has an ambition to become a Redis of feature flagging - small, reliable and completely CLI driven server providing all that's needed to keep features under control. Namely, it's supposed to bring in:
 
 - multiple environments (prod, dev, test, etc)
 - multivariant features
