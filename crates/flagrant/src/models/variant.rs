@@ -116,7 +116,7 @@ pub async fn fetch(
     environment: &Environment,
     variant_id: u16,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant::<_, Variant>(pool, params!(environment.id, variant_id))
+    let variant = Variants::fetch_variant(pool, params!(environment.id, variant_id))
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
@@ -133,12 +133,9 @@ pub async fn list(
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants = Variants::fetch_variants_for_feature::<_, Variant>(
-        pool,
-        params![environment.id, feature.id],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
+    let variants = Variants::fetch_variants_for_feature(pool, params![environment.id, feature.id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
