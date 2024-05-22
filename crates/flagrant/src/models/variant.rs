@@ -10,15 +10,16 @@ use flagrant_types::{Environment, Feature, Variant};
 #[queries = "resources/db/queries/variants.sql"]
 struct Variants {}
 
-/// Creates or updates default (control) variant of given feature.
+/// Creates new or updates existing default (aka control) variant of given feature.
 ///
 /// Default variant represents environment-specific feature control value ie. a value returned
-/// when no other variants have been defined or, having multiple other variants already added,
+/// when no other variants have been defined yet or, having multiple other variants already added,
 /// when distributor decides to prioritize it over other variants based on weight and underlaying
 /// distributing strategy.
 ///
 /// Default variant, similar to standard variants is optional. No such a variant means that feature
-/// has no value defined. Also, having no default variant it's impossible to create other variants.
+/// has no value defined. Also, as a rule of thumb, having no default variant it is impossible to
+/// create other variants.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -40,7 +41,7 @@ pub async fn upsert_default(
     Ok(Variant::build_default(environment, variant_id, value))
 }
 
-/// Creates standard variant with weight and value common for all environments.
+/// Creates a non-default variant with weight and value common for all environments.
 ///
 /// In oppose to default (control) one, standard variants hold an alternative value common across all
 /// environments, ie. once changed, value is propagated immediately to all environments. Weight on the
