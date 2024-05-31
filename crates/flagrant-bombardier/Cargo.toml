@@ -21,6 +21,9 @@ anyhow = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 thiserror = {workspace = true}
+ulid = "1.1.2"
+indicatif = "0.17.8"
+rand = "0.8.5"
 
 [[bin]]
 name = "flagrant-bombardier"
