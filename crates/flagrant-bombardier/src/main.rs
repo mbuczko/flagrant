@@ -10,6 +10,9 @@ use ulid::Ulid;
 const REQUESTS_COUNT: usize = 1000;
 const THREADS_COUNT: usize = 8;
 
+type LockIdents = Arc<RwLock<Vec<Ulid>>>;
+type LockResults = Arc<RwLock<BTreeMap<String, BTreeSet<String>>>>;
+
 pub fn main() -> anyhow::Result<()> {
     let idents = Arc::new(RwLock::new(Vec::<Ulid>::with_capacity(REQUESTS_COUNT)));
     let results = Arc::new(RwLock::new(BTreeMap::<String, BTreeSet<String>>::new()));
@@ -26,6 +29,9 @@ pub fn main() -> anyhow::Result<()> {
                     if let Some(id) = id {
                         let val = get_flag_value(&id);
 
+                        // check if user's ID isn't already assigned to other value.
+                        check_and_evict(&results_clone, &id);
+
                         // add value to corresponding bucket
                         if let Ok(mut res) = results_clone.write() {
                             res.entry(val).or_insert(BTreeSet::new()).insert(id);
@@ -38,10 +44,15 @@ pub fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Generates new or retrieves already created id and returns it as stringified Option.
-/// Locks input `idents` Vec with read-lock first as this is the most common case after
-/// REQUESTS_COUNT requests being fired.
-fn get_or_generate_id(idents: &Arc<RwLock<Vec<Ulid>>>, rng: &mut ThreadRng) -> Option<String> {
+/// Generates new or retrieves already existing user's ULID turned into a String.
+/// For performance reasons, provided `idents` vector is read-locked first to check
+/// if ULID already exists. This becomes the most common case after REQUESTS_COUNT
+/// number of requests gets reached.
+///
+/// If no ULID was found, vector is write-relocked for mutation - adding new ULID.
+/// This way either newly created ULID or existing one is being returned without
+/// excessive locking.
+fn get_or_generate_id(idents: &LockIdents, rng: &mut ThreadRng) -> Option<String> {
     if let Ok(idents_read) = idents.read() {
         if idents_read.len() >= REQUESTS_COUNT {
             return idents_read.get(rng.gen_range(0..REQUESTS_COUNT)).map(|id| id.to_string());
@@ -57,6 +68,20 @@ fn get_or_generate_id(idents: &Arc<RwLock<Vec<Ulid>>>, rng: &mut ThreadRng) -> O
     None
 }
 
+fn check_and_evict(results: &LockResults, id: &String) {
+    if let Ok(results_read) = results.read() {
+        for key in results_read.keys() {
+            if results_read.get(key).unwrap().contains(id) {
+                // drop read-lock and re-enter with read-write lock
+                drop(results_read);
+                if let Ok(mut idents) = results.write() {
+                    idents.remove(id);
+                }
+                break;
+            }
+        }
+    }
+}
 fn get_flag_value(_ident: &str) -> String {
     String::from("dupa")
 }
