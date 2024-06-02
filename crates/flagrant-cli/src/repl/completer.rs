@@ -5,13 +5,13 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::session::{ReplSession, Resource};
+use super::session::{Resource, Session};
 use super::tokenizer::split_command_line;
 
 #[derive(Debug)]
 pub struct CommandCompleter<'a> {
     commands: Vec<String>,
-    session: &'a ReplSession,
+    session: &'a Session,
 }
 
 impl<'a> CommandCompleter<'a> {
@@ -45,14 +45,14 @@ impl<'a> CommandCompleter<'a> {
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let ssn = self.session.borrow();
         let skip = arg_prefix.len() - 1;
         let pairs = match command.to_lowercase().as_str() {
 
             // auto-complete environment names
             "environment" => {
-                let res = ssn.project.as_base_resource();
-                ssn
+                let res = self.session.project.as_base_resource();
+
+                self.session
                     .client
                     .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={arg_prefix}")))?
                     .into_iter()
@@ -65,8 +65,9 @@ impl<'a> CommandCompleter<'a> {
 
             // auto-complete feature name both for "feature" and "variant" commands
             "feature" | "variant" => {
-                let res = ssn.environment.as_base_resource();
-                ssn
+                let res = self.session.environment.as_base_resource();
+
+                self.session
                     .client
                     .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={arg_prefix}")))?
                     .into_iter()
@@ -82,7 +83,7 @@ impl<'a> CommandCompleter<'a> {
         Ok((pos, pairs))
     }
 
-    pub fn new(commands: Vec<String>, session: &'a ReplSession) -> CommandCompleter<'a> {
+    pub fn new(commands: Vec<String>, session: &'a Session) -> CommandCompleter<'a> {
         Self { commands, session }
     }
 }

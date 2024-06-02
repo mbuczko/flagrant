@@ -4,13 +4,11 @@ use anyhow::bail;
 use flagrant_client::{blocking::HttpClient, resource::BaseResource};
 use flagrant_types::{Environment, Project};
 
-pub type ReplSession = RefCell<Session>;
-
 #[derive(Debug)]
 pub struct Session {
     pub client: HttpClient,
-    pub project: Project,
-    pub environment: Environment,
+    pub project: RefCell<Project>,
+    pub environment: RefCell<Environment>,
 }
 
 impl Session {
@@ -26,8 +24,8 @@ impl Session {
             if let Ok(environment) = client.get::<Environment>(format!("{base_path}/envs/{environment_id}")) {
                 return Ok(Session {
                     client,
-                    project,
-                    environment,
+                    project: RefCell::new(project),
+                    environment: RefCell::new(environment),
                 })
             }
             bail!("No environment of given id found.")
@@ -35,8 +33,12 @@ impl Session {
         bail!("No project of given id found.")
     }
 
-    pub fn switch_environment(&mut self, new_environment: Environment) {
-        self.environment = new_environment;
+    pub fn _switch_project(&self, new_project: Project) {
+        self.project.replace_with(move |_| new_project);
+    }
+
+    pub fn switch_environment(&self, new_environment: Environment) {
+        self.environment.replace_with(move |_| new_environment);
     }
 }
 
@@ -44,14 +46,14 @@ pub trait Resource {
     fn as_base_resource(&self) -> BaseResource;
 }
 
-impl Resource for Project {
+impl Resource for RefCell<Project> {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Project(self.id)
+        BaseResource::Project(self.borrow().id)
     }
 }
 
-impl Resource for Environment {
+impl Resource for RefCell<Environment> {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Environment(self.id)
+        BaseResource::Environment(self.borrow().id)
     }
 }

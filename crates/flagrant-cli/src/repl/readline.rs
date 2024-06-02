@@ -1,8 +1,8 @@
-use std::borrow::Cow::{self, Owned};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Editor, Helper, Hinter, Validator};
+use std::borrow::Cow::{self, Owned};
 use strum::IntoEnumIterator;
 
 use crate::handlers;
@@ -10,7 +10,7 @@ use crate::handlers;
 use super::command::Command;
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
-use super::session::ReplSession;
+use super::session::Session;
 use super::tokenizer::split_command_line;
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -30,18 +30,17 @@ impl<'a> Highlighter for ReplHelper<'a> {
     }
 }
 
-
-pub fn prompt(session: &ReplSession) -> String {
-    let ssn = session.borrow();
+pub fn prompt(session: &Session) -> String {
     format!(
         "[{}/\x1b[35m{}\x1b[0m] > ",
-        ssn.project.name, ssn.environment.name
+        session.project.borrow().name,
+        session.environment.borrow().name
     )
 }
 
 /// Initializes a REPL with history, hints and autocompletions pulled straight
 /// from application API in context of respective command.
-pub fn init(session: ReplSession) -> anyhow::Result<()> {
+pub fn init(session: Session) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
@@ -79,7 +78,6 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
-
                 // after a command line split, all the slices turn into
                 // a vector of following elements:
                 //
@@ -91,10 +89,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                 if slices.is_empty() {
                     continue;
                 }
-                if let Some(cmd) = commands
-                    .iter()
-                    .find(|c| c.matches_slices(&slices))
-                {
+                if let Some(cmd) = commands.iter().find(|c| c.matches_slices(&slices)) {
                     rl.add_history_entry(line.as_str())?;
                     if let Err(error) = (cmd.handler)(&slices[1..], &session, &mut rl) {
                         eprintln!("{error}");

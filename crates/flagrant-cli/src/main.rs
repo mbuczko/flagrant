@@ -2,7 +2,6 @@
 
 use flagrant_client::blocking::HttpClient;
 use repl::{session::Session, readline};
-use std::cell::RefCell;
 
 mod handlers;
 mod repl;
@@ -15,11 +14,11 @@ fn main() -> anyhow::Result<()> {
     let environment_id = 1;
 
     let client = HttpClient::new(API_HOST.into());
-    let session = RefCell::new(Session::init(
+    let session = Session::init(
         client,
         project_id,
         environment_id,
-    )?);
+    )?;
     readline::init(session)?;
 
     Ok(())
