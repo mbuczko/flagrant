@@ -73,9 +73,15 @@ fn check_and_evict(results: &LockResults, id: &String) {
         for key in results_read.keys() {
             if results_read.get(key).unwrap().contains(id) {
                 // drop read-lock and re-enter with read-write lock
+                let key_clone = key.clone();
                 drop(results_read);
-                if let Ok(mut idents) = results.write() {
+
+                if let Ok(mut results_write) = results.write() {
+                    let idents = results_write.get_mut(&key_clone).unwrap();
                     idents.remove(id);
+                    if idents.is_empty() {
+                        results_write.remove(&key_clone);
+                    }
                 }
                 break;
             }
