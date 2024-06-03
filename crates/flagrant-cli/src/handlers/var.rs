@@ -54,12 +54,12 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                     .client
                     .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
-                let mut ascii_table = AsciiTable::default();
+                let mut table = AsciiTable::default();
                 let mut vecs = Vec::with_capacity(variants.len() + 1);
 
-                ascii_table.column(0).set_header("ID");
-                ascii_table.column(1).set_header("WEIGHT");
-                ascii_table.column(2).set_header("VALUE");
+                table.column(0).set_header("ID");
+                table.column(1).set_header("WEIGHT");
+                table.column(2).set_header("VALUE");
 
                 for var in variants {
                     vecs.push(vec![
@@ -68,7 +68,7 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                         var.value.trim().to_string(),
                     ])
                 }
-                ascii_table.print(vecs);
+                table.print(vecs);
                 return Ok(());
             }
             Err(error) => {

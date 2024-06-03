@@ -119,16 +119,16 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
     let res = session.environment.as_base_resource();
     let feats: Vec<Feature> = session.client.get(res.subpath("/features"))?;
 
-    let mut ascii_table = AsciiTable::default();
+    let mut table = AsciiTable::default();
     let mut vecs = Vec::with_capacity(feats.len() + 1);
 
-    ascii_table.column(0).set_header("ID");
-    ascii_table.column(1).set_header("NAME");
-    ascii_table
+    table.column(0).set_header("ID");
+    table.column(1).set_header("NAME");
+    table
         .column(2)
         .set_header("ENABLED?")
         .set_align(Align::Center);
-    ascii_table.column(3).set_header("VALUE");
+    table.column(3).set_header("VALUE");
 
     for mut feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
@@ -143,7 +143,7 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
             val.trim().to_string(),
         ]);
     }
-    ascii_table.print(vecs);
+    table.print(vecs);
     Ok(())
 }
 
