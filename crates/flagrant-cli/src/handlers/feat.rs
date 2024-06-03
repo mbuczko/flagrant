@@ -2,13 +2,11 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
+use flagrant_client::session::{Session, Resource};
 use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType, Tabular};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
-use crate::repl::{
-    readline::ReplEditor,
-    session::{Resource, Session},
-};
+use crate::repl::readline::ReplEditor;
 
 /// Adds a new feature.
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {

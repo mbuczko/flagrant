@@ -2,12 +2,10 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::AsciiTable;
+use flagrant_client::session::{Session, Resource};
 use flagrant_types::{Feature, Tabular, Variant, VariantRequestPayload};
 
-use crate::repl::{
-    readline::ReplEditor,
-    session::{Resource, Session},
-};
+use crate::repl::readline::ReplEditor;
 
 pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {

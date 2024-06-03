@@ -2,12 +2,10 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::AsciiTable;
+use flagrant_client::session::{Session, Resource};
 use flagrant_types::{EnvRequestPayload, Environment};
 
-use crate::repl::{
-    readline::ReplEditor,
-    session::{Resource, Session},
-};
+use crate::repl::readline::ReplEditor;
 
 /// Adds a new Environment
 pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {

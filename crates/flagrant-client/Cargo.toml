@@ -17,3 +17,6 @@ flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
 serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
+
+[features]
+blocking = []

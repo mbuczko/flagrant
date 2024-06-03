@@ -1,7 +1,7 @@
 #![feature(let_chains)]
 
-use flagrant_client::blocking::HttpClient;
-use repl::{session::Session, readline};
+use flagrant_client::session::Session;
+use repl::readline;
 
 mod handlers;
 mod repl;
@@ -13,9 +13,8 @@ fn main() -> anyhow::Result<()> {
     let project_id = 1;
     let environment_id = 1;
 
-    let client = HttpClient::new(API_HOST.into());
     let session = Session::init(
-        client,
+        API_HOST.into(),
         project_id,
         environment_id,
     )?;
