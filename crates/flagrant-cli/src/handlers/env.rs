@@ -34,12 +34,12 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
         .client
         .get::<Vec<Environment>>(res.subpath("/envs"))?;
 
-    let mut ascii_table = AsciiTable::default();
+    let mut table = AsciiTable::default();
     let mut vecs = Vec::with_capacity(envs.len() + 1);
 
-    ascii_table.column(0).set_header("ID");
-    ascii_table.column(1).set_header("NAME");
-    ascii_table.column(2).set_header("DESCRIPTION");
+    table.column(0).set_header("ID");
+    table.column(1).set_header("NAME");
+    table.column(2).set_header("DESCRIPTION");
 
     for env in envs {
         vecs.push(vec![
@@ -48,7 +48,7 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
             env.description.unwrap_or_default(),
         ]);
     }
-    ascii_table.print(vecs);
+    table.print(vecs);
     Ok(())
 }
 
