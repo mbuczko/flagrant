@@ -62,7 +62,7 @@ pub fn switch(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
             let env = envs.pop_front().unwrap();
 
             println!("Switching to environment '{}' (id={})", env.name, env.id);
-            session.switch_environment(env);
+            session.set_environment(env);
             return Ok(());
         }
         bail!("No such an environment.")

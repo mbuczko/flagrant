@@ -18,41 +18,46 @@ impl Session {
     pub fn init(api_host: String, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host);
         let path = format!("/projects/{project_id}");
-        if let Ok(project ) = client.get::<Project>(path.clone()) {
-            if let Ok(environment) = client.get::<Environment>(format!("{path}/envs/{environment_id}")) {
-                return Ok(Session {
-                    client,
-                    project: RefCell::new(project),
-                    environment: RefCell::new(environment),
-                })
-            }
-            bail!("No environment of given id found.")
-        }
-        bail!("No project of given id found.")
+
+        Self::build(
+            client.get::<Project>(path.clone()).ok(),
+            client.get::<Environment>(format!("{path}/envs/{environment_id}")).ok(),
+            client
+        )
     }
 
     #[cfg(not(feature = "blocking"))]
     pub async fn init(api_host: String, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host);
         let path = format!("/projects/{project_id}");
-        if let Ok(project ) = client.get::<Project>(path.clone()).await {
-            if let Ok(environment) = client.get::<Environment>(format!("{path}/envs/{environment_id}")).await {
-                return Ok(Session {
+
+        Self::build(
+            client.get::<Project>(path.clone()).await.ok(),
+            client.get::<Environment>(format!("{path}/envs/{environment_id}")).await.ok(),
+            client,
+        )
+    }
+
+    fn build(project: Option<Project>, environment: Option<Environment>, client: HttpClient) -> anyhow::Result<Session> {
+        match (project, environment) {
+            (Some(project), Some(environment)) => {
+                Ok(Session {
                     client,
                     project: RefCell::new(project),
                     environment: RefCell::new(environment),
                 })
-            }
-            bail!("No environment of given id found.")
+            },
+            (Some(_), None) => bail!("No environment of given id found."),
+            (None, Some(_)) => bail!("No project of given id found."),
+            _ => bail!("Neither project nor environment was found."),
         }
-        bail!("No project of given id found.")
     }
 
-    pub fn _switch_project(&self, new_project: Project) {
+    pub fn _set_project(&self, new_project: Project) {
         self.project.replace_with(move |_| new_project);
     }
 
-    pub fn switch_environment(&self, new_environment: Environment) {
+    pub fn set_environment(&self, new_environment: Environment) {
         self.environment.replace_with(move |_| new_environment);
     }
 
