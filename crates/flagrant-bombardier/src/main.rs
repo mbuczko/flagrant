@@ -1,6 +1,7 @@
 use std::{sync::{atomic::{AtomicUsize, Ordering}, Arc}, thread};
 
 use dashmap::{DashMap, DashSet};
+use flagrant_client::session::Session;
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
 
@@ -12,6 +13,8 @@ static IDX: AtomicUsize = AtomicUsize::new(0);
 pub fn main() -> anyhow::Result<()> {
     let idents = Arc::new(DashMap::<usize, Ulid>::with_capacity(REQUESTS_COUNT));
     let results = Arc::new(DashMap::<String, DashSet<String>>::new());
+
+    let _session = Session::init("http://localhost:3030".into(), 1, 1)?;
 
     thread::scope(|s| {
         for _ in 1..=THREADS_COUNT {

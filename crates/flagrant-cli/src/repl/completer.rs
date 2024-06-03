@@ -1,11 +1,11 @@
 use std::io;
 
+use flagrant_client::session::{Session, Resource};
 use flagrant_types::{Environment, Feature};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
-use super::session::{Resource, Session};
 use super::tokenizer::split_command_line;
 
 #[derive(Debug)]

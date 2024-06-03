@@ -1,3 +1,4 @@
+use flagrant_client::session::Session;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
@@ -10,7 +11,6 @@ use crate::handlers;
 use super::command::Command;
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
-use super::session::Session;
 use super::tokenizer::split_command_line;
 
 #[derive(Helper, Completer, Hinter, Validator)]

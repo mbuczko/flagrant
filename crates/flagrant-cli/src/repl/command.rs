@@ -1,5 +1,6 @@
+use flagrant_client::session::Session;
 use strum_macros::{EnumIter, EnumString, Display};
-use super::{readline::ReplEditor, session::Session};
+use super::readline::ReplEditor;
 
 type CommandHandler = fn(&[&str], &Session, &mut ReplEditor) -> anyhow::Result<()>;
 
