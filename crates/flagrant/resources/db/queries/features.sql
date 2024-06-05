@@ -38,7 +38,7 @@ WHERE feature_id = $1
 -- :name update_feature_variants_accumulators :<> :!
 -- :doc Updates feature variants accumulators by given value
 UPDATE variants_weights
-SET accumulator = accumulator + $3
+SET accumulator = accumulator + weight
 WHERE environment_id = $1 AND variant_id IN (select variant_id from variants where feature_id = $2)
 
 -- :name delete_feature :<> :!

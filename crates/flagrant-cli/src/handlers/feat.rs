@@ -2,25 +2,26 @@ use std::collections::VecDeque;
 
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
+use flagrant_client::session::{Session, Resource};
 use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType, Tabular};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
-use crate::repl::{
-    readline::ReplEditor,
-    session::{ReplSession, Resource},
-};
+use crate::repl::readline::ReplEditor;
 
 /// Adds a new feature.
-pub fn add(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let ssn = session.borrow();
-        let res = ssn.environment.as_base_resource();
+        let res = session.environment.as_base_resource();
         let value = match (args.get(2), args.get(3)) {
-            (Some(&value_type), Some(value)) => Some(FeatureValue(value.to_string(), value_type.into())),
-            (Some(&value_type), _) => Some(multiline_value(value_type.into(), editor)?),
-            _ => None
+            (Some(&value_type), Some(value)) => {
+                Some(FeatureValue(value.to_string(), value_type.into()))
+            }
+            (Some(&value_type), _) => {
+                Some(multiline_value(value_type.into(), editor)?)
+            }
+            _ => None,
         };
-        let feature = ssn.client.post::<_, Feature>(
+        let feature = session.client.post::<_, Feature>(
             res.subpath("/features"),
             FeatureRequestPayload {
                 name: name.to_string(),
@@ -37,29 +38,32 @@ pub fn add(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> any
 }
 
 /// Changes value of given feature.
-pub fn value(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let ssn = session.borrow();
-        let res = ssn.environment.as_base_resource();
-        let result = ssn
+        let res = session.environment.as_base_resource();
+        let result = session
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(mut features) = result && !features.is_empty() {
+        if let Ok(mut features) = result
+            && !features.is_empty()
+        {
             let feature = features.pop_front().unwrap();
             let subpath = format!("/features/{}", feature.id);
             let value = match (args.get(2), args.get(3)) {
-                (Some(&value_type), Some(value)) => FeatureValue(value.to_string(), value_type.into()),
+                (Some(&value_type), Some(value)) => {
+                    FeatureValue(value.to_string(), value_type.into())
+                }
                 (Some(&value_type), _) => multiline_value(value_type.into(), editor)?,
                 (_, _) => multiline_value(feature.value_type.clone(), editor)?,
             };
             let mut payload = FeatureRequestPayload::from(feature);
 
             payload.value = Some(value);
-            ssn.client.put(res.subpath(&subpath), payload)?;
+            session.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature: Feature = ssn.client.get(res.subpath(&subpath))?;
+            let feature: Feature = session.client.get(res.subpath(&subpath))?;
 
             feature.tabular_print();
             return Ok(());
@@ -70,21 +74,20 @@ pub fn value(args: &[&str], session: &ReplSession, editor: &mut ReplEditor) -> a
 }
 
 /// Switches feature on.
-pub fn on(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn on(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     onoff(args, session, true)
 }
 
 /// Switches feature off.
-pub fn off(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn off(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     onoff(args, session, false)
 }
 
 /// Switches feature on/off.
-fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
+fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let ssn = session.borrow();
-        let res = ssn.environment.as_base_resource();
-        let result = ssn
+        let res = session.environment.as_base_resource();
+        let result = session
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
@@ -96,10 +99,10 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
             let mut payload = FeatureRequestPayload::from(feature);
 
             payload.is_enabled = on;
-            ssn.client.put(res.subpath(&subpath), payload)?;
+            session.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature = ssn.client.get::<Feature>(res.subpath(&subpath))?;
+            let feature = session.client.get::<Feature>(res.subpath(&subpath))?;
 
             feature.tabular_print();
             return Ok(());
@@ -110,42 +113,43 @@ fn onoff(args: &[&str], session: &ReplSession, on: bool) -> anyhow::Result<()> {
 }
 
 /// Lists all features in a project.
-pub fn list(_args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
-    let ssn = session.borrow();
-    let res = ssn.environment.as_base_resource();
-    let feats: Vec<Feature> = ssn.client.get(res.subpath("/features"))?;
+pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+    let res = session.environment.as_base_resource();
+    let feats: Vec<Feature> = session.client.get(res.subpath("/features"))?;
 
-    let mut ascii_table = AsciiTable::default();
+    let mut table = AsciiTable::default();
     let mut vecs = Vec::with_capacity(feats.len() + 1);
 
-    ascii_table.column(0).set_header("ID");
-    ascii_table.column(1).set_header("NAME");
-    ascii_table.column(2).set_header("ENABLED?").set_align(Align::Center);
-    ascii_table.column(3).set_header("VALUE");
+    table.column(0).set_header("ID");
+    table.column(1).set_header("NAME");
+    table
+        .column(2)
+        .set_header("ENABLED?")
+        .set_align(Align::Center);
+    table.column(3).set_header("VALUE");
 
     for mut feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
         let val = match feat.variants.len() {
             0 => String::default(),
-            _ => feat.variants.swap_remove(0).value
+            _ => feat.variants.swap_remove(0).value,
         };
         vecs.push(vec![
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
-            val.trim().to_string()
+            val.trim().to_string(),
         ]);
     }
-    ascii_table.print(vecs);
+    table.print(vecs);
     Ok(())
 }
 
 /// Deletes existing feature.
-pub fn delete(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let ssn = session.borrow();
-        let res = ssn.environment.as_base_resource();
-        let result = ssn
+        let res = session.environment.as_base_resource();
+        let result = session
             .client
             .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
 
@@ -154,7 +158,8 @@ pub fn delete(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
         {
             let feature = features.pop_front().unwrap();
 
-            ssn.client
+            session
+                .client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 
             println!("Feature removed.");
@@ -165,7 +170,10 @@ pub fn delete(args: &[&str], session: &ReplSession, _: &mut ReplEditor) -> anyho
     bail!("No feature name or value provided.")
 }
 
-fn multiline_value(value_type: FeatureValueType, editor: &mut ReplEditor) -> anyhow::Result<FeatureValue> {
+fn multiline_value(
+    value_type: FeatureValueType,
+    editor: &mut ReplEditor,
+) -> anyhow::Result<FeatureValue> {
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::NONE),
         EventHandler::Simple(Cmd::Newline),

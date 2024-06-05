@@ -1,5 +1,5 @@
 [package]
-name = "flagrant-client"
+name = "flagrant-bombardier"
 version.workspace = true
 description.workspace = true
 repository.workspace = true
@@ -12,11 +12,16 @@ edition.workspace = true
 
 [dependencies]
 flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
+flagrant-client = {path = "../flagrant-client", version = "0.0.2", features = ["blocking"]}
 
-# common dependencies
-serde = {workspace = true}
 anyhow = {workspace = true}
-reqwest = {workspace = true, features = ["json", "blocking"]}
+serde = {workspace = true}
+serde_json = {workspace = true}
+thiserror = {workspace = true}
+ulid = "1.1.2"
+indicatif = "0.17.8"
+rand = "0.8.5"
+dashmap = "5.5.3"
 
-[features]
-blocking = []
+[[bin]]
+name = "flagrant-bombardier"

@@ -4,14 +4,14 @@ use std::fmt;
 
 extern crate regex;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
     #[sqlx(rename = "project_id")]
     pub id: u16,
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Environment {
     #[sqlx(rename = "environment_id")]
     pub id: u16,
@@ -52,7 +52,7 @@ pub struct Variant {
     pub id: u16,
     pub value: String,
     pub weight: i16,
-    pub accumulator: i16,
+    pub accumulator: i32,
     pub environment_id: Option<u16>,
 }
 
