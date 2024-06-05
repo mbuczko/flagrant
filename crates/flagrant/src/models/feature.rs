@@ -175,12 +175,11 @@ pub async fn update(
 pub async fn bump_up_accumulators(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature: &Feature,
-    by_value: i16,
+    feature: &Feature
 ) -> anyhow::Result<()> {
     Features::update_feature_variants_accumulators(
         conn,
-        params![environment.id, feature.id, by_value],
+        params![environment.id, feature.id],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
