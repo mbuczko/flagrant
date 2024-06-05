@@ -12,7 +12,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
 
-const IDENTS_COUNT: usize = 1000;
+const IDENTS_COUNT: usize = 10000;
 const THREADS_COUNT: usize = 8;
 
 static IDX: AtomicUsize = AtomicUsize::new(0);
@@ -23,7 +23,7 @@ pub fn main() -> anyhow::Result<()> {
     let session = Arc::new(Session::init("http://localhost:3030".into(), 1, 1)?);
 
     thread::scope(|s| {
-        for _ in 1..=THREADS_COUNT {
+        for _ in 0..THREADS_COUNT {
             let idents = Arc::clone(&idents);
             let results = Arc::clone(&results);
             let session = Arc::clone(&session);
@@ -32,7 +32,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(fv) = session.get_feature(&id, "spookie") {
+                        if let Some(fv) = session.get_feature(&id, "vera") {
                             let value = fv.0;
 
                             // check if user's ID isn't already assigned to other value.
@@ -41,6 +41,7 @@ pub fn main() -> anyhow::Result<()> {
                             // add value to corresponding bucket
                             results.entry(value).or_default().insert(id);
                         }
+
                     }
                 }
             });
@@ -50,8 +51,8 @@ pub fn main() -> anyhow::Result<()> {
         let sty = ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
         )
-        .unwrap()
-        .progress_chars("##-");
+            .unwrap()
+            .progress_chars("##-");
 
         let pbs = DashMap::<String, ProgressBar>::new();
         loop {
@@ -86,9 +87,11 @@ fn get_or_generate_id(idents: Arc<DashMap<usize, Ulid>>, rng: &mut ThreadRng) ->
             .get(&rng.gen_range(0..IDENTS_COUNT))
             .map(|id| id.to_string());
     }
-    idents
-        .insert(IDX.fetch_add(1, Ordering::SeqCst), ulid::Ulid::new())
-        .map(|id| id.to_string())
+    let ulid = ulid::Ulid::new();
+    let result = ulid.to_string();
+
+    idents.insert(IDX.fetch_add(1, Ordering::SeqCst), ulid);
+    Some(result)
 }
 
 fn evict_from_buckets(results: Arc<DashMap<String, DashSet<String>>>, target: &String, id: &String) {
