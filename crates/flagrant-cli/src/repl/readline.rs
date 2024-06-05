@@ -33,8 +33,8 @@ impl<'a> Highlighter for ReplHelper<'a> {
 pub fn prompt(session: &Session) -> String {
     format!(
         "[{}/\x1b[35m{}\x1b[0m] > ",
-        session.project.borrow().name,
-        session.environment.borrow().name
+        session.project.read().unwrap().name,
+        session.environment.read().unwrap().name
     )
 }
 

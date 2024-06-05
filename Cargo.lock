@@ -736,6 +736,7 @@ dependencies = [
  "anyhow",
  "dashmap",
  "flagrant-client",
+ "flagrant-types",
  "indicatif",
  "rand",
  "serde",
