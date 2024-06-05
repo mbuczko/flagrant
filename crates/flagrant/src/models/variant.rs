@@ -193,7 +193,7 @@ pub async fn update_accumulator(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
-    accumulator: i16,
+    accumulator: i32,
 ) -> anyhow::Result<()> {
     Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await
