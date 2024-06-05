@@ -2,6 +2,7 @@ use std::{sync::{atomic::{AtomicUsize, Ordering}, Arc}, thread};
 
 use dashmap::{DashMap, DashSet};
 use flagrant_client::session::Session;
+use flagrant_types::FeatureValue;
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
 
@@ -14,25 +15,31 @@ pub fn main() -> anyhow::Result<()> {
     let idents = Arc::new(DashMap::<usize, Ulid>::with_capacity(REQUESTS_COUNT));
     let results = Arc::new(DashMap::<String, DashSet<String>>::new());
 
-    let _session = Session::init("http://localhost:3030".into(), 1, 1)?;
+    let session = Arc::new(Session::init("http://localhost:3030".into(), 1, 1)?);
 
     thread::scope(|s| {
         for _ in 1..=THREADS_COUNT {
             let idents = Arc::clone(&idents);
             let results = Arc::clone(&results);
+            let session = Arc::clone(&session);
 
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
                 loop {
                     let id = get_or_generate_id(idents.clone(), &mut rng);
                     if let Some(id) = id {
-                        let val = get_flag_value(&id);
+                        if let Some(fv) =  session.get_feature(&id, "dupa") {
+                            let value = fv.0;
 
-                        // check if user's ID isn't already assigned to other value.
-                        evict_from_buckets(results.clone(), &id);
+                            println!("Ident: {id} val: {value}");
 
-                        // add value to corresponding bucket
-                        results.entry(val).or_default().insert(id);
+                            // check if user's ID isn't already assigned to other value.
+                            evict_from_buckets(results.clone(), &id);
+
+                            // add value to corresponding bucket
+                            results.entry(value).or_default().insert(id);
+
+                        }
                     }
                 }
             });
@@ -56,8 +63,4 @@ fn evict_from_buckets(results: Arc<DashMap<String, DashSet<String>>>, id: &Strin
     for entry in results.iter() {
         entry.value().remove(id);
     }
-}
-
-fn get_flag_value(_ident: &str) -> String {
-    String::from("dupa")
 }

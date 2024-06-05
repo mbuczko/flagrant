@@ -11,6 +11,7 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
+flagrant-types = {path = "../flagrant-types", version = "0.0.2"}
 flagrant-client = {path = "../flagrant-client", version = "0.0.2", features = ["blocking"]}
 
 anyhow = {workspace = true}

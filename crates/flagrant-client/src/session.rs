@@ -1,15 +1,15 @@
-use std::cell::RefCell;
+use std::sync::RwLock;
 
 use anyhow::bail;
-use flagrant_types::{Environment, Project};
+use flagrant_types::{Environment, Project, FeatureValue};
 
 use crate::{http::HttpClient, resource::BaseResource};
 
 #[derive(Debug)]
 pub struct Session {
     pub client: HttpClient,
-    pub project: RefCell<Project>,
-    pub environment: RefCell<Environment>,
+    pub project: RwLock<Project>,
+    pub environment: RwLock<Environment>,
 }
 
 impl Session {
@@ -43,8 +43,8 @@ impl Session {
             (Some(project), Some(environment)) => {
                 Ok(Session {
                     client,
-                    project: RefCell::new(project),
-                    environment: RefCell::new(environment),
+                    project: RwLock::new(project),
+                    environment: RwLock::new(environment),
                 })
             },
             (Some(_), None) => bail!("No environment of given id found."),
@@ -54,16 +54,24 @@ impl Session {
     }
 
     pub fn _set_project(&self, new_project: Project) {
-        self.project.replace_with(move |_| new_project);
+        let mut guard = self.project.write().unwrap();
+
+        std::mem::take(&mut *guard);
+        *guard = new_project;
     }
 
     pub fn set_environment(&self, new_environment: Environment) {
-        self.environment.replace_with(move |_| new_environment);
+        let mut guard = self.environment.write().unwrap();
+
+        std::mem::take(&mut *guard);
+        *guard = new_environment;
     }
 
-    // pub fn get_feature(&self, name: String) -> Option<String> {
-    //     self.get(format!("/envs/:environment_id/ident/:ident/features/{name}"));
-    // }
+    #[cfg(feature = "blocking")]
+    pub fn get_feature(&self, ident: &str, name: &'static str) -> Option<FeatureValue> {
+        let path = self.environment.as_base_resource().subpath(format!("/ident/{ident}/features/{name}"));
+        self.client.get(format!("/api/v1{path}")).ok()
+    }
 
 }
 
@@ -71,14 +79,14 @@ pub trait Resource {
     fn as_base_resource(&self) -> BaseResource;
 }
 
-impl Resource for RefCell<Project> {
+impl Resource for RwLock<Project> {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Project(self.borrow().id)
+        BaseResource::Project(self.read().unwrap().id)
     }
 }
 
-impl Resource for RefCell<Environment> {
+impl Resource for RwLock<Environment> {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Environment(self.borrow().id)
+        BaseResource::Environment(self.read().unwrap().id)
     }
 }
