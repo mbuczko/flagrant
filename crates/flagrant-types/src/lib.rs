@@ -52,7 +52,7 @@ pub struct Variant {
     pub id: u16,
     pub value: String,
     pub weight: i16,
-    pub accumulator: i16,
+    pub accumulator: i32,
     pub environment_id: Option<u16>,
 }
 
