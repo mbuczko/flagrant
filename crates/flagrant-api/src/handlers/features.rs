@@ -26,12 +26,22 @@ pub async fn create(
     Ok(Json(feature))
 }
 
-pub async fn fetch(
+pub async fn fetch_by_id(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<Feature>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch(&pool, &env, feature_id).await?;
+
+    Ok(Json(feature))
+}
+
+pub async fn fetch_by_name(
+    State(pool): State<SqlitePool>,
+    Path((environment_id, feature_name)): Path<(u16, String)>,
+) -> Result<Json<Feature>, ServiceError> {
+    let env = environment::fetch(&pool, environment_id).await?;
+    let feature = feature::fetch_by_name(&pool, &env, feature_name).await?;
 
     Ok(Json(feature))
 }
@@ -62,9 +72,8 @@ pub async fn list(
     Path(environment_id): Path<u16>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
-    let features = match (params.prefix, params.name) {
-        (Some(prefix), _) => feature::fetch_by_prefix(&pool, &env, prefix).await?,
-        (_, Some(name)) => vec![feature::fetch_by_name(&pool, &env, name).await?],
+    let features = match params.prefix {
+        Some(prefix) => feature::fetch_by_prefix(&pool, &env, prefix).await?,
         _ => feature::list(&pool, &env).await?
     };
 

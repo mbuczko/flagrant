@@ -1,8 +1,6 @@
-use std::collections::VecDeque;
-
 use anyhow::bail;
 use ascii_table::AsciiTable;
-use flagrant_client::session::{Session, Resource};
+use flagrant_client::session::{Resource, Session};
 use flagrant_types::{Feature, Tabular, Variant, VariantRequestPayload};
 
 use crate::repl::readline::ReplEditor;
@@ -11,22 +9,18 @@ pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
     if let Some(feature_name) = args.get(1) {
         let res = session.environment.as_base_resource();
 
-        if let Ok(mut feats) = session
+        if let Ok(feat) = session
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")))
-            && !feats.is_empty()
+            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")))
         {
             let variant = match (args.get(2), args.get(3)) {
-                (Some(&weight), Some(&value)) => {
-                    let feat = feats.pop_front().unwrap();
-                    session.client.post::<_, Variant>(
-                        res.subpath(format!("/features/{}/variants", feat.id)),
-                        VariantRequestPayload {
-                            value: value.to_string(),
-                            weight: weight.parse::<i16>()?,
-                        },
-                    )?
-                }
+                (Some(&weight), Some(&value)) => session.client.post::<_, Variant>(
+                    res.subpath(format!("/features/{}/variants", feat.id)),
+                    VariantRequestPayload {
+                        value: value.to_string(),
+                        weight: weight.parse::<i16>()?,
+                    },
+                )?,
                 _ => bail!("No weight or value provided."),
             };
 
@@ -43,11 +37,10 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
         let res = session.environment.as_base_resource();
         let response = session
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={feature_name}")));
+            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
 
         match response {
-            Ok(mut feats) => {
-                let feature = feats.pop_front().unwrap();
+            Ok(feature) => {
                 let variants: Vec<Variant> = session
                     .client
                     .get(res.subpath(format!("/features/{}/variants", feature.id)))?;

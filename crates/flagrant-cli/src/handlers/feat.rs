@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
 use flagrant_client::session::{Session, Resource};
@@ -43,12 +41,9 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
         let res = session.environment.as_base_resource();
         let result = session
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
-        if let Ok(mut features) = result
-            && !features.is_empty()
-        {
-            let feature = features.pop_front().unwrap();
+        if let Ok(feature) = result {
             let subpath = format!("/features/{}", feature.id);
             let value = match (args.get(2), args.get(3)) {
                 (Some(&value_type), Some(value)) => {
@@ -89,12 +84,9 @@ fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
         let res = session.environment.as_base_resource();
         let result = session
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
-        if let Ok(mut features) = result
-            && !features.is_empty()
-        {
-            let feature = features.pop_front().unwrap();
+        if let Ok(feature) = result {
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
 
@@ -151,13 +143,9 @@ pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
         let res = session.environment.as_base_resource();
         let result = session
             .client
-            .get::<VecDeque<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
-        if let Ok(mut features) = result
-            && !features.is_empty()
-        {
-            let feature = features.pop_front().unwrap();
-
+        if let Ok(feature) = result {
             session
                 .client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
