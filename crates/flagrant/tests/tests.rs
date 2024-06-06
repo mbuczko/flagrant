@@ -323,6 +323,17 @@ async fn create_variants_with_different_weights_in_envs(pool: SqlitePool) {
     assert_eq!(variant_env2.weight, 99);
 }
 
+#[flagrant::test(should_fail = true)]
+async fn disallow_default_variant_manual_updates(pool: SqlitePool) {
+    let (_, environment) = create_context(&pool).await;
+    let feature = create_feature(&pool, &environment, Some("foo")).await;
+    let default_variant = feature.get_default_variant().unwrap();
+
+    variant::update(&pool, &environment, default_variant, "bar".into(), 50)
+        .await
+        .unwrap();
+}
+
 #[flagrant::test]
 async fn recalculate_default_weight_for_variant_update(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
@@ -412,7 +423,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(pool: S
 }
 
 #[flagrant::test]
-async fn forbid_removing_default_variant_when_other_variants_exist(mut pool: SqlitePool) {
+async fn disallow_removing_default_variant_when_other_variants_exist(mut pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 

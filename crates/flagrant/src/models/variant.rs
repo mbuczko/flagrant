@@ -12,14 +12,15 @@ struct Variants {}
 
 /// Creates new or updates existing default (aka control) variant of given feature.
 ///
-/// Default variant represents environment-specific feature control value ie. a value returned
-/// when no other variants have been defined yet or, having multiple other variants already added,
-/// when distributor decides to prioritize it over other variants based on weight and underlaying
-/// distributing strategy.
+/// Default variant represents environment-specific feature value being returned when no other
+/// variants have been defined yet. It's also specific in a way how weight is being constrained:
+/// - when created, weight is set by default to 100%
+/// - weight cannot be updated manually - it is auto-adjusted each new variant is being added
+///   so, that all feature variants weights at every single moment should sum up to 100%.
 ///
-/// Default variant, similar to standard variants is optional. No such a variant means that feature
-/// has no value defined. Also, as a rule of thumb, having no default variant it is impossible to
-/// create other variants.
+/// Default variant, similar to standard variants is optional. No such a variant simply means
+/// that feature has no default value defined. This also comes with important limitation -
+/// it is impossible to create other variants having no default variant created before.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -41,12 +42,12 @@ pub async fn upsert_default(
     Ok(Variant::build_default(environment, variant_id, value))
 }
 
-/// Creates a non-default variant with weight and value common for all environments.
+/// Creates a standard variant with its weight and value.
 ///
-/// In oppose to default (control) one, standard variants hold an alternative value common across all
-/// environments, ie. once changed, value is propagated immediately to all environments. Weight on the
-/// other hand is environment-specific, so the change impacts given environment only and, similarly to
-/// default variant, is used to determine how to prioritize variant during distribution process.
+/// Standard variant holds an alternative value common across all environments, ie. once changed
+/// it's changed immediately for all existing environments. Weight however behaves exactly the
+/// opposite - the change impacts given environment only and similarly to control variant, is
+/// used to determine how to prioritize variant during balancing process within given environment.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -78,7 +79,10 @@ pub async fn create(
 ///
 /// Standard variant represents alternative feature value which is common across environments
 /// and, based on weight and distribution strategy, may be prioritized over other variants
-/// during distribution process.
+/// during balancing process.
+///
+/// This function will fail-fast when used to modify control variant. To do so, use `feature::update`
+/// instead.
 pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
@@ -86,6 +90,9 @@ pub async fn update(
     new_value: String,
     new_weight: i16,
 ) -> anyhow::Result<()> {
+    if variant.is_control() {
+        bail!("Control variant cannot be modified this way. Use `feature::update(...)` instead.");
+    }
     let mut tx = pool.begin().await?;
     let feature_id: u16 =
         Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
