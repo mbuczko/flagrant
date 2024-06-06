@@ -34,12 +34,14 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         // environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
-        .route("/projects/:project_id/envs/:env_id", get(environments::fetch))
+        .route("/projects/:project_id/envs/name/:env_name", get(environments::fetch_by_name))
+        .route("/projects/:project_id/envs/:env_id", get(environments::fetch_by_id))
 
         // features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))
-        .route("/envs/:environment_id/features/:feature_id", get(features::fetch))
+        .route("/envs/:environment_id/features/name/:feature_name", get(features::fetch_by_name))
+        .route("/envs/:environment_id/features/:feature_id", get(features::fetch_by_id))
         .route("/envs/:environment_id/features/:feature_id", put(features::update))
         .route("/envs/:environment_id/features/:feature_id", delete(features::delete))
 

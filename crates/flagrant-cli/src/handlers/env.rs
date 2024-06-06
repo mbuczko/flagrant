@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use anyhow::bail;
 use ascii_table::AsciiTable;
 use flagrant_client::session::{Session, Resource};
@@ -56,11 +54,9 @@ pub fn switch(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
         let res = session.project.as_base_resource();
         let result = session
             .client
-            .get::<VecDeque<Environment>>(res.subpath(format!("/envs?name={name}")));
+            .get::<Environment>(res.subpath(format!("/envs/name/{name}")));
 
-        if let Ok(mut envs) = result && !envs.is_empty() {
-            let env = envs.pop_front().unwrap();
-
+        if let Ok(env) = result {
             println!("Switching to environment '{}' (id={})", env.name, env.id);
             session.set_environment(env);
             return Ok(());
