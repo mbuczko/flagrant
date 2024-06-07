@@ -32,7 +32,7 @@ pub async fn create(
             is_enabled,
             value
                 .as_ref()
-                .map(|FeatureValue(_, value_type)| value_type.clone())
+                .map(|FeatureValue(value_type, _)| value_type.clone())
                 .unwrap_or_default()
         ],
         |row| row_to_feature(row, environment),
@@ -41,7 +41,7 @@ pub async fn create(
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
     // if default value was provided, turn it into a control variant.
-    if let Some(FeatureValue(value, _)) = value {
+    if let Some(FeatureValue(_, value)) = value {
         let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
         feature.variants.push(variant);
     }
@@ -133,7 +133,7 @@ pub async fn update(
     let mut tx = pool.begin().await?;
     let new_value_type = new_value
         .as_ref()
-        .map(|FeatureValue(_, t)| t)
+        .map(|FeatureValue(t, _)| t)
         .unwrap_or_else(|| &feature.value_type);
 
     // in transaction, update feature properties first
@@ -145,7 +145,7 @@ pub async fn update(
     .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
     // ...and then the feature value which is stored as default variant
-    if let Some(FeatureValue(value, _)) = new_value {
+    if let Some(FeatureValue(_, value)) = new_value {
         variant::upsert_default(&mut tx, environment, feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {

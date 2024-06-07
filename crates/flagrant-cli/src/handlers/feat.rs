@@ -14,9 +14,9 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
         let res = session.environment.as_base_resource();
         let value = match (args.get(2), args.get(3)) {
             (Some(&value_type), Some(&value)) => Some(FeatureValue(
-                value.to_owned(),
                 FeatureValueType::from_str(value_type)
                     .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+                value.to_owned(),
             )),
             (Some(&value_type), _) => Some(multiline_value(
                 editor,
@@ -53,9 +53,9 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             let subpath = format!("/features/{}", feature.id);
             let value = match (args.get(2), args.get(3)) {
                 (Some(&value_type), Some(&value)) => FeatureValue(
-                    value.to_owned(),
                     FeatureValueType::from_str(value_type)
                         .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+                    value.to_owned(),
                 ),
                 (Some(&value_type), _) => multiline_value(
                     editor,
@@ -195,5 +195,5 @@ fn multiline_value(
         KeyEvent(KeyCode::Char('d'), Modifiers::CTRL),
         EventHandler::Simple(Cmd::EndOfFile),
     );
-    Ok(FeatureValue(value, value_type))
+    Ok(FeatureValue(value_type, value))
 }

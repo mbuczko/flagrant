@@ -44,7 +44,7 @@ pub enum FeatureValueType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FeatureValue(pub String, pub FeatureValueType);
+pub struct FeatureValue(pub FeatureValueType, pub String);
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Variant {
@@ -84,7 +84,7 @@ impl From<Feature> for FeatureRequestPayload {
                 .variants
                 .into_iter()
                 .find(|v| v.environment_id.is_some())
-                .map(|v| FeatureValue(v.value, feature.value_type)),
+                .map(|v| FeatureValue(feature.value_type, v.value)),
             description: None,
             is_enabled: feature.is_enabled,
         }
@@ -97,7 +97,7 @@ impl Feature {
     }
     pub fn get_default_value(&self) -> Option<FeatureValue> {
         if let Some(variant) = self.get_default_variant() {
-            return Some(FeatureValue(variant.value.clone(), self.value_type.clone()));
+            return Some(FeatureValue(self.value_type.clone(), variant.value.clone()));
         }
         None
     }

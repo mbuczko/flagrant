@@ -33,7 +33,7 @@ pub fn main() -> anyhow::Result<()> {
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
                         if let Some(fv) = session.get_feature(&id, "nowy") {
-                            let value = fv.0;
+                            let value = fv.1;
 
                             // check if user's ID isn't already assigned to other value.
                             evict_from_buckets(Arc::clone(&results), &value, &id);
