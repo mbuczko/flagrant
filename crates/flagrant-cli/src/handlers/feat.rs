@@ -1,6 +1,8 @@
-use anyhow::bail;
+use std::str::FromStr;
+
+use anyhow::{anyhow, bail};
 use ascii_table::{Align, AsciiTable};
-use flagrant_client::session::{Session, Resource};
+use flagrant_client::session::{Resource, Session};
 use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType, Tabular};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
@@ -11,12 +13,16 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
         let value = match (args.get(2), args.get(3)) {
-            (Some(&value_type), Some(value)) => {
-                Some(FeatureValue(value.to_string(), value_type.into()))
-            }
-            (Some(&value_type), _) => {
-                Some(multiline_value(value_type.into(), editor)?)
-            }
+            (Some(&value_type), Some(&value)) => Some(FeatureValue(
+                value.to_owned(),
+                FeatureValueType::from_str(value_type)
+                    .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+            )),
+            (Some(&value_type), _) => Some(multiline_value(
+                editor,
+                FeatureValueType::from_str(value_type)
+                    .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+            )?),
             _ => None,
         };
         let feature = session.client.post::<_, Feature>(
@@ -46,11 +52,17 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
         if let Ok(feature) = result {
             let subpath = format!("/features/{}", feature.id);
             let value = match (args.get(2), args.get(3)) {
-                (Some(&value_type), Some(value)) => {
-                    FeatureValue(value.to_string(), value_type.into())
-                }
-                (Some(&value_type), _) => multiline_value(value_type.into(), editor)?,
-                (_, _) => multiline_value(feature.value_type.clone(), editor)?,
+                (Some(&value_type), Some(&value)) => FeatureValue(
+                    value.to_owned(),
+                    FeatureValueType::from_str(value_type)
+                        .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+                ),
+                (Some(&value_type), _) => multiline_value(
+                    editor,
+                    FeatureValueType::from_str(value_type)
+                        .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
+                )?,
+                (_, _) => multiline_value(editor, feature.value_type.clone())?,
             };
             let mut payload = FeatureRequestPayload::from(feature);
 
@@ -159,8 +171,8 @@ pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
 }
 
 fn multiline_value(
-    value_type: FeatureValueType,
     editor: &mut ReplEditor,
+    value_type: FeatureValueType,
 ) -> anyhow::Result<FeatureValue> {
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::NONE),

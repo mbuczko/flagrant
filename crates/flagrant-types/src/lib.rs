@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 extern crate regex;
 
@@ -46,7 +46,7 @@ pub enum FeatureValueType {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FeatureValue(pub String, pub FeatureValueType);
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: u16,
@@ -82,8 +82,9 @@ impl From<Feature> for FeatureRequestPayload {
             name: feature.name,
             value: feature
                 .variants
-                .first()
-                .map(|v| FeatureValue(v.value.clone(), feature.value_type)),
+                .into_iter()
+                .find(|v| v.environment_id.is_some())
+                .map(|v| FeatureValue(v.value, feature.value_type)),
             description: None,
             is_enabled: feature.is_enabled,
         }
@@ -112,7 +113,7 @@ impl Variant {
             id,
             value,
             weight,
-            accumulator: 100,
+            accumulator: weight as i32,
             environment_id: None,
         }
     }
@@ -136,12 +137,18 @@ impl fmt::Display for FeatureValueType {
     }
 }
 
-impl From<&str> for FeatureValueType {
-    fn from(value: &str) -> Self {
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseTypeError;
+
+impl FromStr for FeatureValueType {
+    type Err = ParseTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "json" => Self::Json,
-            "toml" => Self::Toml,
-            _ => Self::default(),
+            "json" => Ok(Self::Json),
+            "toml" => Ok(Self::Toml),
+            "text" => Ok(Self::Text),
+            _ => Err(ParseTypeError),
         }
     }
 }

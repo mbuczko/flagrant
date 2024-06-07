@@ -11,7 +11,6 @@ use crate::errors::ServiceError;
 
 #[derive(Debug, Deserialize)]
 pub struct FeatureQueryParams {
-    name: Option<String>,
     prefix: Option<String>,
 }
 

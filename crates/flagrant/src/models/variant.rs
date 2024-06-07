@@ -15,12 +15,12 @@ struct Variants {}
 /// Default variant represents environment-specific feature value being returned when no other
 /// variants have been defined yet. It's also specific in a way how weight is being constrained:
 /// - when created, weight is set by default to 100%
-/// - weight cannot be updated manually - it is auto-adjusted each new variant is being added
+/// - weight cannot be updated manually - it is auto-adjusted each time new variant is being added
 ///   so, that all feature variants weights at every single moment should sum up to 100%.
 ///
 /// Default variant, similar to standard variants is optional. No such a variant simply means
 /// that feature has no default value defined. This also comes with important limitation -
-/// it is impossible to create other variants having no default variant created before.
+/// it is impossible to create other variants having no default variant created first.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -81,8 +81,8 @@ pub async fn create(
 /// and, based on weight and distribution strategy, may be prioritized over other variants
 /// during balancing process.
 ///
-/// This function will fail-fast when used to modify control variant. To do so, use `feature::update`
-/// instead.
+/// This function will fail-fast when used to modify control variant which should be altered
+/// with `feature::update` instead.
 pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
