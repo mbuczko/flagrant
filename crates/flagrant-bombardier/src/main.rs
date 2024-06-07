@@ -12,8 +12,8 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
 
-const IDENTS_COUNT: usize = 10000;
-const THREADS_COUNT: usize = 8;
+const IDENTS_COUNT: usize = 100;
+const THREADS_COUNT: usize = 1;
 
 static IDX: AtomicUsize = AtomicUsize::new(0);
 
@@ -32,7 +32,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(fv) = session.get_feature(&id, "vera") {
+                        if let Some(fv) = session.get_feature(&id, "nowy") {
                             let value = fv.0;
 
                             // check if user's ID isn't already assigned to other value.
@@ -49,7 +49,7 @@ pub fn main() -> anyhow::Result<()> {
 
         let m = MultiProgress::new();
         let sty = ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+            "[{pos:>7}/{len:7}] {bar:40.cyan/blue} {msg}",
         )
             .unwrap()
             .progress_chars("##-");
