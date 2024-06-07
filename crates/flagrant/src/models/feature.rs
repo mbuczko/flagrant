@@ -42,28 +42,14 @@ pub async fn create(
 
     // if default value was provided, turn it into a control variant.
     if let Some(FeatureValue(value, _)) = value {
-        set_default_value(&mut tx, environment, &mut feature, value).await?;
+        let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
+        feature.variants.push(variant);
     }
 
     feature.validate()?;
     tx.commit().await?;
 
     Ok(feature)
-}
-
-/// Sets default feature value for given environment.
-/// Value type is stored at feature level, however value itself is stored as a String
-/// in variant. This is to enforce same type for all the variant values.
-pub async fn set_default_value(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    feature: &mut Feature,
-    value: String,
-) -> anyhow::Result<()> {
-    let variant = variant::upsert_default(conn, environment, feature, value).await?;
-    feature.variants.insert(0, variant);
-
-    Ok(())
 }
 
 /// Returns feature of given `feature_id` or Error if no feature was found.
