@@ -12,7 +12,6 @@ use crate::errors::ServiceError;
 #[derive(Debug, Deserialize)]
 pub struct EnvQueryParams {
     prefix: Option<String>,
-    name: Option<String>,
 }
 
 pub async fn create(

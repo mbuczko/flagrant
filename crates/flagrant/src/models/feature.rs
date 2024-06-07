@@ -191,8 +191,7 @@ pub async fn delete(
     });
 
     // in transaction, remove all feature variants first.
-    // because of the sorting done before, control variants will be deleted at as
-    // last ones.
+    // because of the sorting done before, control variant will be deleted last.
     for var in vars {
         variant::delete(conn, environment, &var).await?;
     }
