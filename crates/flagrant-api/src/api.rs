@@ -14,5 +14,5 @@ pub async fn get_feature(
     let value_type = feature.value_type.clone();
     let variant = distributor::Distributor::new(feature).distribute(&pool, &env).await?;
 
-    Ok(Json(FeatureValue(variant.value, value_type)))
+    Ok(Json(FeatureValue(value_type, variant.value)))
 }
