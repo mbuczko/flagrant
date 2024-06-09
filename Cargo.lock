@@ -788,6 +788,7 @@ dependencies = [
  "serde",
  "serde_valid",
  "sqlx",
+ "thiserror",
 ]
 
 [[package]]

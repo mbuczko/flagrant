@@ -1,9 +1,7 @@
-use std::str::FromStr;
-
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, FeatureValueType, Tabular};
+use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, Tabular};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
 use crate::repl::readline::ReplEditor;
@@ -13,16 +11,8 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
         let value = match (args.get(2), args.get(3)) {
-            (Some(&value_type), Some(&value)) => Some(FeatureValue(
-                FeatureValueType::from_str(value_type)
-                    .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
-                value.to_owned(),
-            )),
-            (Some(&value_type), _) => Some(multiline_value(
-                editor,
-                FeatureValueType::from_str(value_type)
-                    .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
-            )?),
+            (Some(&value_type), Some(&value)) => Some(FeatureValue::new(value_type, value)?),
+            (Some(&value_type), _) => Some(multiline_value(value_type, editor)?),
             _ => None,
         };
         let feature = session.client.post::<_, Feature>(
@@ -50,20 +40,15 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
         if let Ok(feature) = result {
-            let subpath = format!("/features/{}", feature.id);
             let value = match (args.get(2), args.get(3)) {
-                (Some(&value_type), Some(&value)) => FeatureValue(
-                    FeatureValueType::from_str(value_type)
-                        .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
-                    value.to_owned(),
-                ),
-                (Some(&value_type), _) => multiline_value(
-                    editor,
-                    FeatureValueType::from_str(value_type)
-                        .map_err(|_| anyhow!("Unknown value type: {value_type}"))?,
-                )?,
-                (_, _) => multiline_value(editor, feature.value_type.clone())?,
+                (Some(&value_type), Some(&value)) => FeatureValue::new(value_type, value)?,
+                (Some(&value_type), _) => multiline_value(value_type, editor)?,
+                (_, _) => {
+                    let typ = feature.get_default_value().map(|v| v.decompose().0);
+                    multiline_value(typ.unwrap_or("text"), editor)?
+                }
             };
+            let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
 
             payload.value = Some(value);
@@ -132,17 +117,15 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
         .set_align(Align::Center);
     table.column(3).set_header("VALUE");
 
-    for mut feat in feats {
+    for feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
-        let val = match feat.variants.len() {
-            0 => String::default(),
-            _ => feat.variants.swap_remove(0).value,
-        };
+        let value = feat.get_default_value();
+
         vecs.push(vec![
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
-            val.trim().to_string(),
+            value.map(|v| v.to_string()).unwrap_or_default(),
         ]);
     }
     table.print(vecs);
@@ -170,10 +153,7 @@ pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
     bail!("No feature name or value provided.")
 }
 
-fn multiline_value(
-    editor: &mut ReplEditor,
-    value_type: FeatureValueType,
-) -> anyhow::Result<FeatureValue> {
+fn multiline_value(value_type: &str, editor: &mut ReplEditor) -> anyhow::Result<FeatureValue> {
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::NONE),
         EventHandler::Simple(Cmd::Newline),
@@ -195,5 +175,5 @@ fn multiline_value(
         KeyEvent(KeyCode::Char('d'), Modifiers::CTRL),
         EventHandler::Simple(Cmd::EndOfFile),
     );
-    Ok(FeatureValue(value_type, value))
+    Ok(FeatureValue::new(value_type, &value)?)
 }

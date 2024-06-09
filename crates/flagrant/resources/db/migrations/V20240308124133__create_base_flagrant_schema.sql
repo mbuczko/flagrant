@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS features (
   name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
   description TEXT CHECK(LENGTH(description) <= 2048),
   is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  value_type TEXT NOT NULL DEFAULT 'text',
   version INTEGER NOT NULL DEFAULT 0,
 
   UNIQUE(project_id, name),

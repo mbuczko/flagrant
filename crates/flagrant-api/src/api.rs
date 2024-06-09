@@ -11,8 +11,7 @@ pub async fn get_feature(
 ) -> Result<Json<FeatureValue>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch_by_name(&pool, &env, feature_name).await?;
-    let value_type = feature.value_type.clone();
     let variant = distributor::Distributor::new(feature).distribute(&pool, &env).await?;
 
-    Ok(Json(FeatureValue(value_type, variant.value)))
+    Ok(Json(variant.value))
 }

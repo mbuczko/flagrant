@@ -8,6 +8,7 @@ use std::{
 
 use dashmap::{DashMap, DashSet};
 use flagrant_client::session::Session;
+use flagrant_types::FeatureValue;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
@@ -32,8 +33,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(fv) = session.get_feature(&id, "nowy") {
-                            let value = fv.1;
+                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "nowy") {
 
                             // check if user's ID isn't already assigned to other value.
                             evict_from_buckets(Arc::clone(&results), &value, &id);

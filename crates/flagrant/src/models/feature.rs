@@ -29,11 +29,7 @@ pub async fn create(
         params![
             environment.project_id,
             name,
-            is_enabled,
-            value
-                .as_ref()
-                .map(|FeatureValue(value_type, _)| value_type.clone())
-                .unwrap_or_default()
+            is_enabled
         ],
         |row| row_to_feature(row, environment),
     )
@@ -41,7 +37,7 @@ pub async fn create(
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
     // if default value was provided, turn it into a control variant.
-    if let Some(FeatureValue(_, value)) = value {
+    if let Some(value) = value {
         let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
         feature.variants.push(variant);
     }
@@ -131,21 +127,17 @@ pub async fn update(
     is_enabled: bool,
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
-    let new_value_type = new_value
-        .as_ref()
-        .map(|FeatureValue(t, _)| t)
-        .unwrap_or_else(|| &feature.value_type);
 
     // in transaction, update feature properties first
     Features::update_feature(
         &mut *tx,
-        params![feature.id, new_name, new_value_type, is_enabled],
+        params![feature.id, new_name, is_enabled],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
     // ...and then the feature value which is stored as default variant
-    if let Some(FeatureValue(_, value)) = new_value {
+    if let Some(value) = new_value {
         variant::upsert_default(&mut tx, environment, feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
@@ -226,7 +218,6 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         project_id: row.get("project_id"),
         is_enabled: row.get("is_enabled"),
         name: row.get("name"),
-        value_type: row.get("value_type"),
         variants,
     }
 }

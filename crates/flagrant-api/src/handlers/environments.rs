@@ -17,10 +17,10 @@ pub struct EnvQueryParams {
 pub async fn create(
     State(pool): State<SqlitePool>,
     Path(project_id): Path<u16>,
-    Json(env): Json<EnvRequestPayload>,
+    Json(payload): Json<EnvRequestPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::fetch(&pool, project_id).await?;
-    let env = environment::create(&pool, &project, env.name, env.description).await?;
+    let env = environment::create(&pool, &project, payload.name, payload.description).await?;
 
     Ok(Json(env))
 }

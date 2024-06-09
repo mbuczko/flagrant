@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 use axum::{
     extract::{Path, State},
     Json,
 };
 use flagrant::models::{environment, feature, variant};
-use flagrant_types::{VariantRequestPayload, Variant};
+use flagrant_types::{FeatureValue, Variant, VariantRequestPayload};
 use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;
@@ -15,11 +17,12 @@ use crate::errors::ServiceError;
 pub async fn create(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
-    Json(variant): Json<VariantRequestPayload>,
+    Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<Variant>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch(&pool, &env, feature_id).await?;
-    let variant = variant::create(&pool, &env, &feature, variant.value, variant.weight).await?;
+    let value = FeatureValue::from_str(&payload.value)?;
+    let variant = variant::create(&pool, &env, &feature, value, payload.weight).await?;
 
     Ok(Json(variant))
 }
@@ -28,12 +31,13 @@ pub async fn create(
 pub async fn update(
     State(pool): State<SqlitePool>,
     Path((environment_id, variant_id)): Path<(u16, u16)>,
-    Json(variant): Json<VariantRequestPayload>,
+    Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let var = variant::fetch(&pool, &env, variant_id).await?;
+    let value = FeatureValue::from_str(&payload.value)?;
 
-    variant::update(&pool, &env, &var, variant.value, variant.weight).await?;
+    variant::update(&pool, &env, &var, value, payload.weight).await?;
     Ok(Json(()))
 }
 
