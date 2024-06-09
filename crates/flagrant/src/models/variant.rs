@@ -19,8 +19,9 @@ struct Variants {}
 ///   so, that all feature variants weights at every single moment should sum up to 100%.
 ///
 /// Default variant, similar to standard variants is optional. No such a variant simply means
-/// that feature has no default value defined. This also comes with important limitation -
-/// it is impossible to create other variants having no default variant created first.
+/// that feature has no default value defined yet. This also comes with important consequence -
+/// it is impossible to create additional variants having no default variant created in a first
+/// place.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
