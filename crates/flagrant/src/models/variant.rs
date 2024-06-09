@@ -4,7 +4,7 @@ use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, Variant};
+use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/variants.sql"]
@@ -26,7 +26,7 @@ pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
-    value: String,
+    value: FeatureValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
     let variant_id = Variants::upsert_default_variant(
@@ -53,11 +53,11 @@ pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     feature: &Feature,
-    value: String,
+    value: FeatureValue,
     weight: i16,
 ) -> anyhow::Result<Variant> {
     let mut tx = pool.begin().await?;
-    let variant_id = Variants::create_variant(&mut *tx, params!(feature.id, &value), |v| {
+    let variant_id = Variants::create_variant(&mut *tx, params![feature.id, &value], |v| {
         v.get("variant_id")
     })
     .await
@@ -88,7 +88,7 @@ pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     variant: &Variant,
-    new_value: String,
+    new_value: FeatureValue,
     new_weight: i16,
 ) -> anyhow::Result<()> {
     if variant.is_control() {
@@ -125,7 +125,7 @@ pub async fn fetch(
     environment: &Environment,
     variant_id: u16,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant(pool, params!(environment.id, variant_id))
+    let variant = Variants::fetch_variant(pool, params![environment.id, variant_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 

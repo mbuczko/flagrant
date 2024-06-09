@@ -15,4 +15,5 @@ regex = "1.10.4"
 serde = {workspace = true}
 serde_valid = {workspace = true}
 sqlx = {workspace = true}
+thiserror = {workspace = true}
 
