@@ -58,7 +58,7 @@ impl fmt::Display for FeatureValue {
 }
 
 impl FeatureValue {
-    pub fn new(typ: &str, value: &str) -> Result<Self, ParseTypeError> {
+    fn new(typ: &str, value: &str) -> Result<Self, ParseTypeError> {
         let val = value.to_owned();
         match typ {
             "json" => Ok(Self::Json(val)),
@@ -67,11 +67,23 @@ impl FeatureValue {
             _ => Err(ParseTypeError::Type(typ.to_owned())),
         }
     }
-    pub fn decompose(&self) -> (&str, &str) {
+    fn decompose(&self) -> (&str, &str) {
         match self {
             Self::Json(v) => ("json", v),
             Self::Toml(v) => ("toml", v),
             Self::Text(v) => ("text", v),
         }
+    }
+    pub fn build(value: &str) -> Self {
+        let val = value.trim();
+        match val.chars().next() {
+            Some('{') => Self::Json(val.to_owned()),
+            Some('[') => Self::Toml(val.to_owned()),
+            _ => Self::Text(val.to_owned()),
+        }
+    }
+    pub fn clone_with(&self, value: &str) -> Self {
+        let (typ, _) = self.decompose();
+        Self::new(typ, value).unwrap()
     }
 }

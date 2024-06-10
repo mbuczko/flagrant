@@ -2,26 +2,26 @@ use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::FeatureRequestPayload, tabular::Tabular, Feature, FeatureValue};
-use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
-use crate::repl::readline::ReplEditor;
+use crate::repl::{multiline::multiline_value, readline::ReplEditor};
 
 /// Adds a new feature.
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
-        let value = match (args.get(2), args.get(3)) {
-            (Some(&value_type), Some(&value)) => Some(FeatureValue::new(value_type, value)?),
-            (Some(&value_type), _) => Some(multiline_value(value_type, editor)?),
-            _ => None,
-        };
+        let val = args
+            .get(2)
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| multiline_value(editor).unwrap());
+
+        let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
         let feature = session.client.post::<_, Feature>(
             res.subpath("/features"),
             FeatureRequestPayload {
                 name: name.to_string(),
                 description: args.get(3).map(|d| d.to_string()),
                 is_enabled: false,
-                value,
+                value: Some(parsed),
             },
         )?;
 
@@ -35,23 +35,26 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
 pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
-        let result = session
-            .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+        let val = args
+            .get(2)
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| multiline_value(editor).unwrap());
 
-        if let Ok(feature) = result {
-            let value = match (args.get(2), args.get(3)) {
-                (Some(&value_type), Some(&value)) => FeatureValue::new(value_type, value)?,
-                (Some(&value_type), _) => multiline_value(value_type, editor)?,
-                (_, _) => {
-                    let typ = feature.get_default_value().map(|v| v.decompose().0);
-                    multiline_value(typ.unwrap_or("text"), editor)?
-                }
-            };
+        if let Ok(feature) = session
+            .client
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")))
+        {
+            let cloned = val.parse().unwrap_or_else(|_| {
+                feature
+                    .get_default_value()
+                    .map(|v| v.clone_with(&val))
+                    .unwrap_or_else(|| FeatureValue::Text(val))
+            });
+
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
 
-            payload.value = Some(value);
+            payload.value = Some(cloned);
             session.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
@@ -151,29 +154,4 @@ pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
         bail!("No such a feature.")
     }
     bail!("No feature name or value provided.")
-}
-
-fn multiline_value(value_type: &str, editor: &mut ReplEditor) -> anyhow::Result<FeatureValue> {
-    editor.bind_sequence(
-        KeyEvent(KeyCode::Enter, Modifiers::NONE),
-        EventHandler::Simple(Cmd::Newline),
-    );
-    editor.bind_sequence(
-        KeyEvent(KeyCode::Char('d'), Modifiers::CTRL),
-        EventHandler::Simple(Cmd::AcceptLine),
-    );
-
-    println!("--- Editing '{value_type}' value. Press CTRL-D to finish ---");
-    let value = editor.readline("")?;
-
-    // restore default behaviour of Enter and CTRL-D keys
-    editor.bind_sequence(
-        KeyEvent(KeyCode::Enter, Modifiers::NONE),
-        EventHandler::Simple(Cmd::AcceptLine),
-    );
-    editor.bind_sequence(
-        KeyEvent(KeyCode::Char('d'), Modifiers::CTRL),
-        EventHandler::Simple(Cmd::EndOfFile),
-    );
-    Ok(FeatureValue::new(value_type, &value)?)
 }

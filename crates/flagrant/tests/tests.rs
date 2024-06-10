@@ -99,7 +99,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(pool: SqlitePo
     let environment2 = create_environment(&pool, &project).await;
 
     let feature = create_feature(&pool, &environment1, Some("foo")).await;
-    variant::create(&pool, &environment1, &feature, "text::bar".parse().unwrap(), 40)
+    variant::create(&pool, &environment1, &feature, FeatureValue::build("bar"), 40)
         .await
         .unwrap();
 
@@ -113,7 +113,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(pool: SqlitePo
     // after adding default variant, a list consisting of default- and previously created
     // variant should be returned.
     let mut conn = pool.acquire().await.unwrap();
-    variant::upsert_default(&mut conn, &environment2, &feature, "text::bazz".parse().unwrap())
+    variant::upsert_default(&mut conn, &environment2, &feature, FeatureValue::build("bazz"))
         .await
         .unwrap();
 
@@ -131,7 +131,7 @@ async fn create_feature_with_different_values_in_envs(pool: SqlitePool) {
     let mut conn = pool.acquire().await.unwrap();
     let feature = create_feature(&pool, &environment1, Some("foo")).await;
 
-    variant::upsert_default(&mut conn, &environment2, &feature, FeatureValue::new("text", "bazz").unwrap())
+    variant::upsert_default(&mut conn, &environment2, &feature, FeatureValue::build("bazz"))
         .await
         .unwrap();
 
@@ -218,10 +218,10 @@ async fn delete_feature_with_variants(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("foo")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 10)
         .await
         .unwrap();
 
@@ -235,7 +235,7 @@ async fn delete_feature_with_variants(pool: SqlitePool) {
 async fn create_valid_variant(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("foo")).await;
-    let variant = variant::create(&pool, &environment, &feature, "text::bar".parse().unwrap(), 10).await;
+    let variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar"), 10).await;
 
     assert!(variant.is_ok());
 }
@@ -244,7 +244,7 @@ async fn create_valid_variant(pool: SqlitePool) {
 async fn create_variant_for_feature_with_no_default_variant(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, None).await;
-    let variant = variant::create(&pool, &environment, &feature, "text::bar".parse().unwrap(), 10).await;
+    let variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar"), 10).await;
 
     assert!(variant.is_err());
 }
@@ -254,13 +254,13 @@ async fn create_variants_with_valid_weights(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 30)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-3".parse().unwrap(), 40)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-3"), 40)
         .await
         .unwrap();
 
@@ -277,14 +277,14 @@ async fn create_variants_with_exceeding_weight(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 30)
         .await
         .unwrap();
 
-    let exceeding_variant = variant::create(&pool, &environment, &feature, "text::bar-3".parse().unwrap(), 90);
+    let exceeding_variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar-3"), 90);
 
     assert!(exceeding_variant.await.is_err());
 }
@@ -295,15 +295,15 @@ async fn create_variants_with_different_weights_in_envs(pool: SqlitePool) {
     let environment2 = create_environment(&pool, &project).await;
 
     let feature = create_feature(&pool, &environment1, Some("foo")).await;
-    let variant = variant::create(&pool, &environment1, &feature, "text::bar".parse().unwrap(), 40)
+    let variant = variant::create(&pool, &environment1, &feature, FeatureValue::build("bar"), 40)
         .await
         .unwrap();
 
     let mut conn = pool.acquire().await.unwrap();
-    variant::upsert_default(&mut conn, &environment2, &feature, "text::bazz".parse().unwrap())
+    variant::upsert_default(&mut conn, &environment2, &feature, FeatureValue::build("bazz"))
         .await
         .unwrap();
-    variant::update(&pool, &environment2, &variant, "text::new-bar".parse().unwrap(), 99)
+    variant::update(&pool, &environment2, &variant, FeatureValue::build("new-bar"), 99)
         .await
         .unwrap();
 
@@ -329,7 +329,7 @@ async fn disallow_default_variant_manual_updates(pool: SqlitePool) {
     let feature = create_feature(&pool, &environment, Some("foo")).await;
     let default_variant = feature.get_default_variant().unwrap();
 
-    variant::update(&pool, &environment, default_variant, "text::bar".parse().unwrap(), 50)
+    variant::update(&pool, &environment, default_variant, FeatureValue::build("bar"), 50)
         .await
         .unwrap();
 }
@@ -339,17 +339,17 @@ async fn recalculate_default_weight_for_variant_update(pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 30)
         .await
         .unwrap();
 
-    let variant = variant::create(&pool, &environment, &feature, "text::bar-3".parse().unwrap(), 40)
+    let variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar-3"), 40)
         .await
         .unwrap();
-    variant::update(&pool, &environment, &variant, "text::new-bar-3".parse().unwrap(), 50)
+    variant::update(&pool, &environment, &variant, FeatureValue::build("new-bar-3"), 50)
         .await
         .unwrap();
 
@@ -366,14 +366,14 @@ async fn recalculate_default_weight_for_variant_delete(mut pool: SqlitePool) {
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 30)
         .await
         .unwrap();
 
-    let variant = variant::create(&pool, &environment, &feature, "text::bar-3".parse().unwrap(), 40)
+    let variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar-3"), 40)
         .await
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
@@ -395,20 +395,20 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(pool: S
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 30)
         .await
         .unwrap();
 
     // update with exceeding weight should fail
-    let variant = variant::create(&pool, &environment, &feature, "text::bar-3".parse().unwrap(), 40)
+    let variant = variant::create(&pool, &environment, &feature, FeatureValue::build("bar-3"), 40)
         .await
         .unwrap();
 
     assert!(
-        variant::update(&pool, &environment, &variant, "text::new-bar-3".parse().unwrap(), 80)
+        variant::update(&pool, &environment, &variant, FeatureValue::build("new-bar-3"), 80)
             .await
             .is_err()
     );
@@ -427,10 +427,10 @@ async fn disallow_removing_default_variant_when_other_variants_exist(mut pool: S
     let (_, environment) = create_context(&pool).await;
     let feature = create_feature(&pool, &environment, Some("bar")).await;
 
-    variant::create(&pool, &environment, &feature, "text::bar-1".parse().unwrap(), 10)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-1"), 10)
         .await
         .unwrap();
-    variant::create(&pool, &environment, &feature, "text::bar-2".parse().unwrap(), 30)
+    variant::create(&pool, &environment, &feature, FeatureValue::build("bar-2"), 30)
         .await
         .unwrap();
 
