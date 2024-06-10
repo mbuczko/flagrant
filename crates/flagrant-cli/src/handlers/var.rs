@@ -15,10 +15,11 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
             .map(|v| v.to_string())
             .unwrap_or_else(|| multiline_value(editor).unwrap());
 
-        if let Ok(feature) = session
+        let response = session
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")))
-        {
+            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
+
+        if let Ok(feature) = response {
             // take default variant's value type and use it to construct value for
             // variant being created, according to following rules:
             //
@@ -64,10 +65,11 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             .map(|v| v.to_string())
             .unwrap_or_else(|| multiline_value(editor).unwrap());
 
-        if let Ok(variant) = session
+        let response = session
             .client
-            .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))
-        {
+            .get::<Variant>(res.subpath(format!("/variants/{variant_id}")));
+
+        if let Ok(variant) = response {
             // update variant value according to following rules:
             // - if given value hasn't been explicitly typed (like json::{"a": 2}) use  current
             //   variant's value type
@@ -100,11 +102,11 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
 pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
         let res = session.environment.as_base_resource();
-
-        if let Ok(variant) = session
+        let response = session
             .client
-            .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))
-        {
+            .get::<Variant>(res.subpath(format!("/variants/{variant_id}")));
+
+        if let Ok(variant) = response {
             if let Some(weight) = args.get(2) {
                 let weight = weight.parse::<u8>()?;
 
