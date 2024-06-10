@@ -33,7 +33,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
                     .unwrap_or_else(|| FeatureValue::Text(val))
             });
             let weight = match args.get(2) {
-                Some(&weight) => weight.parse::<i16>()?,
+                Some(&weight) => weight.parse::<u8>()?,
                 _ => bail!("No weight or value provided."),
             };
 
@@ -106,7 +106,7 @@ pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
             .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))
         {
             if let Some(weight) = args.get(2) {
-                let weight = weight.parse::<i16>()?;
+                let weight = weight.parse::<u8>()?;
 
                 if !(0..=100).contains(&weight) {
                     bail!("Variant weight should be positive number in range of <0, 100>.")
@@ -185,7 +185,7 @@ pub fn del(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
     bail!("No variant-id provided.")
 }
 
-fn bar(weight: i16, width: i16) -> String {
+fn bar(weight: u8, width: u8) -> String {
     let mut bar = vec![' '; width as usize];
     let progress = weight * width / 100;
 

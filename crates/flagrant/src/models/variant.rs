@@ -54,7 +54,7 @@ pub async fn create(
     environment: &Environment,
     feature: &Feature,
     value: FeatureValue,
-    weight: i16,
+    weight: u8,
 ) -> anyhow::Result<Variant> {
     let mut tx = pool.begin().await?;
     let variant_id = Variants::create_variant(&mut *tx, params![feature.id, &value], |v| {
@@ -89,7 +89,7 @@ pub async fn update(
     environment: &Environment,
     variant: &Variant,
     new_value: FeatureValue,
-    new_weight: i16,
+    new_weight: u8,
 ) -> anyhow::Result<()> {
     if variant.is_control() {
         bail!("Control variant cannot be modified this way. Use `feature::update(...)` instead.");
