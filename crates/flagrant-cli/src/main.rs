@@ -5,6 +5,7 @@ use repl::readline;
 
 mod handlers;
 mod repl;
+mod tabular;
 
 const API_HOST: &str = "http://localhost:3030";
 

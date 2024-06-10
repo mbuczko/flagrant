@@ -3,7 +3,7 @@ use ascii_table::AsciiTable;
 use flagrant_client::session::{Session, Resource};
 use flagrant_types::{payloads::EnvRequestPayload, Environment};
 
-use crate::repl::readline::ReplEditor;
+use crate::{repl::readline::ReplEditor, tabular::Tabular};
 
 /// Adds a new Environment
 pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
@@ -17,7 +17,7 @@ pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
             },
         )?;
 
-        println!("Created new environment '{}' (id={})", env.name, env.id);
+        env.tabular_print();
         return Ok(());
     }
     bail!("No environment name provided.")
@@ -33,10 +33,6 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
     let mut table = AsciiTable::default();
     let mut vecs = Vec::with_capacity(envs.len() + 1);
 
-    table.column(0).set_header("ID");
-    table.column(1).set_header("NAME");
-    table.column(2).set_header("DESCRIPTION");
-
     for env in envs {
         vecs.push(vec![
             env.id.to_string(),
@@ -44,7 +40,12 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
             env.description.unwrap_or_default(),
         ]);
     }
+
+    table.column(0).set_header("ID");
+    table.column(1).set_header("NAME");
+    table.column(2).set_header("DESCRIPTION");
     table.print(vecs);
+
     Ok(())
 }
 
