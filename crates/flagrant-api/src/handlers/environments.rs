@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{Environment, EnvRequestPayload};
+use flagrant_types::{payloads::EnvRequestPayload, Environment};
 use serde::Deserialize;
 use sqlx::SqlitePool;
 

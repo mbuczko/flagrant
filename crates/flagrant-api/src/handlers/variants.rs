@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, feature, variant};
-use flagrant_types::{FeatureValue, Variant, VariantRequestPayload};
+use flagrant_types::{payloads::VariantRequestPayload, FeatureValue, Variant};
 use sqlx::SqlitePool;
 
 use crate::errors::ServiceError;

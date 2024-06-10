@@ -1,7 +1,7 @@
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{Feature, FeatureRequestPayload, FeatureValue, Tabular};
+use flagrant_types::{payloads::FeatureRequestPayload, tabular::Tabular, Feature, FeatureValue};
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
 
 use crate::repl::readline::ReplEditor;
