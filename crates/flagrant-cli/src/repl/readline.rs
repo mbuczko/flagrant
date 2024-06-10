@@ -51,8 +51,8 @@ pub fn init(session: Session) -> anyhow::Result<()> {
         // features
         Command::Feature.no_op("add | del | ls | val | on | off"),
         Command::Feature.op("ls", "", handlers::feat::list),
-        Command::Feature.op("add", "feature-name [type] [value]", handlers::feat::add),
-        Command::Feature.op("val", "feature-name [type] [value]", handlers::feat::value),
+        Command::Feature.op("add", "feature-name value", handlers::feat::add),
+        Command::Feature.op("val", "feature-name value", handlers::feat::value),
         Command::Feature.op("on", "feature-name", handlers::feat::on),
         Command::Feature.op("off", "feature-name", handlers::feat::off),
         Command::Feature.op("del", "feature-name", handlers::feat::delete),
@@ -60,7 +60,8 @@ pub fn init(session: Session) -> anyhow::Result<()> {
         Command::Variant.no_op("add | del | ls | set"),
         Command::Variant.op("ls", "feature-name", handlers::var::list),
         Command::Variant.op("add", "feature-name weight value", handlers::var::add),
-        Command::Variant.op("set", "variant-id weight [value]", handlers::var::update),
+        Command::Variant.op("val", "variant-id value", handlers::var::value),
+        Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
         Command::Variant.op("del", "variant-id", handlers::var::del),
     ];
     rl.set_helper(Some(ReplHelper {

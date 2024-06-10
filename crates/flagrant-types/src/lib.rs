@@ -6,7 +6,7 @@ extern crate regex;
 pub mod payloads;
 pub mod tabular;
 
-mod compounds;
+mod internals;
 
 #[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
