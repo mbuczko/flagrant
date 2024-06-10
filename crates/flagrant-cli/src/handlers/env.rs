@@ -1,7 +1,7 @@
 use anyhow::bail;
 use ascii_table::AsciiTable;
 use flagrant_client::session::{Session, Resource};
-use flagrant_types::{EnvRequestPayload, Environment};
+use flagrant_types::{payloads::EnvRequestPayload, Environment};
 
 use crate::repl::readline::ReplEditor;
 
