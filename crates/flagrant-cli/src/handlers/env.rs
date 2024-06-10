@@ -52,11 +52,11 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
 pub fn switch(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.project.as_base_resource();
-        let result = session
+        let response = session
             .client
             .get::<Environment>(res.subpath(format!("/envs/name/{name}")));
 
-        if let Ok(env) = result {
+        if let Ok(env) = response {
             println!("Switching to environment '{}' (id={})", env.name, env.id);
             session.set_environment(env);
             return Ok(());

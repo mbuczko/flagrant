@@ -40,10 +40,11 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             .map(|v| v.to_string())
             .unwrap_or_else(|| multiline_value(editor).unwrap());
 
-        if let Ok(feature) = session
+        let response = session
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")))
-        {
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+
+        if let Ok(feature) = response {
             let cloned = val.parse().unwrap_or_else(|_| {
                 feature
                     .get_default_value()
@@ -82,11 +83,11 @@ pub fn off(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
 fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
-        let result = session
+        let response = session
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
-        if let Ok(feature) = result {
+        if let Ok(feature) = response {
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
 
@@ -139,11 +140,11 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
 pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.environment.as_base_resource();
-        let result = session
+        let response = session
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
-        if let Ok(feature) = result {
+        if let Ok(feature) = response {
             session
                 .client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
