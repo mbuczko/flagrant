@@ -19,7 +19,7 @@ pub struct FeatureRequestPayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VariantRequestPayload {
     pub value: String,
-    pub weight: i16,
+    pub weight: u8,
 }
 
 impl From<Feature> for FeatureRequestPayload {

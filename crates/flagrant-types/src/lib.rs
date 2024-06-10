@@ -41,7 +41,7 @@ pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: u16,
     pub value: FeatureValue,
-    pub weight: i16,
+    pub weight: u8,
     pub accumulator: i32,
     pub environment_id: Option<u16>,
 }
@@ -70,7 +70,7 @@ impl Feature {
 }
 
 impl Variant {
-    pub fn build(id: u16, value: FeatureValue, weight: i16) -> Variant {
+    pub fn build(id: u16, value: FeatureValue, weight: u8) -> Variant {
         Variant {
             id,
             value,
