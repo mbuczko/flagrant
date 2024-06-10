@@ -1,9 +1,9 @@
 use anyhow::bail;
 use ascii_table::{Align, AsciiTable};
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{payloads::FeatureRequestPayload, tabular::Tabular, Feature, FeatureValue};
+use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
 
-use crate::repl::{multiline::multiline_value, readline::ReplEditor};
+use crate::{repl::{multiline::multiline_value, readline::ReplEditor}, tabular::Tabular};
 
 /// Adds a new feature.
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
@@ -113,14 +113,6 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
     let mut table = AsciiTable::default();
     let mut vecs = Vec::with_capacity(feats.len() + 1);
 
-    table.column(0).set_header("ID");
-    table.column(1).set_header("NAME");
-    table
-        .column(2)
-        .set_header("ENABLED?")
-        .set_align(Align::Center);
-    table.column(3).set_header("VALUE");
-
     for feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
         let value = feat.get_default_value();
@@ -132,7 +124,16 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
             value.map(|v| v.to_string()).unwrap_or_default(),
         ]);
     }
+
+    table.column(0).set_header("ID");
+    table.column(1).set_header("NAME");
+    table
+        .column(2)
+        .set_header("ENABLED?")
+        .set_align(Align::Center);
+    table.column(3).set_header("VALUE");
     table.print(vecs);
+
     Ok(())
 }
 

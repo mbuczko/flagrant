@@ -4,8 +4,6 @@ use serde_valid::Validate;
 extern crate regex;
 
 pub mod payloads;
-pub mod tabular;
-
 mod internals;
 
 #[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
