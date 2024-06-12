@@ -33,7 +33,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "nowy") {
+                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "spookie") {
 
                             // check if user's ID isn't already assigned to other value.
                             evict_from_buckets(Arc::clone(&results), &value, &id);

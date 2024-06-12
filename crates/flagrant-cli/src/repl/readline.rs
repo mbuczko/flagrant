@@ -44,25 +44,25 @@ pub fn init(session: Session) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Command::Environment.no_op("add | del | set | ls"),
-        Command::Environment.op("add", "env-name description", handlers::env::add),
-        Command::Environment.op("set", "env-name", handlers::env::switch),
+        Command::Environment.no_op("add | to | ls"),
+        Command::Environment.op("add", "environment description", handlers::env::add),
+        Command::Environment.op("to", "environment", handlers::env::switch),
         Command::Environment.op("ls", "", handlers::env::list),
         // features
-        Command::Feature.no_op("add | del | ls | val | on | off"),
+        Command::Feature.no_op("add | del | ls | on | off | val"),
         Command::Feature.op("ls", "", handlers::feat::list),
-        Command::Feature.op("add", "feature-name value", handlers::feat::add),
-        Command::Feature.op("val", "feature-name value", handlers::feat::value),
-        Command::Feature.op("on", "feature-name", handlers::feat::on),
-        Command::Feature.op("off", "feature-name", handlers::feat::off),
-        Command::Feature.op("del", "feature-name", handlers::feat::delete),
+        Command::Feature.op("add", "feature value", handlers::feat::add),
+        Command::Feature.op("del", "feature", handlers::feat::delete),
+        Command::Feature.op("val", "feature value", handlers::feat::value),
+        Command::Feature.op("on", "feature", handlers::feat::on),
+        Command::Feature.op("off", "feature", handlers::feat::off),
         // variants
-        Command::Variant.no_op("add | del | ls | set"),
-        Command::Variant.op("ls", "feature-name", handlers::var::list),
-        Command::Variant.op("add", "feature-name weight value", handlers::var::add),
+        Command::Variant.no_op("add | del | ls | val | weight"),
+        Command::Variant.op("ls", "feature", handlers::var::list),
+        Command::Variant.op("add", "feature weight value", handlers::var::add),
+        Command::Variant.op("del", "variant-id", handlers::var::del),
         Command::Variant.op("val", "variant-id value", handlers::var::value),
         Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
-        Command::Variant.op("del", "variant-id", handlers::var::del),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),

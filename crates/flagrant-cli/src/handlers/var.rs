@@ -4,10 +4,10 @@ use anyhow::bail;
 use ascii_table::AsciiTable;
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{
-    payloads::VariantRequestPayload, tabular::Tabular, Feature, FeatureValue, Variant,
+    payloads::VariantRequestPayload, Feature, FeatureValue, Variant,
 };
 
-use crate::repl::{multiline::multiline_value, readline::ReplEditor};
+use crate::{repl::{multiline::multiline_value, readline::ReplEditor}, tabular::Tabular};
 
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
@@ -153,10 +153,6 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                 let mut table = AsciiTable::default();
                 let mut vecs = Vec::with_capacity(variants.len() + 1);
 
-                table.column(0).set_header("ID");
-                table.column(1).set_header("WEIGHT");
-                table.column(2).set_header("VALUE");
-
                 for var in variants {
                     vecs.push(vec![
                         var.id.to_string(),
@@ -164,7 +160,12 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                         var.value.to_string(),
                     ])
                 }
+
+                table.column(0).set_header("ID");
+                table.column(1).set_header("WEIGHT");
+                table.column(2).set_header("VALUE");
                 table.print(vecs);
+
                 return Ok(());
             }
             Err(error) => {
@@ -189,9 +190,9 @@ pub fn del(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
     bail!("No variant-id provided.")
 }
 
-fn bar(weight: u8, width: u8) -> String {
+fn bar(weight: u8, width: u16) -> String {
     let mut bar = vec![' '; width as usize];
-    let progress = weight * width / 100;
+    let progress = (weight as u16 * width) / 100;
 
     for ch in bar.iter_mut().take(progress as usize) {
         *ch = '▆';
