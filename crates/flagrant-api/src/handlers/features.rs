@@ -52,6 +52,7 @@ pub async fn update(
 ) -> Result<Json<()>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch(&pool, &env, feature_id).await?;
+
     feature::update(
         &pool,
         &env,
@@ -85,6 +86,7 @@ pub async fn delete(
 ) -> Result<Json<()>, ServiceError> {
     let env = environment::fetch(&pool, environment_id).await?;
     let feature = feature::fetch(&pool, &env, feature_id).await?;
+
     feature::delete(
         &pool,
         &env,

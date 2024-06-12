@@ -14,6 +14,8 @@ pub fn multiline_value(editor: &mut ReplEditor) -> anyhow::Result<String> {
 
     println!("--- Editing value. Press CTRL-D to finish ---");
 
+    let value = editor.readline("")?;
+
     // restore default behaviour of Enter and CTRL-D keys
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::NONE),
@@ -23,5 +25,5 @@ pub fn multiline_value(editor: &mut ReplEditor) -> anyhow::Result<String> {
         KeyEvent(KeyCode::Char('d'), Modifiers::CTRL),
         EventHandler::Simple(Cmd::EndOfFile),
     );
-    Ok(editor.readline("")?)
+    Ok(value)
 }
