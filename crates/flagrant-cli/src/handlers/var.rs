@@ -190,9 +190,9 @@ pub fn del(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
     bail!("No variant-id provided.")
 }
 
-fn bar(weight: u8, width: u8) -> String {
+fn bar(weight: u8, width: u16) -> String {
     let mut bar = vec![' '; width as usize];
-    let progress = weight * width / 100;
+    let progress = (weight as u16 * width) / 100;
 
     for ch in bar.iter_mut().take(progress as usize) {
         *ch = '▆';

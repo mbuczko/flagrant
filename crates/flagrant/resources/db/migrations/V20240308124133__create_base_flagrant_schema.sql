@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS features (
   FOREIGN KEY (project_id) REFERENCES projects(project_id)
 );
 
-
 CREATE TABLE IF NOT EXISTS variants (
   variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
   feature_id INTEGER NOT NULL,
