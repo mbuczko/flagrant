@@ -690,7 +690,7 @@ checksum = "8fcfdc7a0362c9f4444381a9e697c79d435fe65b52a37466fc2c1184cee9edc6"
 
 [[package]]
 name = "flagrant"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "flagrant-macros",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-api"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-bombardier"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-cli"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "ascii_table",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-client"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "flagrant-types",
@@ -773,7 +773,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-macros"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "quote",
  "semver",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-types"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "regex",
  "serde",
