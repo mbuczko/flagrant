@@ -23,10 +23,13 @@ impl IntoResponse for ServiceError {
                 tracing::error!(error);
                 (StatusCode::BAD_REQUEST, error.to_string())
             }
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error: {}", self.0),
-            ),
+            _ => {
+                tracing::error!(error = ?self.0, "Unexpected error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error: {}", self.0),
+                )
+            }
         }
         .into_response()
     }

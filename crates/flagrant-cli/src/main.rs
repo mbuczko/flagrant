@@ -1,11 +1,11 @@
 #![feature(let_chains)]
 
-use flagrant_client::blocking::HttpClient;
-use repl::{session::Session, readline};
-use std::cell::RefCell;
+use flagrant_client::session::Session;
+use repl::readline;
 
 mod handlers;
 mod repl;
+mod tabular;
 
 const API_HOST: &str = "http://localhost:3030";
 
@@ -14,12 +14,11 @@ fn main() -> anyhow::Result<()> {
     let project_id = 1;
     let environment_id = 1;
 
-    let client = HttpClient::new(API_HOST.into());
-    let session = RefCell::new(Session::init(
-        client,
+    let session = Session::init(
+        API_HOST.into(),
         project_id,
         environment_id,
-    )?);
+    )?;
     readline::init(session)?;
 
     Ok(())

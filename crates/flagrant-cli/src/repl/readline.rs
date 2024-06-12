@@ -1,8 +1,9 @@
-use std::borrow::Cow::{self, Owned};
+use flagrant_client::session::Session;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
 use rustyline::history::DefaultHistory;
 use rustyline::{Completer, Editor, Helper, Hinter, Validator};
+use std::borrow::Cow::{self, Owned};
 use strum::IntoEnumIterator;
 
 use crate::handlers;
@@ -10,7 +11,6 @@ use crate::handlers;
 use super::command::Command;
 use super::completer::CommandCompleter;
 use super::hinter::ReplHinter;
-use super::session::ReplSession;
 use super::tokenizer::split_command_line;
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -30,39 +30,39 @@ impl<'a> Highlighter for ReplHelper<'a> {
     }
 }
 
-
-pub fn prompt(session: &ReplSession) -> String {
-    let ssn = session.borrow();
+pub fn prompt(session: &Session) -> String {
     format!(
         "[{}/\x1b[35m{}\x1b[0m] > ",
-        ssn.project.name, ssn.environment.name
+        session.project.read().unwrap().name,
+        session.environment.read().unwrap().name
     )
 }
 
 /// Initializes a REPL with history, hints and autocompletions pulled straight
 /// from application API in context of respective command.
-pub fn init(session: ReplSession) -> anyhow::Result<()> {
+pub fn init(session: Session) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper, DefaultHistory> = Editor::new()?;
     let commands = vec![
         // environments
-        Command::Environment.no_op("add | del | set | ls"),
-        Command::Environment.op("add", "env-name description", handlers::env::add),
-        Command::Environment.op("set", "env-name", handlers::env::switch),
+        Command::Environment.no_op("add | to | ls"),
+        Command::Environment.op("add", "environment description", handlers::env::add),
+        Command::Environment.op("to", "environment", handlers::env::switch),
         Command::Environment.op("ls", "", handlers::env::list),
         // features
-        Command::Feature.no_op("add | del | ls | val | on | off"),
+        Command::Feature.no_op("add | del | ls | on | off | val"),
         Command::Feature.op("ls", "", handlers::feat::list),
-        Command::Feature.op("add", "feature-name [type] [value]", handlers::feat::add),
-        Command::Feature.op("val", "feature-name [type] [value]", handlers::feat::value),
-        Command::Feature.op("on", "feature-name", handlers::feat::on),
-        Command::Feature.op("off", "feature-name", handlers::feat::off),
-        Command::Feature.op("del", "feature-name", handlers::feat::delete),
+        Command::Feature.op("add", "feature value", handlers::feat::add),
+        Command::Feature.op("del", "feature", handlers::feat::delete),
+        Command::Feature.op("val", "feature value", handlers::feat::value),
+        Command::Feature.op("on", "feature", handlers::feat::on),
+        Command::Feature.op("off", "feature", handlers::feat::off),
         // variants
-        Command::Variant.no_op("add | del | ls | set"),
-        Command::Variant.op("ls", "feature-name", handlers::var::list),
-        Command::Variant.op("add", "feature-name weight value", handlers::var::add),
-        Command::Variant.op("set", "variant-id weight [value]", handlers::var::update),
+        Command::Variant.no_op("add | del | ls | val | weight"),
+        Command::Variant.op("ls", "feature", handlers::var::list),
+        Command::Variant.op("add", "feature weight value", handlers::var::add),
         Command::Variant.op("del", "variant-id", handlers::var::del),
+        Command::Variant.op("val", "variant-id value", handlers::var::value),
+        Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
     ];
     rl.set_helper(Some(ReplHelper {
         hinter: ReplHinter::new(&commands),
@@ -79,7 +79,6 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
-
                 // after a command line split, all the slices turn into
                 // a vector of following elements:
                 //
@@ -91,10 +90,7 @@ pub fn init(session: ReplSession) -> anyhow::Result<()> {
                 if slices.is_empty() {
                     continue;
                 }
-                if let Some(cmd) = commands
-                    .iter()
-                    .find(|c| c.matches_slices(&slices))
-                {
+                if let Some(cmd) = commands.iter().find(|c| c.matches_slices(&slices)) {
                     rl.add_history_entry(line.as_str())?;
                     if let Err(error) = (cmd.handler)(&slices[1..], &session, &mut rl) {
                         eprintln!("{error}");

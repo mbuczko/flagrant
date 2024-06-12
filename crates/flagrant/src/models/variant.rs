@@ -4,26 +4,29 @@ use sqlx::{Connection, Row, SqliteConnection};
 use sqlx::{Pool, Sqlite};
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, Variant};
+use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/variants.sql"]
 struct Variants {}
 
-/// Creates or updates default (control) variant of given feature.
+/// Creates new or updates existing default (aka control) variant of given feature.
 ///
-/// Default variant represents environment-specific feature control value ie. a value returned
-/// when no other variants have been defined or, having multiple other variants already added,
-/// when distributor decides to prioritize it over other variants based on weight and underlaying
-/// distributing strategy.
+/// Default variant represents environment-specific feature value being returned when no other
+/// variants have been defined yet. It's also specific in a way how weight is being constrained:
+/// - when created, weight is set by default to 100%
+/// - weight cannot be updated manually - it is auto-adjusted each time new variant is being added
+///   so, that all feature variants weights at every single moment should sum up to 100%.
 ///
-/// Default variant, similar to standard variants is optional. No such a variant means that feature
-/// has no value defined. Also, having no default variant it's impossible to create other variants.
+/// Default variant, similar to standard variants is optional. No such a variant simply means
+/// that feature has no default value defined yet. This also comes with important consequence -
+/// it is impossible to create additional variants having no default variant created in a first
+/// place.
 pub async fn upsert_default(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
-    value: String,
+    value: FeatureValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
     let variant_id = Variants::upsert_default_variant(
@@ -40,21 +43,21 @@ pub async fn upsert_default(
     Ok(Variant::build_default(environment, variant_id, value))
 }
 
-/// Creates standard variant with weight and value common for all environments.
+/// Creates a standard variant with its weight and value.
 ///
-/// In oppose to default (control) one, standard variants hold an alternative value common across all
-/// environments, ie. once changed, value is propagated immediately to all environments. Weight on the
-/// other hand is environment-specific, so the change impacts given environment only and, similarly to
-/// default variant, is used to determine how to prioritize variant during distribution process.
+/// Standard variant holds an alternative value common across all environments, ie. once changed
+/// it's changed immediately for all existing environments. Weight however behaves exactly the
+/// opposite - the change impacts given environment only and similarly to control variant, is
+/// used to determine how to prioritize variant during balancing process within given environment.
 pub async fn create(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     feature: &Feature,
-    value: String,
-    weight: i16,
+    value: FeatureValue,
+    weight: u8,
 ) -> anyhow::Result<Variant> {
     let mut tx = pool.begin().await?;
-    let variant_id = Variants::create_variant(&mut *tx, params!(feature.id, &value), |v| {
+    let variant_id = Variants::create_variant(&mut *tx, params![feature.id, &value], |v| {
         v.get("variant_id")
     })
     .await
@@ -77,14 +80,20 @@ pub async fn create(
 ///
 /// Standard variant represents alternative feature value which is common across environments
 /// and, based on weight and distribution strategy, may be prioritized over other variants
-/// during distribution process.
+/// during balancing process.
+///
+/// This function will fail-fast when used to modify control variant which should be altered
+/// with `feature::update` instead.
 pub async fn update(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     variant: &Variant,
-    new_value: String,
-    new_weight: i16,
+    new_value: FeatureValue,
+    new_weight: u8,
 ) -> anyhow::Result<()> {
+    if variant.is_control() {
+        bail!("Control variant cannot be modified this way. Use `feature::update(...)` instead.");
+    }
     let mut tx = pool.begin().await?;
     let feature_id: u16 =
         Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
@@ -116,7 +125,7 @@ pub async fn fetch(
     environment: &Environment,
     variant_id: u16,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant(pool, params!(environment.id, variant_id))
+    let variant = Variants::fetch_variant(pool, params![environment.id, variant_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
@@ -192,7 +201,7 @@ pub async fn update_accumulator(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
-    accumulator: i16,
+    accumulator: i32,
 ) -> anyhow::Result<()> {
     Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await

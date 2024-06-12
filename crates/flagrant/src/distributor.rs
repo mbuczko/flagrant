@@ -3,7 +3,6 @@ use sqlx::{Pool, Sqlite};
 
 use crate::models::{feature, variant};
 
-
 pub struct Distributor {
     feature: Feature,
 }
@@ -18,23 +17,25 @@ impl Distributor {
     ///  - choose the variation with the largest `accum`
     ///  - subtract 100 from the `accum` for the chosen variation
     ///  - add `weight` to `accum` for all variations, including the chosen one
-    pub async fn distribute(&self, pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Result<Variant> {
-        let mut variants = variant::list(pool, environment, &self.feature).await?;
-        let max_accum = variants
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.accumulator.cmp(&b.accumulator));
+    pub async fn distribute(
+        &self,
+        pool: &Pool<Sqlite>,
+        environment: &Environment,
+    ) -> anyhow::Result<Variant> {
+        let variants = variant::list(pool, environment, &self.feature).await?;
 
         // there should be always at least one variation with a control value
-        let (idx, _) = max_accum.unwrap();
-        let var = variants.swap_remove(idx);
+        let variant = variants
+            .into_iter()
+            .max_by(|a, b| a.accumulator.cmp(&b.accumulator))
+            .unwrap();
 
         let mut tx = pool.begin().await?;
-        variant::update_accumulator(&mut tx, environment, &var, var.accumulator - 100).await?;
-        feature::bump_up_accumulators(&mut tx, environment, &self.feature, var.weight).await?;
+
+        variant::update_accumulator(&mut tx, environment, &variant, variant.accumulator - 100).await?;
+        feature::bump_up_accumulators(&mut tx, environment, &self.feature).await?;
 
         tx.commit().await?;
-        Ok(var)
+        Ok(variant)
     }
-
 }

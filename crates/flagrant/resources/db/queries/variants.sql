@@ -13,25 +13,27 @@ RETURNING variant_id
 
 -- :name upsert_default_variant_weight :<> :!
 -- :doc Inserts or updates a weight for feature control variant in given environment
-INSERT INTO variants_weights(environment_id, variant_id, weight)
-VALUES(
-  $1,
-  (select variant_id from variants where environment_id = $1 and feature_id = $2),
-  (select coalesce(100 - sum(weight), 100)
+WITH calc AS (select coalesce(100 - sum(weight), 100) AS remaining_weight
    from variants_weights w
    join variants v using(variant_id)
    where feature_id = $2
      -- exclude control value from sum...
      and v.environment_id is null
      -- ...and sum all the other variant weights within given environment
-     and w.environment_id = $1))
-ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight
+     and w.environment_id = $1)
+INSERT INTO variants_weights(environment_id, variant_id, weight, accumulator)
+VALUES(
+  $1,
+  (select variant_id from variants where environment_id = $1 and feature_id = $2),
+  (select remaining_weight from calc),
+  (select remaining_weight from calc))
+ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight, accumulator = excluded.accumulator
 
 -- :name upsert_variant_weight :|| :1
--- :doc Inserts or updates a weight for feature variant in given environment
-INSERT INTO variants_weights(environment_id, variant_id, weight)
-VALUES($1, $2, $3)
-ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight
+-- :doc Inserts or updates a weight (and accumulator) for feature variant in given environment
+INSERT INTO variants_weights(environment_id, variant_id, weight, accumulator)
+VALUES($1, $2, $3, $3)
+ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight, accumulator = excluded.accumulator
 RETURNING weight
 
 -- :name update_variant_value :|| :1
