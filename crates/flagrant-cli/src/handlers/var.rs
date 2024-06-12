@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::bail;
 use ascii_table::AsciiTable;
 use flagrant_client::session::{Resource, Session};
@@ -12,8 +14,8 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
         let res = session.environment.as_base_resource();
         let val = args
             .get(3)
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| multiline_value(editor).unwrap());
+            .map(|&a| Cow::from(a))
+            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let response = session
             .client
@@ -31,7 +33,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
                 feature
                     .get_default_value()
                     .map(|v| v.clone_with(&val))
-                    .unwrap_or_else(|| FeatureValue::Text(val))
+                    .unwrap_or_else(|| FeatureValue::Text(val.into_owned()))
             });
             let weight = match args.get(2) {
                 Some(&weight) => weight.parse::<u8>()?,
@@ -62,8 +64,8 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
         let res = session.environment.as_base_resource();
         let val = args
             .get(2)
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| multiline_value(editor).unwrap());
+            .map(|&a| Cow::from(a))
+            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let response = session
             .client
