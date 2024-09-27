@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use ascii_table::AsciiTable;
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout};
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{
     payloads::VariantRequestPayload, Feature, FeatureValue, Variant,
@@ -150,22 +150,22 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                     .client
                     .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
-                let mut table = AsciiTable::default();
-                let mut vecs = Vec::with_capacity(variants.len() + 1);
+                let table = FancyTable::create(FancyTableOpts::default())
+                    .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
+                    .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(8), Align::Left)
+                    .add_column_named_with_align("VALUE".into(), Layout::Expandable(120), Align::Left)
+                    .build(80);
 
+                let mut rows = Vec::with_capacity(variants.len());
                 for var in variants {
-                    vecs.push(vec![
+                    rows.push(vec![
                         var.id.to_string(),
                         bar(var.weight, 10),
                         var.value.to_string(),
-                    ])
+                    ]);
                 }
 
-                table.column(0).set_header("ID");
-                table.column(1).set_header("WEIGHT");
-                table.column(2).set_header("VALUE");
-                table.print(vecs);
-
+                table.render(rows);
                 return Ok(());
             }
             Err(error) => {

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use ascii_table::{Align, AsciiTable};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout};
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
 
@@ -112,14 +112,19 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
     let res = session.environment.as_base_resource();
     let feats: Vec<Feature> = session.client.get(res.subpath("/features"))?;
 
-    let mut table = AsciiTable::default();
-    let mut vecs = Vec::with_capacity(feats.len() + 1);
+    let table = FancyTable::create(FancyTableOpts::default())
+        .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
+        .add_column_named_with_align("NAME".into(), Layout::Expandable(50), Align::Left)
+        .add_column_named_with_align("ENABLED?".into(), Layout::Fixed(10), Align::Center)
+        .add_column_named_with_align("VALUE".into(), Layout::Expandable(100), Align::Left)
+        .build(80);
 
+    let mut rows = Vec::with_capacity(feats.len());
     for feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
         let value = feat.get_default_value();
 
-        vecs.push(vec![
+        rows.push(vec![
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
@@ -127,15 +132,7 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
         ]);
     }
 
-    table.column(0).set_header("ID");
-    table.column(1).set_header("NAME");
-    table
-        .column(2)
-        .set_header("ENABLED?")
-        .set_align(Align::Center);
-    table.column(3).set_header("VALUE");
-    table.print(vecs);
-
+    table.render(rows);
     Ok(())
 }
 
