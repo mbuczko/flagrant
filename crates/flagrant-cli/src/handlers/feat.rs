@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout};
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
 
@@ -27,7 +26,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
             },
         )?;
 
-        feature.tabular_print();
+        feature.render();
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -63,7 +62,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             // re-fetch feature to be sure it's updated
             let feature: Feature = session.client.get(res.subpath(&subpath))?;
 
-            feature.tabular_print();
+            feature.render();
             return Ok(());
         }
         bail!("Feature not found.");
@@ -99,7 +98,7 @@ fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
             // re-fetch feature to be sure it's updated
             let feature = session.client.get::<Feature>(res.subpath(&subpath))?;
 
-            feature.tabular_print();
+            feature.render();
             return Ok(());
         }
         bail!("No such a feature.")
@@ -112,27 +111,19 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
     let res = session.environment.as_base_resource();
     let feats: Vec<Feature> = session.client.get(res.subpath("/features"))?;
 
-    let table = FancyTable::create(FancyTableOpts::default())
-        .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-        .add_column_named_with_align("NAME".into(), Layout::Expandable(50), Align::Left)
-        .add_column_named_with_align("ENABLED?".into(), Layout::Fixed(10), Align::Center)
-        .add_column_named_with_align("VALUE".into(), Layout::Expandable(100), Align::Left)
-        .build(80);
-
     let mut rows = Vec::with_capacity(feats.len());
     for feat in feats {
         let toggle = if feat.is_enabled { "▣" } else { "▢" };
         let value = feat.get_default_value();
 
-        rows.push(vec![
+        rows.push([
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
             value.map(|v| v.to_string()).unwrap_or_default(),
         ]);
     }
-
-    table.render(rows);
+    Feature::table().render(rows);
     Ok(())
 }
 

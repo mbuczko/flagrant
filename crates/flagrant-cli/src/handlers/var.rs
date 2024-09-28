@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout};
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{
     payloads::VariantRequestPayload, Feature, FeatureValue, Variant,
@@ -51,7 +50,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
                     weight,
                 },
             )?;
-            variant.tabular_print();
+            variant.render();
             return Ok(());
         }
         bail!("Feature not found.")
@@ -93,7 +92,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
                 .client
                 .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
-            variant.tabular_print();
+            variant.render();
             return Ok(());
         }
         bail!("No variant of given id found.");
@@ -127,7 +126,7 @@ pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
                     .client
                     .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
-                variant.tabular_print();
+                variant.render();
                 return Ok(());
             }
             bail!("No variant weight provided.");
@@ -150,22 +149,15 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
                     .client
                     .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
-                let table = FancyTable::create(FancyTableOpts::default())
-                    .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-                    .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(8), Align::Left)
-                    .add_column_named_with_align("VALUE".into(), Layout::Expandable(120), Align::Left)
-                    .build(80);
-
                 let mut rows = Vec::with_capacity(variants.len());
                 for var in variants {
-                    rows.push(vec![
+                    rows.push([
                         var.id.to_string(),
                         bar(var.weight, 10),
                         var.value.to_string(),
                     ]);
                 }
-
-                table.render(rows);
+                Variant::table().render(rows);
                 return Ok(());
             }
             Err(error) => {

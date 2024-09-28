@@ -1,5 +1,4 @@
 use anyhow::bail;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout};
 use flagrant_client::session::{Session, Resource};
 use flagrant_types::{payloads::EnvRequestPayload, Environment};
 
@@ -17,7 +16,7 @@ pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
             },
         )?;
 
-        env.tabular_print();
+        env.render();
         return Ok(());
     }
     bail!("No environment name provided.")
@@ -30,23 +29,15 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
         .client
         .get::<Vec<Environment>>(res.subpath("/envs"))?;
 
-    let table = FancyTable::create(FancyTableOpts::default())
-        .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-        .add_column_named_with_align("NAME".into(), Layout::Expandable(50), Align::Left)
-        .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
-        .rseparator(None)
-        .build(80);
-
     let mut rows = Vec::with_capacity(envs.len());
     for env in envs {
-        rows.push(vec![
+        rows.push([
             env.id.to_string(),
             env.name,
             env.description.unwrap_or_default(),
         ]);
     }
-
-    table.render(rows);
+    Environment::table().render(rows);
     Ok(())
 }
 
