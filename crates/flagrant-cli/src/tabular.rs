@@ -1,4 +1,4 @@
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{Environment, Feature, Variant};
 
 pub trait Tabular {
@@ -10,7 +10,7 @@ impl Tabular for Environment {
     fn table() -> FancyTable<'static, String> {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-            .add_column_named_with_align("NAME".into(), Layout::Expandable(50), Align::Left)
+            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
             .rseparator(None)
             .build(80)
@@ -20,15 +20,16 @@ impl Tabular for Environment {
         let desc_str = self.description.as_deref().unwrap_or("");
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(6, 1, Layout::Fixed(6), Align::Right, Overflow::Truncate)
+            .add_column(None, Layout::Fixed(6), Align::Right, Overflow::Truncate, 1)
             .add_column(
-                70,
-                1,
+                None,
                 Layout::Expandable(120),
                 Align::Left,
                 Overflow::Truncate,
+                1
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align("ENVIRONMENT", TitleAlign::RightOffset(1))
             .build(80);
 
         table.render(vec![
@@ -43,8 +44,8 @@ impl Tabular for Feature {
     fn table() -> FancyTable<'static, String> {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-            .add_column_named_with_align("NAME".into(), Layout::Expandable(50), Align::Left)
-            .add_column_named_with_align("ENABLED?".into(), Layout::Fixed(10), Align::Center)
+            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
+            .add_column_named_with_align("ENABLED?".into(), Layout::Slim, Align::Center)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(100), Align::Left)
             .build(80)
     }
@@ -57,14 +58,15 @@ impl Tabular for Feature {
         let val_str = value.map(|v| v.to_string()).unwrap_or_default();
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(6, 1, Layout::Fixed(6), Align::Right, Overflow::Truncate)
+            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
             .add_column(
-                70,
-                1,
+                None,
                 Layout::Expandable(120),
                 Align::Left,
                 Overflow::Truncate,
+                3,
             )
+            .add_title_with_align("FEATURE", TitleAlign::RightOffset(1))
             .build(80);
 
         table.render(vec![
@@ -80,7 +82,7 @@ impl Tabular for Variant {
     fn table() -> FancyTable<'static, String> {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("ID".into(), Layout::Fixed(6), Align::Left)
-            .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(8), Align::Left)
+            .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(120), Align::Left)
             .build(80)
     }
@@ -90,8 +92,9 @@ impl Tabular for Variant {
         let val_str = self.value.to_string();
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(6, 1, Layout::Fixed(6), Align::Right, Overflow::Truncate)
-            .add_column(70, 1, Layout::Expandable(120), Align::Left, Overflow::Truncate)
+            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 1)
+            .add_title_with_align("VARIANT", TitleAlign::RightOffset(1))
             .build(80);
 
         table.render(vec![
