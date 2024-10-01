@@ -1,6 +1,6 @@
 use std::io;
 
-use flagrant_client::session::{Session, Resource};
+use flagrant_client::session::{Resource, Session};
 use flagrant_types::{Environment, Feature};
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -47,7 +47,6 @@ impl<'a> CommandCompleter<'a> {
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         let skip = arg_prefix.len() - 1;
         let pairs = match command.to_lowercase().as_str() {
-
             // auto-complete environment names
             "environment" => {
                 let res = self.session.project.as_base_resource();
@@ -61,7 +60,7 @@ impl<'a> CommandCompleter<'a> {
                         display: c.name,
                     })
                     .collect::<Vec<_>>()
-            },
+            }
 
             // auto-complete feature name both for "feature" and "variant" commands
             "feature" | "variant" => {
@@ -76,8 +75,8 @@ impl<'a> CommandCompleter<'a> {
                         display: c.name,
                     })
                     .collect::<Vec<_>>()
-            },
-            _ => vec![]
+            }
+            _ => vec![],
         };
 
         Ok((pos, pairs))

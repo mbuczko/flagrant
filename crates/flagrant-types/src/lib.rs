@@ -3,8 +3,8 @@ use serde_valid::Validate;
 
 extern crate regex;
 
-pub mod payloads;
 mod internals;
+pub mod payloads;
 
 #[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {

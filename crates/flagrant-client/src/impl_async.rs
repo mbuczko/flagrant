@@ -13,12 +13,14 @@ impl HttpClient {
         match self {
             HttpClient::Async(client, host) => {
                 match client.get(format!("{host}{path}")).send().await {
-                    Ok(response) if response.status().is_success() => Ok(response.json::<T>().await?),
+                    Ok(response) if response.status().is_success() => {
+                        Ok(response.json::<T>().await?)
+                    }
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -36,8 +38,8 @@ impl HttpClient {
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -55,31 +57,29 @@ impl HttpClient {
                     .await;
 
                 match result {
-                    Ok(response) if response.status().is_success() => Ok(response.json::<T>().await?),
+                    Ok(response) if response.status().is_success() => {
+                        Ok(response.json::<T>().await?)
+                    }
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
     pub async fn delete(&self, path: String) -> anyhow::Result<Response> {
         match self {
             HttpClient::Async(client, host) => {
-                let result = client
-                    .delete(format!("{host}{path}"))
-                    .send()
-                    .await;
+                let result = client.delete(format!("{host}{path}")).send().await;
 
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response),
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 }
-

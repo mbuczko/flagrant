@@ -1,6 +1,6 @@
-use flagrant_client::session::Session;
-use strum_macros::{EnumIter, EnumString, Display};
 use super::readline::ReplEditor;
+use flagrant_client::session::Session;
+use strum_macros::{Display, EnumIter, EnumString};
 
 type CommandHandler = fn(&[&str], &Session, &mut ReplEditor) -> anyhow::Result<()>;
 
@@ -52,7 +52,6 @@ impl ReplCommand {
     ///  - for "ENV add dev" - as first argument ("dev") has been already provided,
     ///    only a part of the hint describing second argument gets returned.
     pub fn remaining_hint(&self, slices: &[&str]) -> &str {
-
         // This is to deduce how many slices to ignore initially. Command is skipped
         // in every case, operation is skipped only when it's available.
         let slices_to_skip = match self.op {
@@ -81,9 +80,12 @@ impl ReplCommand {
 }
 
 impl Command {
-
     /// No-op command handler used to ignore commands called with no required arguments.
-    fn no_op_handler(_args: &[&str], _session: &Session, _editor: &mut ReplEditor) -> anyhow::Result<()> {
+    fn no_op_handler(
+        _args: &[&str],
+        _session: &Session,
+        _editor: &mut ReplEditor,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -94,7 +96,7 @@ impl Command {
             cmd: self.to_string(),
             op: op.map(String::from),
             hint: hint.to_owned(),
-            handler: handler.unwrap_or(Self::no_op_handler)
+            handler: handler.unwrap_or(Self::no_op_handler),
         }
     }
 

@@ -33,24 +33,21 @@ pub fn main() -> anyhow::Result<()> {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "spookie") {
-
+                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "spookie")
+                        {
                             // check if user's ID isn't already assigned to other value.
                             evict_from_buckets(Arc::clone(&results), &value, &id);
 
                             // add value to corresponding bucket
                             results.entry(value).or_default().insert(id);
                         }
-
                     }
                 }
             });
         }
 
         let m = MultiProgress::new();
-        let sty = ProgressStyle::with_template(
-            "[{pos:>7}/{len:7}] {bar:40.cyan/blue} {msg}",
-        )
+        let sty = ProgressStyle::with_template("[{pos:>7}/{len:7}] {bar:40.cyan/blue} {msg}")
             .unwrap()
             .progress_chars("##-");
 
@@ -94,7 +91,11 @@ fn get_or_generate_id(idents: Arc<DashMap<usize, Ulid>>, rng: &mut ThreadRng) ->
     Some(result)
 }
 
-fn evict_from_buckets(results: Arc<DashMap<String, DashSet<String>>>, target: &String, id: &String) {
+fn evict_from_buckets(
+    results: Arc<DashMap<String, DashSet<String>>>,
+    target: &String,
+    id: &String,
+) {
     for entry in results.iter() {
         if entry.key() != target {
             entry.value().remove(id);

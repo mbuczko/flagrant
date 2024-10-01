@@ -21,7 +21,7 @@ pub async fn create(
     Ok(env)
 }
 
-pub async fn fetch(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
+pub async fn get_by_id(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
     let env = Environments::fetch_environment(pool, params![environment_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e))?;
@@ -29,7 +29,7 @@ pub async fn fetch(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<E
     Ok(env)
 }
 
-pub async fn fetch_by_name(
+pub async fn get_by_name(
     pool: &Pool<Sqlite>,
     project: &Project,
     name: String,
@@ -41,7 +41,7 @@ pub async fn fetch_by_name(
     Ok(env)
 }
 
-pub async fn fetch_by_prefix(
+pub async fn get_by_prefix(
     pool: &Pool<Sqlite>,
     project: &Project,
     prefix: String,
@@ -56,7 +56,7 @@ pub async fn fetch_by_prefix(
     Ok(envs)
 }
 
-pub async fn fetch_for_project(
+pub async fn get_by_project(
     pool: &Pool<Sqlite>,
     project: &Project,
 ) -> anyhow::Result<Vec<Environment>> {

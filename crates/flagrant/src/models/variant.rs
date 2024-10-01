@@ -120,7 +120,7 @@ pub async fn update(
 ///
 /// Variant is returned along with its value and weight. Control variant weight is auto-calculated
 /// based on sum of other feature variants within given environment.
-pub async fn fetch(
+pub async fn get_by_id(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     variant_id: u16,
@@ -137,7 +137,7 @@ pub async fn fetch(
 /// Variants are returned along with their values and weights. Note that control variant's weight
 /// is calculated dynamically based on the sum of the other variants, it's not persisted directy
 /// in database.
-pub async fn list(
+pub async fn get_all(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     feature: &Feature,

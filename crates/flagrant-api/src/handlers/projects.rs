@@ -12,6 +12,6 @@ pub async fn fetch(
     State(pool): State<SqlitePool>,
     Path(project_id): Path<u16>,
 ) -> Result<Json<Project>, ServiceError> {
-    let project = project::fetch(&pool, project_id).await?;
+    let project = project::get_by_id(&pool, project_id).await?;
     Ok(Json(project))
 }

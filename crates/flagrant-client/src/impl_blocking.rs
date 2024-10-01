@@ -17,26 +17,23 @@ impl HttpClient {
                     Ok(response) => Err(anyhow::anyhow!(response.text()?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
     pub fn put<P: Serialize>(&self, path: String, payload: P) -> anyhow::Result<()> {
         match self {
             HttpClient::Blocking(client, host) => {
-                let result = client
-                    .put(format!("{host}{path}"))
-                    .json(&payload)
-                    .send();
+                let result = client.put(format!("{host}{path}")).json(&payload).send();
 
                 match result {
                     Ok(response) if response.status().is_success() => Ok(()),
                     Ok(response) => Err(anyhow::anyhow!(response.text()?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -47,35 +44,30 @@ impl HttpClient {
     ) -> anyhow::Result<T> {
         match self {
             HttpClient::Blocking(client, host) => {
-                let result = client
-                    .post(format!("{host}{path}"))
-                    .json(&payload)
-                    .send();
+                let result = client.post(format!("{host}{path}")).json(&payload).send();
 
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response.json::<T>()?),
                     Ok(response) => Err(anyhow::anyhow!(response.text()?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
     pub fn delete(&self, path: String) -> anyhow::Result<Response> {
         match self {
             HttpClient::Blocking(client, host) => {
-                let result = client
-                    .delete(format!("{host}{path}"))
-                    .send();
+                let result = client.delete(format!("{host}{path}")).send();
 
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response),
                     Ok(response) => Err(anyhow::anyhow!(response.text()?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 }

@@ -16,7 +16,7 @@ pub async fn create(pool: &Pool<Sqlite>, name: String) -> anyhow::Result<Project
     Ok(project)
 }
 
-pub async fn fetch(pool: &Pool<Sqlite>, project_id: u16) -> anyhow::Result<Project> {
+pub async fn get_by_id(pool: &Pool<Sqlite>, project_id: u16) -> anyhow::Result<Project> {
     let project = Projects::fetch_project(pool, params!(project_id))
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch project", e))?;

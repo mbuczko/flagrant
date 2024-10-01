@@ -26,11 +26,7 @@ pub async fn create(
     let mut tx = pool.begin().await?;
     let mut feature = Features::create_feature(
         &mut *tx,
-        params![
-            environment.project_id,
-            name,
-            is_enabled
-        ],
+        params![environment.project_id, name, is_enabled],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -49,7 +45,7 @@ pub async fn create(
 }
 
 /// Returns feature of given `feature_id` or Error if no feature was found.
-pub async fn fetch(
+pub async fn get_by_id(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     feature_id: u16,
@@ -60,7 +56,7 @@ pub async fn fetch(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::list(pool, environment, &feature)
+    let variants = variant::get_all(pool, environment, &feature)
         .await
         .unwrap_or_default();
 
@@ -69,7 +65,7 @@ pub async fn fetch(
 
 /// Returns feature with exact `name` or Error if no feature was found.
 /// Features names are unique therefore at most one feature is returned.
-pub async fn fetch_by_name(
+pub async fn get_by_name(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     name: String,
@@ -81,7 +77,7 @@ pub async fn fetch_by_name(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::list(pool, environment, &feature)
+    let variants = variant::get_all(pool, environment, &feature)
         .await
         .unwrap_or_default();
 
@@ -90,7 +86,7 @@ pub async fn fetch_by_name(
 
 /// Returns features with name starting by given `prefix`.
 /// For performance reasons each feature is returned with its default variant only.
-pub async fn fetch_by_prefix(
+pub async fn get_by_prefix(
     pool: &Pool<Sqlite>,
     environment: &Environment,
     prefix: String,
@@ -108,7 +104,10 @@ pub async fn fetch_by_prefix(
 
 /// Returns all features for given `environment`.
 /// For performance reasons each feature is returned with its default variant only.
-pub async fn list(pool: &Pool<Sqlite>, environment: &Environment) -> anyhow::Result<Vec<Feature>> {
+pub async fn get_all(
+    pool: &Pool<Sqlite>,
+    environment: &Environment,
+) -> anyhow::Result<Vec<Feature>> {
     Ok(Features::fetch_features_for_environment(
         pool,
         params![environment.project_id, environment.id],
@@ -129,12 +128,9 @@ pub async fn update(
     let mut tx = pool.begin().await?;
 
     // in transaction, update feature properties first
-    Features::update_feature(
-        &mut *tx,
-        params![feature.id, new_name, is_enabled],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
+    Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
     // ...and then the feature value which is stored as default variant
     if let Some(value) = new_value {
@@ -153,14 +149,11 @@ pub async fn update(
 pub async fn bump_up_accumulators(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature: &Feature
+    feature: &Feature,
 ) -> anyhow::Result<()> {
-    Features::update_feature_variants_accumulators(
-        conn,
-        params![environment.id, feature.id],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
+    Features::update_feature_variants_accumulators(conn, params![environment.id, feature.id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
     Ok(())
 }
@@ -172,7 +165,7 @@ pub async fn delete(
 ) -> anyhow::Result<()> {
     let mut tx = pool.begin().await?;
     let conn = tx.acquire().await?;
-    let mut vars = variant::list(pool, environment, feature).await?;
+    let mut vars = variant::get_all(pool, environment, feature).await?;
 
     // sort variants so, that control ones go last in a vector.
     // this is required because of the strict deletion policy - control variants

@@ -1,7 +1,7 @@
 use std::sync::RwLock;
 
 use anyhow::bail;
-use flagrant_types::{Environment, Project, FeatureValue};
+use flagrant_types::{Environment, FeatureValue, Project};
 
 use crate::{http::HttpClient, resource::BaseResource};
 
@@ -13,7 +13,6 @@ pub struct Session {
 }
 
 impl Session {
-
     #[cfg(feature = "blocking")]
     pub fn init(api_host: String, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host);
@@ -21,32 +20,43 @@ impl Session {
 
         Self::build(
             client.get::<Project>(path.clone()).ok(),
-            client.get::<Environment>(format!("{path}/envs/{environment_id}")).ok(),
             client
+                .get::<Environment>(format!("{path}/envs/{environment_id}"))
+                .ok(),
+            client,
         )
     }
 
     #[cfg(not(feature = "blocking"))]
-    pub async fn init(api_host: String, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
+    pub async fn init(
+        api_host: String,
+        project_id: u16,
+        environment_id: u16,
+    ) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host);
         let path = format!("/projects/{project_id}");
 
         Self::build(
             client.get::<Project>(path.clone()).await.ok(),
-            client.get::<Environment>(format!("{path}/envs/{environment_id}")).await.ok(),
+            client
+                .get::<Environment>(format!("{path}/envs/{environment_id}"))
+                .await
+                .ok(),
             client,
         )
     }
 
-    fn build(project: Option<Project>, environment: Option<Environment>, client: HttpClient) -> anyhow::Result<Session> {
+    fn build(
+        project: Option<Project>,
+        environment: Option<Environment>,
+        client: HttpClient,
+    ) -> anyhow::Result<Session> {
         match (project, environment) {
-            (Some(project), Some(environment)) => {
-                Ok(Session {
-                    client,
-                    project: RwLock::new(project),
-                    environment: RwLock::new(environment),
-                })
-            },
+            (Some(project), Some(environment)) => Ok(Session {
+                client,
+                project: RwLock::new(project),
+                environment: RwLock::new(environment),
+            }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
             _ => bail!("Neither project nor environment was found."),
@@ -69,10 +79,12 @@ impl Session {
 
     #[cfg(feature = "blocking")]
     pub fn get_feature(&self, ident: &str, name: &'static str) -> Option<FeatureValue> {
-        let path = self.environment.as_base_resource().subpath(format!("/ident/{ident}/features/{name}"));
+        let path = self
+            .environment
+            .as_base_resource()
+            .subpath(format!("/ident/{ident}/features/{name}"));
         self.client.get(format!("/api/v1{path}")).ok()
     }
-
 }
 
 pub trait Resource {

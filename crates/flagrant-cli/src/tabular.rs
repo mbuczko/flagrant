@@ -26,7 +26,7 @@ impl Tabular for Environment {
                 Layout::Expandable(120),
                 Align::Left,
                 Overflow::Truncate,
-                1
+                1,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
             .add_title_with_align("ENVIRONMENT", TitleAlign::RightOffset(1))
@@ -93,7 +93,13 @@ impl Tabular for Variant {
 
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                1,
+            )
             .add_title_with_align("VARIANT", TitleAlign::RightOffset(1))
             .build(80);
 

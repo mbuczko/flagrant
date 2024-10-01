@@ -1,4 +1,6 @@
-use axum::{routing::{delete, get, post, put}, Router
+use axum::{
+    routing::{delete, get, post, put},
+    Router,
 };
 use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
@@ -30,37 +32,68 @@ pub async fn start_api_server() -> anyhow::Result<()> {
     let app = Router::new()
         // projects
         .route("/projects/:project_id", get(projects::fetch))
-
         // environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
-        .route("/projects/:project_id/envs/name/:env_name", get(environments::fetch_by_name))
-        .route("/projects/:project_id/envs/:env_id", get(environments::fetch_by_id))
-
+        .route(
+            "/projects/:project_id/envs/name/:env_name",
+            get(environments::fetch_by_name),
+        )
+        .route(
+            "/projects/:project_id/envs/:env_id",
+            get(environments::fetch_by_id),
+        )
         // features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))
-        .route("/envs/:environment_id/features/name/:feature_name", get(features::fetch_by_name))
-        .route("/envs/:environment_id/features/:feature_id", get(features::fetch_by_id))
-        .route("/envs/:environment_id/features/:feature_id", put(features::update))
-        .route("/envs/:environment_id/features/:feature_id", delete(features::delete))
-
+        .route(
+            "/envs/:environment_id/features/name/:feature_name",
+            get(features::fetch_by_name),
+        )
+        .route(
+            "/envs/:environment_id/features/:feature_id",
+            get(features::fetch_by_id),
+        )
+        .route(
+            "/envs/:environment_id/features/:feature_id",
+            put(features::update),
+        )
+        .route(
+            "/envs/:environment_id/features/:feature_id",
+            delete(features::delete),
+        )
         // variants
-        .route("/envs/:environment_id/features/:feature_id/variants", get(variants::list))
-        .route("/envs/:environment_id/features/:feature_id/variants", post(variants::create))
-        .route("/envs/:environment_id/variants/:variant_id", get(variants::fetch))
-        .route("/envs/:environment_id/variants/:variant_id", put(variants::update))
-        .route("/envs/:environment_id/variants/:variant_id", delete(variants::delete))
-
+        .route(
+            "/envs/:environment_id/features/:feature_id/variants",
+            get(variants::list),
+        )
+        .route(
+            "/envs/:environment_id/features/:feature_id/variants",
+            post(variants::create),
+        )
+        .route(
+            "/envs/:environment_id/variants/:variant_id",
+            get(variants::fetch),
+        )
+        .route(
+            "/envs/:environment_id/variants/:variant_id",
+            put(variants::update),
+        )
+        .route(
+            "/envs/:environment_id/variants/:variant_id",
+            delete(variants::delete),
+        )
         // public API
-        .nest("/api/v1",
-              Router::new()
-                .route("/envs/:environment_id/ident/:ident/features/:feature_name", get(api::get_feature)))
-
+        .nest(
+            "/api/v1",
+            Router::new().route(
+                "/envs/:environment_id/ident/:ident/features/:feature_name",
+                get(api::get_feature),
+            ),
+        )
         .with_state(pool)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http());
-
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
         .await

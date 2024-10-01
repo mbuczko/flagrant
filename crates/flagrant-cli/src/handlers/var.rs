@@ -2,11 +2,12 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{
-    payloads::VariantRequestPayload, Feature, FeatureValue, Variant,
-};
+use flagrant_types::{payloads::VariantRequestPayload, Feature, FeatureValue, Variant};
 
-use crate::{repl::{multiline::multiline_value, readline::ReplEditor}, tabular::Tabular};
+use crate::{
+    repl::{multiline::multiline_value, readline::ReplEditor},
+    tabular::Tabular,
+};
 
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {

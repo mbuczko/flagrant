@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS projects (
   project_id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS environments (
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS environments (
   project_id INTEGER NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   FOREIGN KEY (project_id) REFERENCES projects(project_id)
 );
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS features (
   name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
   description TEXT CHECK(LENGTH(description) <= 2048),
   is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   version INTEGER NOT NULL DEFAULT 0,
 
   UNIQUE(project_id, name),
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS variants (
   -- environment_id is set only for control value
   environment_id INTEGER,
   value TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   version INTEGER NOT NULL DEFAULT 0,
 
   UNIQUE(feature_id, environment_id),
@@ -47,8 +49,8 @@ CREATE TABLE IF NOT EXISTS variants_weights (
   environment_id INTEGER NOT NULL,
   weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0 and weight <= 100),
   accumulator INTEGER NOT NULL DEFAULT 100,
-  
-  PRIMARY KEY (variant_id, environment_id),  
+
+  PRIMARY KEY (variant_id, environment_id),
   FOREIGN KEY (variant_id) REFERENCES variants(variant_id),
   FOREIGN KEY (environment_id) REFERENCES environments(environment_id)
 );

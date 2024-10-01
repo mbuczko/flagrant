@@ -4,7 +4,10 @@ use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
 
-use crate::{repl::{multiline::multiline_value, readline::ReplEditor}, tabular::Tabular};
+use crate::{
+    repl::{multiline::multiline_value, readline::ReplEditor},
+    tabular::Tabular,
+};
 
 /// Adds a new feature.
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {

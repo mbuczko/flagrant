@@ -3,7 +3,7 @@ use quote::{quote, ToTokens};
 use syn::{parse_macro_input, FnArg, ItemFn};
 
 struct Args {
-   should_fail: bool
+    should_fail: bool,
 }
 
 fn parse_args(attr_args: syn::AttributeArgs) -> syn::Result<Args> {
@@ -11,24 +11,24 @@ fn parse_args(attr_args: syn::AttributeArgs) -> syn::Result<Args> {
     for arg in attr_args {
         match arg {
             syn::NestedMeta::Meta(syn::Meta::NameValue(namevalue))
-                if namevalue.path.is_ident("should_fail") => {
-                    should_fail = match namevalue.lit {
-                        syn::Lit::Bool(litbool) => litbool.value,
-                        _ => {
-                            return Err(syn::Error::new_spanned(
-                                namevalue,
-                                "expected `true` or `false`",
-                            ))
-                        }
-                    };
-                },
+                if namevalue.path.is_ident("should_fail") =>
+            {
+                should_fail = match namevalue.lit {
+                    syn::Lit::Bool(litbool) => litbool.value,
+                    _ => {
+                        return Err(syn::Error::new_spanned(
+                            namevalue,
+                            "expected `true` or `false`",
+                        ))
+                    }
+                };
+            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
                     "expected `should_fail = true | false`",
                 ))
             }
-
         }
     }
     Ok(Args { should_fail })
@@ -55,7 +55,7 @@ pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
             #[should_panic]
         }
     } else {
-        quote! { }
+        quote! {}
     };
 
     quote! {
@@ -65,5 +65,6 @@ pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
             #migrate
             #block
         }
-    }.into()
+    }
+    .into()
 }

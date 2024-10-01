@@ -22,7 +22,7 @@ impl Distributor {
         pool: &Pool<Sqlite>,
         environment: &Environment,
     ) -> anyhow::Result<Variant> {
-        let variants = variant::list(pool, environment, &self.feature).await?;
+        let variants = variant::get_all(pool, environment, &self.feature).await?;
 
         // there should be always at least one variation with a control value
         let variant = variants
@@ -32,7 +32,8 @@ impl Distributor {
 
         let mut tx = pool.begin().await?;
 
-        variant::update_accumulator(&mut tx, environment, &variant, variant.accumulator - 100).await?;
+        variant::update_accumulator(&mut tx, environment, &variant, variant.accumulator - 100)
+            .await?;
         feature::bump_up_accumulators(&mut tx, environment, &self.feature).await?;
 
         tx.commit().await?;

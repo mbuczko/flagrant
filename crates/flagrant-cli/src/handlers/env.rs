@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_client::session::{Session, Resource};
+use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::EnvRequestPayload, Environment};
 
 use crate::{repl::readline::ReplEditor, tabular::Tabular};
