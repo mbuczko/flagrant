@@ -1,10 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use sqlx::{
-    encode::IsNull,
-    sqlite::SqliteValueRef,
-    Decode, Encode, Sqlite, Type,
-};
+use sqlx::{encode::IsNull, sqlite::SqliteValueRef, Decode, Encode, Sqlite, Type};
 use thiserror::Error;
 
 use crate::FeatureValue;

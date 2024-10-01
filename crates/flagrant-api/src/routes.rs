@@ -2,34 +2,13 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use tower_http::compression::CompressionLayer;
-use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use sqlx::{Pool, Sqlite};
 
-use crate::handlers::projects;
-use crate::handlers::{environments, features, variants};
+use crate::api;
+use crate::handlers::{environments, features, projects, variants};
 
-mod api;
-mod errors;
-mod extractors;
-mod handlers;
-
-pub fn init_tracing() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                // axum logs rejections from built-in extractors with the `axum::rejection`
-                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
-                "flagrant_api=debug,flagrant=debug,tower_http=debug,axum::rejection=trace".into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-}
-
-pub async fn start_api_server() -> anyhow::Result<()> {
-    let pool = flagrant::db::init_pool().await?;
-    let app = Router::new()
+pub fn init_router() -> Router<Pool<Sqlite>> {
+    Router::new()
         // projects
         .route("/projects/:project_id", get(projects::fetch))
         // environments
@@ -86,21 +65,6 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         // public API
         .nest(
             "/api/v1",
-            Router::new().route(
-                "/envs/:environment_id/features",
-                get(api::get_features),
-            ),
+            Router::new().route("/envs/:environment_id/features", get(api::get_features)),
         )
-        .with_state(pool)
-        .layer(CompressionLayer::new())
-        .layer(TraceLayer::new_for_http());
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
-        .await
-        .unwrap();
-
-    tracing::info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
-
-    Ok(())
 }

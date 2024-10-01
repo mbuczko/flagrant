@@ -96,7 +96,9 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
-async fn create_feature_with_missing_default_variant_in_other_env(mut conn: PoolConnection<Sqlite>) {
+async fn create_feature_with_missing_default_variant_in_other_env(
+    mut conn: PoolConnection<Sqlite>,
+) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
     let feature = create_feature(&mut conn, &environment1, Some("foo")).await;
@@ -223,7 +225,9 @@ async fn delete_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, Some("foo")).await;
 
-    assert!(feature::delete(&mut conn, &environment, &feature).await.is_ok());
+    assert!(feature::delete(&mut conn, &environment, &feature)
+        .await
+        .is_ok());
     assert!(feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .is_err());
@@ -254,7 +258,9 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    assert!(feature::delete(&mut conn, &environment, &feature).await.is_ok());
+    assert!(feature::delete(&mut conn, &environment, &feature)
+        .await
+        .is_ok());
     assert!(feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .is_err());
@@ -534,7 +540,9 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
 }
 
 #[sqlx::test]
-async fn ignore_default_weight_recalculation_for_exceeding_weight_update(mut conn: PoolConnection<Sqlite>) {
+async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
+    mut conn: PoolConnection<Sqlite>,
+) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, Some("bar")).await;
 
@@ -588,7 +596,9 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(mut con
 }
 
 #[sqlx::test]
-async fn disallow_removing_default_variant_when_other_variants_exist(mut conn: PoolConnection<Sqlite>) {
+async fn disallow_removing_default_variant_when_other_variants_exist(
+    mut conn: PoolConnection<Sqlite>,
+) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, Some("bar")).await;
 
@@ -620,7 +630,9 @@ async fn disallow_removing_default_variant_when_other_variants_exist(mut conn: P
 }
 
 #[sqlx::test]
-async fn allow_removing_default_variant_when_no_other_variants_exist(mut conn: PoolConnection<Sqlite>) {
+async fn allow_removing_default_variant_when_no_other_variants_exist(
+    mut conn: PoolConnection<Sqlite>,
+) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, Some("bar")).await;
     let variant = feature.get_default_variant().unwrap();

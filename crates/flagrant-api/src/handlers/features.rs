@@ -1,13 +1,12 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     Json,
 };
 use flagrant::models::{environment, feature};
 use flagrant_types::{payloads::FeatureRequestPayload, Feature};
 use serde::Deserialize;
-use sqlx::SqlitePool;
 
-use crate::errors::ServiceError;
+use crate::{errors::ServiceError, extractors::DbConnection};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FeatureQueryParams {
@@ -15,23 +14,27 @@ pub(crate) struct FeatureQueryParams {
 }
 
 pub async fn create(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path(environment_id): Path<u16>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let feature =
-        feature::create(&mut conn, &env, payload.name, payload.value, payload.is_enabled).await?;
+    let feature = feature::create(
+        &mut conn,
+        &env,
+        payload.name,
+        payload.value,
+        payload.is_enabled,
+    )
+    .await?;
 
     Ok(Json(feature))
 }
 
 pub async fn fetch_by_id(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
@@ -39,10 +42,9 @@ pub async fn fetch_by_id(
 }
 
 pub async fn fetch_by_name(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_name)): Path<(u16, String)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_name(&mut conn, &env, feature_name).await?;
 
@@ -50,11 +52,10 @@ pub async fn fetch_by_name(
 }
 
 pub async fn update(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
@@ -72,11 +73,10 @@ pub async fn update(
 }
 
 pub async fn list(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
     Path(environment_id): Path<u16>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let features = match params.prefix {
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
@@ -87,10 +87,9 @@ pub async fn list(
 }
 
 pub async fn delete(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<()>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 

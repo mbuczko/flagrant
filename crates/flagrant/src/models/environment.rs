@@ -21,7 +21,10 @@ pub async fn create(
     Ok(env)
 }
 
-pub async fn get_by_id(conn: &mut SqliteConnection, environment_id: u16) -> anyhow::Result<Environment> {
+pub async fn get_by_id(
+    conn: &mut SqliteConnection,
+    environment_id: u16,
+) -> anyhow::Result<Environment> {
     let env = Environments::fetch_environment(conn, params![environment_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e))?;

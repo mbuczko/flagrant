@@ -1,25 +1,20 @@
 use std::str::FromStr;
 
-use axum::{
-    extract::{Path, State},
-    Json,
-};
+use axum::{extract::Path, Json};
 use flagrant::models::{environment, feature, variant};
 use flagrant_types::{payloads::VariantRequestPayload, FeatureValue, Variant};
-use sqlx::SqlitePool;
 
-use crate::errors::ServiceError;
+use crate::{errors::ServiceError, extractors::DbConnection};
 
 /// Creates a new feature variant.
 /// To create a new feature variant, a few pre-conditions must be fulfiled:
 /// - there is still enough weight - all variants' weights should sum up to 100%
 /// - variant should be created for all environments (by default with same value)
 pub async fn create(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
     Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
@@ -30,11 +25,10 @@ pub async fn create(
 
 /// Updates existing variant with provided value/weight.
 pub async fn update(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(u16, u16)>,
     Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
@@ -44,10 +38,9 @@ pub async fn update(
 }
 
 pub async fn fetch(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(u16, u16)>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let variant = variant::get_by_id(&mut conn, &env, variant_id).await?;
 
@@ -55,10 +48,9 @@ pub async fn fetch(
 }
 
 pub async fn list(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let variants = variant::get_all(&mut conn, &env, feature.id).await?;
@@ -67,10 +59,9 @@ pub async fn list(
 }
 
 pub async fn delete(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(u16, u16)>,
 ) -> Result<Json<()>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
 
