@@ -23,6 +23,10 @@ impl IntoResponse for ServiceError {
                 tracing::error!(error);
                 (StatusCode::BAD_REQUEST, error.to_string())
             }
+            Some(FlagrantError::NoIdentity(error)) => {
+                tracing::error!(error);
+                (StatusCode::UNAUTHORIZED, error.to_string())
+            }
             _ => {
                 tracing::error!(error = ?self.0, "Unexpected error");
                 (

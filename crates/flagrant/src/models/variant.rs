@@ -1,10 +1,9 @@
 use anyhow::bail;
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, Row, SqliteConnection};
-use sqlx::{Pool, Sqlite};
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, FeatureValue, Variant};
+use flagrant_types::{Environment, Feature, FeatureValue, IdentityVariant, Variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/variants.sql"]
@@ -47,21 +46,22 @@ pub async fn upsert_default(
 ///
 /// Standard variant holds an alternative value common across all environments, ie. once changed
 /// it's changed immediately for all existing environments. Weight however behaves exactly the
-/// opposite - the change impacts given environment only and similarly to control variant, is
+/// opposite way - the change impacts given environment only and similarly to control variant, is
 /// used to determine how to prioritize variant during balancing process within given environment.
 pub async fn create(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
     value: FeatureValue,
     weight: u8,
 ) -> anyhow::Result<Variant> {
-    let mut tx = pool.begin().await?;
+    let mut tx = conn.begin().await?;
     let variant_id = Variants::create_variant(&mut *tx, params![feature.id, &value], |v| {
         v.get("variant_id")
     })
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e))?;
+
     let weight = Variants::upsert_variant_weight(
         &mut *tx,
         params![environment.id, variant_id, weight],
@@ -85,7 +85,7 @@ pub async fn create(
 /// This function will fail-fast when used to modify control variant which should be altered
 /// with `feature::update` instead.
 pub async fn update(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
     new_value: FeatureValue,
@@ -94,7 +94,7 @@ pub async fn update(
     if variant.is_control() {
         bail!("Control variant cannot be modified this way. Use `feature::update(...)` instead.");
     }
-    let mut tx = pool.begin().await?;
+    let mut tx = conn.begin().await?;
     let feature_id: u16 =
         Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
             v.get("feature_id")
@@ -121,15 +121,28 @@ pub async fn update(
 /// Variant is returned along with its value and weight. Control variant weight is auto-calculated
 /// based on sum of other feature variants within given environment.
 pub async fn get_by_id(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     variant_id: u16,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant(pool, params![environment.id, variant_id])
+    let variant = Variants::fetch_variant(conn, params![environment.id, variant_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variant)
+}
+
+/// Returns variant assigned to given identity
+pub async fn get_by_identity<T: AsRef<str>>(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    identity: T,
+) -> anyhow::Result<Vec<IdentityVariant>> {
+    let variants = Variants::fetch_variants_for_identity(conn, params![environment.id, identity.as_ref()])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+
+    Ok(variants)
 }
 
 /// Returns all variants of given feature.
@@ -138,17 +151,17 @@ pub async fn get_by_id(
 /// is calculated dynamically based on the sum of the other variants, it's not persisted directy
 /// in database.
 pub async fn get_all(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
-    feature: &Feature,
+    feature_id: u16,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants = Variants::fetch_variants_for_feature(pool, params![environment.id, feature.id])
+    let variants = Variants::fetch_variants_for_feature(conn, params![environment.id, feature_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
-    // already exist for other environments. Hence the Error as result.
+    // already exist for other environments - hence the Error as result.
 
     if !variants.iter().any(|v| is_default(environment, v)) {
         bail!(FlagrantError::BadRequest(
@@ -158,11 +171,7 @@ pub async fn get_all(
     Ok(variants)
 }
 
-/// Deletes a variant.
-///
-/// Removes permanently variant of given `variant_id`. This function is supposed to be called
-/// within the outer transaction when entire feature is being removed, hence it takes a connection
-/// (instead of pool) as argument.
+/// Permanently deletes a variant of given id.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,

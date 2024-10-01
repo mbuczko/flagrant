@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use sqlx::{
     encode::IsNull,
-    sqlite::{SqliteArgumentValue, SqliteValueRef},
+    sqlite::SqliteValueRef,
     Decode, Encode, Sqlite, Type,
 };
 use thiserror::Error;
@@ -36,7 +36,10 @@ impl FromStr for FeatureValue {
 }
 
 impl Encode<'_, Sqlite> for FeatureValue {
-    fn encode_by_ref(&self, buf: &mut Vec<SqliteArgumentValue<'_>>) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
         Encode::<Sqlite>::encode(self.to_string(), buf)
     }
 }

@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 use crate::errors::ServiceError;
 
 #[derive(Debug, Deserialize)]
-pub struct FeatureQueryParams {
+pub(crate) struct FeatureQueryParams {
     prefix: Option<String>,
 }
 
@@ -19,9 +19,10 @@ pub async fn create(
     Path(environment_id): Path<u16>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature =
-        feature::create(&pool, &env, payload.name, payload.value, payload.is_enabled).await?;
+        feature::create(&mut conn, &env, payload.name, payload.value, payload.is_enabled).await?;
 
     Ok(Json(feature))
 }
@@ -30,8 +31,9 @@ pub async fn fetch_by_id(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
-    let feature = feature::get_by_id(&pool, &env, feature_id).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     Ok(Json(feature))
 }
@@ -40,8 +42,9 @@ pub async fn fetch_by_name(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_name)): Path<(u16, String)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
-    let feature = feature::get_by_name(&pool, &env, feature_name).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_name(&mut conn, &env, feature_name).await?;
 
     Ok(Json(feature))
 }
@@ -51,11 +54,12 @@ pub async fn update(
     Path((environment_id, feature_id)): Path<(u16, u16)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
-    let feature = feature::get_by_id(&pool, &env, feature_id).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::update(
-        &pool,
+        &mut conn,
         &env,
         &feature,
         payload.name,
@@ -72,10 +76,11 @@ pub async fn list(
     Query(params): Query<FeatureQueryParams>,
     Path(environment_id): Path<u16>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
     let features = match params.prefix {
-        Some(prefix) => feature::get_by_prefix(&pool, &env, prefix).await?,
-        _ => feature::get_all(&pool, &env).await?,
+        Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
+        _ => feature::get_all(&mut conn, &env).await?,
     };
 
     Ok(Json(features))
@@ -85,10 +90,11 @@ pub async fn delete(
     State(pool): State<SqlitePool>,
     Path((environment_id, feature_id)): Path<(u16, u16)>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&pool, environment_id).await?;
-    let feature = feature::get_by_id(&pool, &env, feature_id).await?;
+    let mut conn = pool.acquire().await?;
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
-    feature::delete(&pool, &env, &feature).await?;
+    feature::delete(&mut conn, &env, &feature).await?;
 
     Ok(Json(()))
 }

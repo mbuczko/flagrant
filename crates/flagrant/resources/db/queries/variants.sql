@@ -62,8 +62,16 @@ LEFT JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment
 WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
 ORDER BY weight DESC
 
+-- :name fetch_variants_for_identity :<> :*
+-- :doc Fetches all variants value that given identity is still attached to
+SELECT v.variant_id, f.feature_id, f.name, v.value, s.detached_at IS NOT NULL
+FROM variants v
+JOIN features f USING(feature_id)
+JOIN identities s USING(variant_id)
+WHERE f.is_enabled = true AND s.identity = $1
+
 -- :name fetch_count_of_feature_variants :|| :1
--- :doc Having a variant id, fetch count of all the variants that belong to same feature, including one of known id.
+-- :doc Fetches a number of all the variants that belong to same feature that given variant_id belongs to
 SELECT count(v2.variant_id) AS count
 FROM variants v1 JOIN variants v2 USING(feature_id)
 WHERE COALESCE(v2.environment_id, $1) = $1 AND v1.variant_id = $2

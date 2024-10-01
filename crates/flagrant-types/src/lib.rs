@@ -44,6 +44,15 @@ pub struct Variant {
     pub environment_id: Option<u16>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct IdentityVariant {
+    pub variant_id: u16,
+    pub feature_id: u16,
+    pub name: String,
+    pub value: FeatureValue,
+    pub is_detached: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FeatureValue {
     Text(String),

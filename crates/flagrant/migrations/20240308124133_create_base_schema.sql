@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS features (
   project_id INTEGER NOT NULL,
   name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
   description TEXT CHECK(LENGTH(description) <= 2048),
-  is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   version INTEGER NOT NULL DEFAULT 0,
 
@@ -55,9 +55,9 @@ CREATE TABLE IF NOT EXISTS variants_weights (
   FOREIGN KEY (environment_id) REFERENCES environments(environment_id)
 );
 
-CREATE TABLE IF NOT EXISTS variants_idents (
+CREATE TABLE IF NOT EXISTS identities (
   identity TEXT NOT NULL PRIMARY KEY,
-  variant_id TEXT NOT NULL,
-
+  variant_id INTEGER NOT NULL,
+  detached_at DATETIME,
   FOREIGN KEY (variant_id) REFERENCES variants(variant_id)
 );

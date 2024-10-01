@@ -4,7 +4,7 @@ use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 use hugsqlx::{params, HugSqlx};
 use serde_valid::Validate;
-use sqlx::{sqlite::SqliteRow, Acquire, Pool, Row, Sqlite, SqliteConnection};
+use sqlx::{sqlite::SqliteRow, Connection, Row, SqliteConnection};
 
 use super::variant;
 
@@ -17,13 +17,13 @@ struct Features {}
 /// Feature value is stored as default variant and is environment-specific
 /// which means it may differ across all other environments.
 pub async fn create(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     name: String,
     value: Option<FeatureValue>,
     is_enabled: bool,
 ) -> anyhow::Result<Feature> {
-    let mut tx = pool.begin().await?;
+    let mut tx = conn.begin().await?;
     let mut feature = Features::create_feature(
         &mut *tx,
         params![environment.project_id, name, is_enabled],
@@ -46,17 +46,17 @@ pub async fn create(
 
 /// Returns feature of given `feature_id` or Error if no feature was found.
 pub async fn get_by_id(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: u16,
 ) -> anyhow::Result<Feature> {
-    let feature = Features::fetch_feature(pool, params![feature_id], |row| {
+    let feature = Features::fetch_feature(&mut *conn, params![feature_id], |row| {
         row_to_feature(row, environment)
     })
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(pool, environment, &feature)
+    let variants = variant::get_all(conn, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -66,18 +66,18 @@ pub async fn get_by_id(
 /// Returns feature with exact `name` or Error if no feature was found.
 /// Features names are unique therefore at most one feature is returned.
 pub async fn get_by_name(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
     let feature =
-        Features::fetch_feature_by_name(pool, params![environment.project_id, name], |row| {
+        Features::fetch_feature_by_name(&mut *conn, params![environment.project_id, name], |row| {
             row_to_feature(row, environment)
         })
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(pool, environment, &feature)
+    let variants = variant::get_all(conn, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -87,12 +87,12 @@ pub async fn get_by_name(
 /// Returns features with name starting by given `prefix`.
 /// For performance reasons each feature is returned with its default variant only.
 pub async fn get_by_prefix(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     prefix: String,
 ) -> anyhow::Result<Vec<Feature>> {
     let features = Features::fetch_features_by_pattern(
-        pool,
+        conn,
         params![environment.project_id, environment.id, format!("{prefix}%")],
         |row| row_to_feature(row, environment),
     )
@@ -105,11 +105,11 @@ pub async fn get_by_prefix(
 /// Returns all features for given `environment`.
 /// For performance reasons each feature is returned with its default variant only.
 pub async fn get_all(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
 ) -> anyhow::Result<Vec<Feature>> {
     Ok(Features::fetch_features_for_environment(
-        pool,
+        conn,
         params![environment.project_id, environment.id],
         |row| row_to_feature(row, environment),
     )
@@ -118,14 +118,14 @@ pub async fn get_all(
 }
 
 pub async fn update(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
     new_name: String,
     new_value: Option<FeatureValue>,
     is_enabled: bool,
 ) -> anyhow::Result<()> {
-    let mut tx = pool.begin().await?;
+    let mut tx = conn.begin().await?;
 
     // in transaction, update feature properties first
     Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
@@ -134,7 +134,7 @@ pub async fn update(
 
     // ...and then the feature value which is stored as default variant
     if let Some(value) = new_value {
-        variant::upsert_default(&mut tx, environment, feature, value)
+        variant::upsert_default(&mut *tx, environment, feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
                 Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
@@ -149,9 +149,9 @@ pub async fn update(
 pub async fn bump_up_accumulators(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature: &Feature,
+    feature_id: u16,
 ) -> anyhow::Result<()> {
-    Features::update_feature_variants_accumulators(conn, params![environment.id, feature.id])
+    Features::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
@@ -159,13 +159,12 @@ pub async fn bump_up_accumulators(
 }
 
 pub async fn delete(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<()> {
-    let mut tx = pool.begin().await?;
-    let conn = tx.acquire().await?;
-    let mut vars = variant::get_all(pool, environment, feature).await?;
+    let mut tx = conn.begin().await?;
+    let mut vars = variant::get_all(&mut *tx, environment, feature.id).await?;
 
     // sort variants so, that control ones go last in a vector.
     // this is required because of the strict deletion policy - control variants
@@ -178,7 +177,7 @@ pub async fn delete(
     // in transaction, remove all feature variants first.
     // because of the sorting done before, control variant will be deleted last.
     for var in vars {
-        variant::delete(conn, environment, &var).await?;
+        variant::delete(&mut *tx, environment, &var).await?;
     }
 
     // ...and then remove feature value and entire feature definition

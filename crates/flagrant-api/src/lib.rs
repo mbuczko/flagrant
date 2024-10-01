@@ -28,7 +28,7 @@ pub fn init_tracing() {
 }
 
 pub async fn start_api_server() -> anyhow::Result<()> {
-    let pool = flagrant::init().await?;
+    let pool = flagrant::db::init_pool().await?;
     let app = Router::new()
         // projects
         .route("/projects/:project_id", get(projects::fetch))
@@ -87,8 +87,8 @@ pub async fn start_api_server() -> anyhow::Result<()> {
         .nest(
             "/api/v1",
             Router::new().route(
-                "/envs/:environment_id/ident/:ident/features/:feature_name",
-                get(api::get_feature),
+                "/envs/:environment_id/features",
+                get(api::get_features),
             ),
         )
         .with_state(pool)

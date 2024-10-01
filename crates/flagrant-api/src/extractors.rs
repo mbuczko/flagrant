@@ -1,27 +1,25 @@
-// use axum::{
-//     extract::{FromRef, FromRequestParts},
-//     http::request::Parts,
-//     RequestPartsExt,
-// };
-// use axum_extra::{headers, TypedHeader};
-// use sqlx::{Pool, Sqlite};
+use axum::{
+    async_trait,
+    extract::FromRequestParts,
+    http::request::Parts,
+};
+use flagrant::errors::FlagrantError;
 
-// use crate::{cookie::Cookie, errors};
+use crate::errors::ServiceError;
 
-// impl<S> FromRequestParts<S> for Cookie
-// where
-//     Pool<Sqlite>: FromRef<S>,
-//     S: Send + Sync,
-// {
-//     type Rejection = errors::ServiceError;
+pub struct Identity(pub String);
 
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let cookies = parts
-//             .extract::<TypedHeader<headers::Cookie>>()
-//             .await
-//             .map_err(|err| err.into());
-//     }
+#[async_trait]
+impl<S> FromRequestParts<S> for Identity
+where
+    S: Send + Sync + 'static,
+{
+    type Rejection = ServiceError;
 
-//     // https://github.com/tokio-rs/axum/blob/b6b203b3065e4005bda01efac8429176da055ae2/examples/oauth/src/main.rs#L127
-//     //
-// }
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        if let Some(Ok(header)) = parts.headers.get("X-Flagrant-Identity").map(|h| h.to_str()) {
+            return Ok(Identity(header.to_owned()) );
+        }
+        Err(FlagrantError::NoIdentity("No identity header found").into())
+    }
+}

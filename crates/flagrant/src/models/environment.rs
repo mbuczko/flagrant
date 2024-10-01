@@ -1,5 +1,5 @@
 use hugsqlx::{params, HugSqlx};
-use sqlx::{Pool, Sqlite};
+use sqlx::SqliteConnection;
 
 use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Project};
@@ -9,20 +9,20 @@ use flagrant_types::{Environment, Project};
 struct Environments {}
 
 pub async fn create(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     project: &Project,
     name: String,
     description: Option<String>,
 ) -> anyhow::Result<Environment> {
-    let env = Environments::create_environment(pool, params![project.id, name, description])
+    let env = Environments::create_environment(conn, params![project.id, name, description])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e))?;
 
     Ok(env)
 }
 
-pub async fn get_by_id(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Result<Environment> {
-    let env = Environments::fetch_environment(pool, params![environment_id])
+pub async fn get_by_id(conn: &mut SqliteConnection, environment_id: u16) -> anyhow::Result<Environment> {
+    let env = Environments::fetch_environment(conn, params![environment_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e))?;
 
@@ -30,11 +30,11 @@ pub async fn get_by_id(pool: &Pool<Sqlite>, environment_id: u16) -> anyhow::Resu
 }
 
 pub async fn get_by_name(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     project: &Project,
     name: String,
 ) -> anyhow::Result<Environment> {
-    let env = Environments::fetch_environment_by_name(pool, params![project.id, name])
+    let env = Environments::fetch_environment_by_name(conn, params![project.id, name])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch environment", e))?;
 
@@ -42,12 +42,12 @@ pub async fn get_by_name(
 }
 
 pub async fn get_by_prefix(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     project: &Project,
     prefix: String,
 ) -> anyhow::Result<Vec<Environment>> {
     let envs = Environments::fetch_environments_by_pattern::<_, Environment>(
-        pool,
+        conn,
         params![project.id, format!("{}%", prefix)],
     )
     .await
@@ -57,10 +57,10 @@ pub async fn get_by_prefix(
 }
 
 pub async fn get_by_project(
-    pool: &Pool<Sqlite>,
+    conn: &mut SqliteConnection,
     project: &Project,
 ) -> anyhow::Result<Vec<Environment>> {
-    let envs = Environments::fetch_environments_for_project(pool, params![project.id])
+    let envs = Environments::fetch_environments_for_project(conn, params![project.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of environments", e))?;
 
