@@ -56,8 +56,17 @@ CREATE TABLE IF NOT EXISTS variants_weights (
 );
 
 CREATE TABLE IF NOT EXISTS identities (
-  identity TEXT NOT NULL PRIMARY KEY,
-  variant_id INTEGER NOT NULL,
+  identity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  identity TEXT NOT NULL UNIQUE,
+  last_seen_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS identities_variants (
+  identity_id INTEGER NOT NULL REFERENCES identities,
+  feature_id INTEGER NOT NULL REFERENCES features,
+  variant_id INTEGER NOT NULL REFERENCES variants,
   detached_at DATETIME,
-  FOREIGN KEY (variant_id) REFERENCES variants(variant_id)
+
+  UNIQUE(identity_id, feature_id)
 );

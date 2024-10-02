@@ -1,13 +1,9 @@
-use axum::{
-    extract::{Path, State},
-    Json,
-};
+use axum::{extract::Path, Json};
 use flagrant::models::{environment, identity};
 use flagrant_types::FeatureValue;
 use serde::Serialize;
-use sqlx::SqlitePool;
 
-use crate::{errors::ServiceError, extractors::Identity};
+use crate::{errors::ServiceError, extractors::{DbConnection, Identity}};
 
 #[derive(Serialize)]
 pub(crate) struct FeatureVariant<'a> {
@@ -18,11 +14,10 @@ pub(crate) struct FeatureVariant<'a> {
 }
 
 pub async fn get_features<'a>(
-    State(pool): State<SqlitePool>,
+    DbConnection(mut conn): DbConnection,
     Path(environment_id): Path<u16>,
     Identity(identity): Identity,
 ) -> Result<Json<Vec<FeatureVariant<'a>>>, ServiceError> {
-    let mut conn = pool.acquire().await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let variants = identity::get_variants(&mut conn, &env, identity)
         .await?

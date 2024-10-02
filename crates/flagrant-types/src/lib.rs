@@ -59,6 +59,7 @@ pub struct Variant {
 pub struct IdentityVariant {
     pub variant_id: u16,
     pub feature_id: u16,
+    pub identity_id: Option<u16>,
     pub name: String,
     pub value: FeatureValue,
     pub is_detached: bool,

@@ -64,11 +64,14 @@ ORDER BY weight DESC
 
 -- :name fetch_variants_for_identity :<> :*
 -- :doc Fetches all variants value that given identity is still attached to
-SELECT v.variant_id, f.feature_id, f.name, v.value, s.detached_at IS NOT NULL
-FROM variants v
-JOIN features f USING(feature_id)
-JOIN identities s USING(variant_id)
-WHERE f.is_enabled = true AND s.identity = $1
+SELECT f.feature_id, v.variant_id, f.name, v.value, iv.detached_at IS NOT NULL AS is_detached, max(iv.identity_id) AS identity_id
+FROM features f
+JOIN variants v USING(feature_id)
+LEFT JOIN identities i ON i.identity = $2
+LEFT JOIN identities_variants iv ON iv.variant_id = v.variant_id AND iv.identity_id = i.identity_id
+WHERE f.is_enabled = true AND COALESCE(v.environment_id, $1) = $1
+GROUP BY f.feature_id
+ORDER BY identity_id DESC
 
 -- :name fetch_count_of_feature_variants :|| :1
 -- :doc Fetches a number of all the variants that belong to same feature that given variant_id belongs to
@@ -84,4 +87,3 @@ RETURNING feature_id
 -- :name delete_variant_weights :<> :!
 -- :doc Removes all variant weights
 DELETE FROM variants_weights WHERE variant_id = $1
-
