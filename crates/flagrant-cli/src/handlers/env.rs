@@ -2,7 +2,7 @@ use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
 use flagrant_types::{payloads::EnvRequestPayload, Environment};
 
-use crate::{repl::readline::ReplEditor, tabular::Tabular};
+use crate::{repl::readline::ReplEditor, printer::tabular::Tabular};
 
 /// Adds a new Environment
 pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {

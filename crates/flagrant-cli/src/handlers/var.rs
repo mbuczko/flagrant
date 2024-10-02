@@ -6,7 +6,7 @@ use flagrant_types::{payloads::VariantRequestPayload, Feature, FeatureValue, Var
 
 use crate::{
     repl::{multiline::multiline_value, readline::ReplEditor},
-    tabular::Tabular,
+    printer::tabular::Tabular,
 };
 
 pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {

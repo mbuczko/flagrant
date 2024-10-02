@@ -6,7 +6,7 @@ use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
 
 use crate::{
     repl::{multiline::multiline_value, readline::ReplEditor},
-    tabular::Tabular,
+    printer::tabular::Tabular,
 };
 
 /// Adds a new feature.
