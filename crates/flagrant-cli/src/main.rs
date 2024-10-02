@@ -4,8 +4,8 @@ use flagrant_client::session::Session;
 use repl::readline;
 
 mod handlers;
-mod repl;
 mod printer;
+mod repl;
 
 const API_HOST: &str = "http://localhost:3030";
 

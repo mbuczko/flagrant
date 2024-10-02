@@ -2,11 +2,11 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{payloads::FeatureRequestPayload, Feature, FeatureValue};
+use flagrant_types::{payload::FeatureRequestPayload, Feature, FeatureValue};
 
 use crate::{
-    repl::{multiline::multiline_value, readline::ReplEditor},
     printer::tabular::Tabular,
+    repl::{multiline::multiline_value, readline::ReplEditor},
 };
 
 /// Adds a new feature.

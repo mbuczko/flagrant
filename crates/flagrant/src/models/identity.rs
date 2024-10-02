@@ -16,9 +16,9 @@ pub async fn get_variants(
     identity: String,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let mut tx = conn.begin().await?;
-    let mut variants = Vec::new();
+    let mut variants = variant::get_by_identity(&mut tx, environment, &identity).await?;
 
-    for mut var in variant::get_by_identity(&mut tx, environment, &identity).await? {
+    for var in variants.iter_mut() {
         // identity detached from a variant should be distributed to another one
         if var.is_detached {
             let variant = distributor::distribute(&mut tx, environment, var.feature_id).await?;
@@ -29,15 +29,10 @@ pub async fn get_variants(
                     FlagrantError::QueryFailed("Could not attach identity to given variant", e)
                 })?;
 
-            var = IdentityVariant {
-                feature_id: var.feature_id,
-                variant_id: variant.id,
-                value: variant.value,
-                name: var.name,
-                is_detached: false,
-            };
+            var.variant_id = variant.id;
+            var.value = variant.value;
+            var.is_detached = false;
         }
-        variants.push(var);
     }
     Ok(variants)
 }

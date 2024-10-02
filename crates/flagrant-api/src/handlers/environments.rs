@@ -3,7 +3,7 @@ use axum::{
     Json,
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{payloads::EnvRequestPayload, Environment};
+use flagrant_types::{payload::EnvRequestPayload, Environment};
 use serde::Deserialize;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
