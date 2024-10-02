@@ -63,7 +63,7 @@ WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
 ORDER BY weight DESC
 
 -- :name fetch_variants_for_identity :<> :*
--- :doc Fetches all variants value that given identity is still attached to
+-- :doc Fetches feature variants for given identity. Variants attached to identity by distributor are denoted by non-NULL identity_id field.
 SELECT f.feature_id, v.variant_id, f.name, v.value, iv.detached_at IS NOT NULL AS is_detached, max(iv.identity_id) AS identity_id
 FROM features f
 JOIN variants v USING(feature_id)
@@ -74,7 +74,7 @@ GROUP BY f.feature_id
 ORDER BY identity_id DESC
 
 -- :name fetch_count_of_feature_variants :|| :1
--- :doc Fetches a number of all the variants that belong to same feature that given variant_id belongs to
+-- :doc Fetches a number of variants that belong to same feature that given variant_id belongs to
 SELECT count(v2.variant_id) AS count
 FROM variants v1 JOIN variants v2 USING(feature_id)
 WHERE COALESCE(v2.environment_id, $1) = $1 AND v1.variant_id = $2

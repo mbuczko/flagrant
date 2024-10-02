@@ -5,3 +5,4 @@ history.txt
 *.db-shm
 *.db-wal
 *.db
+*.org
