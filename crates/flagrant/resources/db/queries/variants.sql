@@ -11,30 +11,39 @@ VALUES($1, $2, $3)
 ON CONFLICT(environment_id, feature_id) DO UPDATE SET value = excluded.value
 RETURNING variant_id
 
--- :name upsert_default_variant_weight :<> :!
+-- :name upsert_default_variant_weight :<> :1
 -- :doc Inserts or updates a weight for feature control variant in given environment
-WITH calc AS (select coalesce(100 - sum(weight), 100) AS remaining_weight
-   from variants_weights w
-   join variants v using(variant_id)
-   where feature_id = $2
-     -- exclude control value from sum...
-     and v.environment_id is null
-     -- ...and sum all the other variant weights within given environment
-     and w.environment_id = $1)
-INSERT INTO variants_weights(environment_id, variant_id, weight, accumulator)
-VALUES(
+WITH calc AS
+  (select coalesce(100 - sum(weight), 100) AS remaining_weight, $1 as environment_id
+    from variant_weights w
+    join variants v using(variant_id)
+    where feature_id = $2
+      -- exclude control value from sum...
+      and v.environment_id is null
+      -- ...and sum all the other variant weights within given environment
+      and w.environment_id = $1)
+INSERT INTO variant_weights(environment_id, variant_id, accumulator, weight, weight_diff)
+SELECT
   $1,
-  (select variant_id from variants where environment_id = $1 and feature_id = $2),
-  (select remaining_weight from calc),
-  (select remaining_weight from calc))
-ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight, accumulator = excluded.accumulator
+  v.variant_id,
+  calc.remaining_weight,
+  calc.remaining_weight,
+  null
+FROM variants v
+JOIN calc USING(environment_id)
+LEFT JOIN variant_weights vw USING(variant_id)
+WHERE v.environment_id = $1 AND v.feature_id = $2
+ON CONFLICT(environment_id, variant_id) DO
+  UPDATE SET accumulator = excluded.accumulator,
+             weight = excluded.weight,
+             weight_diff = excluded.weight - weight
+RETURNING variant_id, weight, weight_diff
 
--- :name upsert_variant_weight :|| :1
+-- :name upsert_variant_weight :<> :!
 -- :doc Inserts or updates a weight (and accumulator) for feature variant in given environment
-INSERT INTO variants_weights(environment_id, variant_id, weight, accumulator)
+INSERT INTO variant_weights(environment_id, variant_id, weight, accumulator)
 VALUES($1, $2, $3, $3)
 ON CONFLICT(environment_id, variant_id) DO UPDATE SET weight = excluded.weight, accumulator = excluded.accumulator
-RETURNING weight
 
 -- :name update_variant_value :|| :1
 -- :doc Updates value of given feature variant
@@ -44,21 +53,21 @@ RETURNING feature_id
 
 -- :name update_variant_accumulator :<> :!
 -- :doc Updates accumulator of given feature variant
-UPDATE variants_weights SET accumulator = $3
+UPDATE variant_weights SET accumulator = $3
 WHERE environment_id = $1 AND variant_id = $2
 
 -- :name fetch_variant :<> :1
 -- :doc Fetches a variant of given id. Control variant value is automatically calculated.
 SELECT v.variant_id, v.environment_id, feature_id, value, COALESCE(weight, 0) AS weight, accumulator
 FROM variants v
-LEFT JOIN variants_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
+LEFT JOIN variant_weights vw ON v.variant_id = vw.variant_id AND vw.environment_id = $1
 WHERE v.variant_id = $2
 
 -- :name fetch_variants_for_feature :<> :*
 -- :doc Fetches all variants for given feature
 SELECT v.variant_id, v.environment_id, v.value, COALESCE(vw.weight, 0) AS weight, vw.accumulator
 FROM variants v
-LEFT JOIN variants_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $1
+LEFT JOIN variant_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $1
 WHERE feature_id = $2 AND COALESCE(v.environment_id, $1) = $1
 ORDER BY weight DESC
 
@@ -68,7 +77,7 @@ SELECT f.feature_id, v.variant_id, f.name, v.value, iv.detached_at IS NOT NULL A
 FROM features f
 JOIN variants v USING(feature_id)
 LEFT JOIN identities i ON i.identity = $2
-LEFT JOIN identities_variants iv ON iv.variant_id = v.variant_id AND iv.identity_id = i.identity_id
+LEFT JOIN identity_variants iv ON iv.variant_id = v.variant_id AND iv.identity_id = i.identity_id
 WHERE f.is_enabled = true AND COALESCE(v.environment_id, $1) = $1
 GROUP BY f.feature_id
 ORDER BY identity_id DESC
@@ -86,4 +95,4 @@ RETURNING feature_id
 
 -- :name delete_variant_weights :<> :!
 -- :doc Removes all variant weights
-DELETE FROM variants_weights WHERE variant_id = $1
+DELETE FROM variant_weights WHERE variant_id = $1

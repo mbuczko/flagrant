@@ -1,6 +1,6 @@
-use flagrant_types::{Environment, IdentityVariant};
+use flagrant_types::{Environment, IdentityVariant, Variant};
 use hugsqlx::{params, HugSqlx};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError};
 
@@ -30,15 +30,20 @@ pub async fn get_variants(
             let variant = distributor::distribute(&mut tx, environment, var.feature_id).await?;
 
             if identity_id.is_none() {
-                let (id, _) = Identities::upsert_identity::<_, (u16, String)>(&mut *tx, params![&identity]).await?;
+                let (id, _) =
+                    Identities::upsert_identity::<_, (u16, String)>(&mut *tx, params![&identity])
+                        .await?;
                 identity_id = Some(id);
             }
 
-            Identities::upsert_identity_variant(&mut *tx, params![identity_id, var.feature_id, variant.id])
-                .await
-                .map_err(|e| {
-                    FlagrantError::QueryFailed("Could not attach identity to given variant", e)
-                })?;
+            Identities::upsert_identity_variant(
+                &mut *tx,
+                params![identity_id, environment.id, var.feature_id, variant.id],
+            )
+            .await
+            .map_err(|e| {
+                FlagrantError::QueryFailed("Could not attach identity to given variant", e)
+            })?;
 
             var.variant_id = variant.id;
             var.value = variant.value;
@@ -47,4 +52,22 @@ pub async fn get_variants(
 
     tx.commit().await?;
     Ok(variants)
+}
+
+pub async fn detach_identities(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    variant_id: u16,
+    weight: u8,
+) -> anyhow::Result<()> {
+    let idents_count: u32 =
+        Identities::fetch_identities_count(&mut *conn, params![], |row| row.get("count")).await?;
+    let max_attached = idents_count * (weight as u32) / 100;
+
+    Identities::detach_identities_from_variant(
+        &mut *conn,
+        params![environment.id, variant_id, max_attached],
+    )
+    .await?;
+    Ok(())
 }

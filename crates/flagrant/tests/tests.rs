@@ -122,7 +122,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(
 
     // after adding default variant, a list consisting of default- and previously created
     // variant should be returned.
-    variant::upsert_default(
+    variant::create_control(
         &mut conn,
         &environment2,
         &feature,
@@ -143,7 +143,7 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
     let environment2 = create_environment(&mut conn, &project).await;
     let feature = create_feature(&mut conn, &environment1, Some("foo")).await;
 
-    variant::upsert_default(
+    variant::create_control(
         &mut conn,
         &environment2,
         &feature,
@@ -388,7 +388,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
     .await
     .unwrap();
 
-    variant::upsert_default(
+    variant::create_control(
         &mut conn,
         &environment2,
         &feature,

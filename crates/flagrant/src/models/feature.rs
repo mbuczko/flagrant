@@ -34,7 +34,7 @@ pub async fn create(
 
     // if default value was provided, turn it into a control variant.
     if let Some(value) = value {
-        let variant = variant::upsert_default(&mut tx, environment, &feature, value).await?;
+        let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
         feature.variants.push(variant);
     }
 
@@ -134,7 +134,7 @@ pub async fn update(
 
     // ...and then the feature value which is stored as default variant
     if let Some(value) = new_value {
-        variant::upsert_default(&mut *tx, environment, feature, value)
+        variant::create_control(&mut *tx, environment, feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
                 Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
