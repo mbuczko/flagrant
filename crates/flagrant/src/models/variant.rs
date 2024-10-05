@@ -13,16 +13,18 @@ struct Variants {}
 
 /// Creates or updates control variant of given feature.
 ///
-/// Control variant represents environment-specific feature value being returned when no other
-/// variants have been defined yet. It's also specific in a way how weight is being constrained:
-/// - when created, weight is set by default to 100%
-/// - weight cannot be updated manually - it is auto-adjusted each time new variant is being added,
-///   modified or removed so, that all feature variants weights at every single moment should sum
-///   up to 100%.
+/// Control variant represents environment-specific feature value being returned when either
+/// distributor decided so based on underlaying distribution strategy, or simply no other
+/// variant has been defined yet. It's important to understand that control variant weight is
+/// an auto-adjustable value, being calculated according to following rules:
+///
+/// - when created, weight is initially set up to 100%
+/// - each time new feature variant is being added, modified or removed control weight adjusts
+///   itself so, that all feature variants weights at every single moment sum to 100%.
 ///
 /// Control variant, similar to standard variants is optional. No such a variant simply means
 /// that feature has no default value defined yet. This also comes with important consequence -
-/// it is impossible to create additional variants having no default variant created in a first
+/// it is impossible to create additional variants having no control variant created in a first
 /// place.
 pub async fn create_control(
     conn: &mut SqliteConnection,
@@ -47,10 +49,10 @@ pub async fn create_control(
 
 /// Creates a feature variant with given weight and value.
 ///
-/// Feature variant holds an alternative value common across all environments, ie. once changed
-/// it's changed immediately for all existing environments. Weight however behaves exactly the
-/// opposite way - the change impacts given environment only and similarly to control variant, is
-/// used to determine how to prioritize variant during balancing process within given environment.
+/// Non-control feature variants hold an alternative values shared by defined environments, ie.
+/// any update on feature value impacts immediately all the environments. Weights however behave
+/// exactly the opposite way - the change impacts given environment only and similarly to control,
+/// variant is used to determine how to prioritize variant during distribution process.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -76,14 +78,10 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
-/// Updates standard variant with `new_value` and `new_weight`.
+/// Updates feature variant with `new_value` and `new_weight`.
 ///
-/// Standard variant represents alternative feature value which is common across environments
-/// and, based on weight and distribution strategy, may be prioritized over other variants
-/// during balancing process.
-///
-/// This function will fail-fast when used to modify control variant which should be altered
-/// with `feature::update` instead.
+/// This function fails-fast when used to modify control variant which, because of auto-adjustable
+/// weight, should be altered with `feature::update` function instead.
 pub async fn update(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -92,7 +90,7 @@ pub async fn update(
     new_weight: u8,
 ) -> anyhow::Result<()> {
     if variant.is_control() {
-        bail!("Control variant cannot be updated as it's being auto-adjusted.");
+        bail!("Control variant cannot be updated with new weight as it auto-adjusts itself.");
     }
 
     let mut tx = conn.begin().await?;
