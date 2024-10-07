@@ -22,22 +22,19 @@ WITH calc AS
       and v.environment_id is null
       -- ...and sum all the other variant weights within given environment
       and w.environment_id = $1)
-INSERT INTO variant_weights(environment_id, variant_id, accumulator, weight, weight_diff)
+INSERT INTO variant_weights(environment_id, variant_id, accumulator, weight)
 SELECT
   $1,
   v.variant_id,
   calc.remaining_weight,
-  calc.remaining_weight,
-  null
+  calc.remaining_weight
 FROM variants v
 JOIN calc USING(environment_id)
 LEFT JOIN variant_weights vw USING(variant_id)
 WHERE v.environment_id = $1 AND v.feature_id = $2
-ON CONFLICT(environment_id, variant_id) DO
-  UPDATE SET accumulator = excluded.accumulator,
-             weight = excluded.weight,
-             weight_diff = excluded.weight - weight
-RETURNING variant_id, weight, weight_diff
+ON CONFLICT(environment_id, variant_id)
+DO UPDATE SET accumulator = excluded.accumulator, weight = excluded.weight
+RETURNING variant_id, weight
 
 -- :name upsert_variant_weight :<> :!
 -- :doc Inserts or updates a weight (and accumulator) for feature variant in given environment

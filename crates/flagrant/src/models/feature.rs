@@ -14,8 +14,9 @@ struct Features {}
 
 /// Creates a new on/off feature with given `name` and optional `value`.
 ///
-/// Feature value is stored as default variant and is environment-specific
-/// which means it may differ across all other environments.
+/// Feature value is stored as environment-specific control variant which means
+/// it may be different in every other environment and any change on value impacts
+/// given environment only.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -85,7 +86,7 @@ pub async fn get_by_name(
 }
 
 /// Returns features with name starting by given `prefix`.
-/// For performance reasons each feature is returned with its default variant only.
+/// For performance reasons each feature is returned with its control variant only.
 pub async fn get_by_prefix(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -103,7 +104,7 @@ pub async fn get_by_prefix(
 }
 
 /// Returns all features for given `environment`.
-/// For performance reasons each feature is returned with its default variant only.
+/// For performance reasons each feature is returned with its control variant only.
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -134,7 +135,7 @@ pub async fn update(
 
     // ...and then the feature value which is stored as default variant
     if let Some(value) = new_value {
-        variant::create_control(&mut *tx, environment, feature, value)
+        variant::create_control(&mut tx, environment, feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
                 Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
@@ -164,7 +165,7 @@ pub async fn delete(
     feature: &Feature,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let mut vars = variant::get_all(&mut *tx, environment, feature.id).await?;
+    let mut vars = variant::get_all(&mut tx, environment, feature.id).await?;
 
     // sort variants so, that control ones go last in a vector.
     // this is required because of the strict deletion policy - control variants
@@ -177,7 +178,7 @@ pub async fn delete(
     // in transaction, remove all feature variants first.
     // because of the sorting done before, control variant will be deleted last.
     for var in vars {
-        variant::delete(&mut *tx, environment, &var).await?;
+        variant::delete(&mut tx, environment, &var).await?;
     }
 
     // ...and then remove feature value and entire feature definition

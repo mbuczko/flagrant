@@ -50,9 +50,9 @@ pub async fn create_control(
 /// Creates a feature variant with given weight and value.
 ///
 /// Non-control feature variants hold an alternative values shared by defined environments, ie.
-/// any update on feature value impacts immediately all the environments. Weights however behave
-/// exactly the opposite way - the change impacts given environment only and similarly to control,
-/// variant is used to determine how to prioritize variant during distribution process.
+/// any update on feature value is reflected immediately in every environments. Weights on the
+/// other hand prioritize the variant during distribution process and behave exactly the opposite
+/// way - the change impacts single environment only.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -71,7 +71,13 @@ pub async fn create(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
-    // each newly added variant decreases control variant weight
+    // Each newly added variant decreases control variant weight, so it is
+    // crucial to reconcile identities already attached to control variant.
+    //
+    // In this case reconciliation comes down to marking number of exceeding
+    // identities as detached. Detached identities are considered as "free to
+    // re-attach" to the other variant during distribution process.
+
     update_control_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
 
@@ -80,7 +86,7 @@ pub async fn create(
 
 /// Updates feature variant with `new_value` and `new_weight`.
 ///
-/// This function fails-fast when used to modify control variant which, because of auto-adjustable
+/// This function fails-fast when used to modify control variant which, due to auto-adjustable
 /// weight, should be altered with `feature::update` function instead.
 pub async fn update(
     conn: &mut SqliteConnection,
@@ -92,7 +98,6 @@ pub async fn update(
     if variant.is_control() {
         bail!("Control variant cannot be updated with new weight as it auto-adjusts itself.");
     }
-
     let mut tx = conn.begin().await?;
     let feature_id: u16 =
         Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
@@ -105,10 +110,14 @@ pub async fn update(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
 
-    // identity::detach_identities(&mut tx, environment, variant, new_weight).await?;
+    // Similarly to variant creation, update needs to take care of attached identities too.
+    // No matter if variant weight goes up or down, update impacts identities assigned both
+    // to control variant (as its weight needs to accomodate the change) and variant provided
+    // here as argument.
+
+    identity::reconcile_attached_identities(&mut tx, environment, variant.id, new_weight).await?;
 
     update_control_weight(&mut tx, environment, feature_id).await?;
-
     tx.commit().await?;
 
     Ok(())
@@ -144,11 +153,8 @@ pub async fn get_by_identity<T: AsRef<str>>(
     Ok(variants)
 }
 
-/// Returns all variants of given feature.
-///
-/// Variants are returned along with their values and weights. Note that control variant's weight
-/// is calculated dynamically based on the sum of the other variants, it's not persisted directy
-/// in database.
+/// Returns all variants of given feature. Variants are returned along with their values and weights.
+/// Returns Error when no feature value has been set.
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -170,7 +176,10 @@ pub async fn get_all(
     Ok(variants)
 }
 
-/// Permanently deletes a variant of given id.
+/// Permanently deletes a variant of given id and updates control variant weight if necessary.
+///
+/// Returns error on control variant deletion when there are still other variants existing.
+/// Control variant should be deleted as a last one - when no other variants already exist.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -185,7 +194,7 @@ pub async fn delete(
     .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
-        bail!(FlagrantError::BadRequest("Could not remove default variant as there are still other variants defined for this feature"));
+        bail!(FlagrantError::BadRequest("Could not remove control variant as there are still other variants existing for this feature"));
     }
 
     Variants::delete_variant_weights(&mut *tx, params![variant.id])
@@ -205,7 +214,7 @@ pub async fn delete(
     Ok(())
 }
 
-pub async fn update_accumulator(
+pub(crate) async fn update_accumulator(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
@@ -218,23 +227,25 @@ pub async fn update_accumulator(
     Ok(())
 }
 
-/// Inserts or updates feature control variant weight.
-/// Weight is calculated based on sum of all the other feature variants weights within given environment.
+/// Inserts or updates control variant weight. Control weight accomodates difference between 100% and
+/// sum of all the other variants weights within single environment.
+/// This function also takes care of already attached identities number of which may happen to exceed
+/// the weight. In this case, exceeding identities (starting from the earliest attached ones) are marked
+/// as "detatched" and eventually re-assigned by distributor to other variants.
+///
 /// Returns new control variant weight.
 async fn update_control_weight(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: u16,
 ) -> anyhow::Result<u8> {
-    let (variant_id, weight, weight_diff) = Variants::upsert_default_variant_weight::<_, (u16, u8, Option<i8>)>(&mut *conn, params![environment.id, feature_id])
+    let (variant_id, weight) = Variants::upsert_default_variant_weight::<_, (u16, u8)>(&mut *conn, params![environment.id, feature_id])
         .await
         .map_err(|e| {
             FlagrantError::QueryFailed("Could not upsert default variant weight", e)
         })?;
 
-    if let Some(diff) = weight_diff && diff.is_negative() {
-        identity::detach_identities(conn, environment, variant_id, weight).await?;
-    }
+    identity::reconcile_attached_identities(conn, environment, variant_id, weight).await?;
     Ok(weight)
 }
 

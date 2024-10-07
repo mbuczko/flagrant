@@ -1,6 +1,6 @@
-use flagrant_types::{Environment, IdentityVariant, Variant};
+use flagrant_types::{Environment, IdentityVariant};
 use hugsqlx::{params, HugSqlx};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError};
 
@@ -36,6 +36,11 @@ pub async fn get_variants(
                 identity_id = Some(id);
             }
 
+            println!(
+                "identity: {:?}, env: {}, feature: {}, variant: {}",
+                identity_id, environment.id, var.feature_id, variant.id
+            );
+
             Identities::upsert_identity_variant(
                 &mut *tx,
                 params![identity_id, environment.id, var.feature_id, variant.id],
@@ -54,19 +59,17 @@ pub async fn get_variants(
     Ok(variants)
 }
 
-pub async fn detach_identities(
+pub async fn reconcile_attached_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant_id: u16,
     weight: u8,
 ) -> anyhow::Result<()> {
-    let idents_count: u32 =
-        Identities::fetch_identities_count(&mut *conn, params![], |row| row.get("count")).await?;
-    let max_attached = idents_count * (weight as u32) / 100;
-
+    println!("variant_id: {}, weight: {}", variant_id, weight);
+    Identities::reset_detached_identities(&mut *conn, params![environment.id, variant_id]).await?;
     Identities::detach_identities_from_variant(
         &mut *conn,
-        params![environment.id, variant_id, max_attached],
+        params![environment.id, variant_id, weight],
     )
     .await?;
     Ok(())

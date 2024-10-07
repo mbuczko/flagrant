@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS variant_weights (
   variant_id INTEGER NOT NULL REFERENCES variants,
   environment_id INTEGER NOT NULL REFERENCES environments,
   weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0 and weight <= 100),
-  weight_diff INTEGER,
   accumulator INTEGER NOT NULL DEFAULT 100,
   PRIMARY KEY (variant_id, environment_id)
 );
