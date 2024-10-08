@@ -23,7 +23,7 @@ pub async fn create(
 
 pub async fn get_by_id(
     conn: &mut SqliteConnection,
-    environment_id: u16,
+    environment_id: i32,
 ) -> anyhow::Result<Environment> {
     let env = Environments::fetch_environment(conn, params![environment_id])
         .await

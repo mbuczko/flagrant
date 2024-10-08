@@ -5,13 +5,13 @@ use crate::models::{feature, variant};
 
 /// Distributes hit among defined featured variants in respect to associated weights.
 /// On every call:
-///  - choose the variation with the largest `accum`
-///  - subtract 100 from the `accum` for the chosen variation
-///  - add `weight` to `accum` for all variations, including the chosen one
+///  - choose the variation with the largest `accumulator`
+///  - subtract 100 from the `accumulator` for the chosen variation
+///  - add `weight` all variations accumulators, including the chosen one
 pub async fn distribute(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature_id: u16,
+    feature_id: i32,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
     let variants = variant::get_all(&mut tx, environment, feature_id).await?;

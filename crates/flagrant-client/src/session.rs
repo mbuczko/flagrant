@@ -1,9 +1,9 @@
 use std::sync::RwLock;
 
 use anyhow::bail;
-use flagrant_types::{Environment, FeatureValue, Project};
+use flagrant_types::{Environment, FeatureResponse, Project};
 
-use crate::{http::HttpClient, resource::BaseResource};
+use crate::{http::{Auth, HttpClient}, resource::BaseResource};
 
 #[derive(Debug)]
 pub struct Session {
@@ -14,8 +14,8 @@ pub struct Session {
 
 impl Session {
     #[cfg(feature = "blocking")]
-    pub fn init(api_host: String, project_id: u16, environment_id: u16) -> anyhow::Result<Session> {
-        let client = HttpClient::new(api_host);
+    pub fn init(api_host: String, auth: Auth, project_id: i32, environment_id: i32) -> anyhow::Result<Session> {
+        let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_id}");
 
         Self::build(
@@ -30,8 +30,8 @@ impl Session {
     #[cfg(not(feature = "blocking"))]
     pub async fn init(
         api_host: String,
-        project_id: u16,
-        environment_id: u16,
+        project_id: i32,
+        environment_id: i32,
     ) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host);
         let path = format!("/projects/{project_id}");
@@ -78,12 +78,12 @@ impl Session {
     }
 
     #[cfg(feature = "blocking")]
-    pub fn get_feature(&self, ident: &str, name: &'static str) -> Option<FeatureValue> {
+    pub fn get_features(&self,  identity: &str) -> Option<Vec<FeatureResponse>> {
         let path = self
             .environment
             .as_base_resource()
-            .subpath(format!("/ident/{ident}/features/{name}"));
-        self.client.get(format!("/api/v1{path}")).ok()
+            .subpath("/features");
+        self.client.get_with_identity(format!("/api/v1{path}"), Some(identity)).ok()
     }
 }
 

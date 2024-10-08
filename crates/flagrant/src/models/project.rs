@@ -16,7 +16,7 @@ pub async fn create(conn: &mut SqliteConnection, name: String) -> anyhow::Result
     Ok(project)
 }
 
-pub async fn get_by_id(conn: &mut SqliteConnection, project_id: u16) -> anyhow::Result<Project> {
+pub async fn get_by_id(conn: &mut SqliteConnection, project_id: i32) -> anyhow::Result<Project> {
     let project = Projects::fetch_project(conn, params!(project_id))
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch project", e))?;

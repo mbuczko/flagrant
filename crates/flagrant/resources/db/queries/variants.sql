@@ -73,7 +73,7 @@ ORDER BY weight DESC
 SELECT f.feature_id, v.variant_id, f.name, v.value, iv.detached_at IS NOT NULL AS is_detached, max(iv.identity_id) AS identity_id
 FROM features f
 JOIN variants v USING(feature_id)
-LEFT JOIN identities i ON i.identity = $2
+LEFT JOIN identities i ON i.identity = lower($2)
 LEFT JOIN identity_variants iv ON iv.variant_id = v.variant_id AND iv.identity_id = i.identity_id
 WHERE f.is_enabled = true AND COALESCE(v.environment_id, $1) = $1
 GROUP BY f.feature_id

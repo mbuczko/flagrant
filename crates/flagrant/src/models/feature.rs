@@ -49,7 +49,7 @@ pub async fn create(
 pub async fn get_by_id(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature_id: u16,
+    feature_id: i32,
 ) -> anyhow::Result<Feature> {
     let feature = Features::fetch_feature(&mut *conn, params![feature_id], |row| {
         row_to_feature(row, environment)
@@ -150,7 +150,7 @@ pub async fn update(
 pub async fn bump_up_accumulators(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature_id: u16,
+    feature_id: i32,
 ) -> anyhow::Result<()> {
     Features::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
         .await

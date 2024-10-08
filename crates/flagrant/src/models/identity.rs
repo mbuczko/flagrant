@@ -17,7 +17,7 @@ pub async fn get_variants(
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let mut tx = conn.begin().await?;
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity).await?;
-    let mut identity_id: Option<u16> = None;
+    let mut identity_id: Option<i32> = None;
 
     for var in variants.iter_mut() {
         if let Some(id) = var.identity_id {
@@ -31,7 +31,7 @@ pub async fn get_variants(
 
             if identity_id.is_none() {
                 let (id, _) =
-                    Identities::upsert_identity::<_, (u16, String)>(&mut *tx, params![&identity])
+                    Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity])
                         .await?;
                 identity_id = Some(id);
             }
@@ -62,10 +62,9 @@ pub async fn get_variants(
 pub async fn reconcile_attached_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    variant_id: u16,
+    variant_id: i32,
     weight: u8,
 ) -> anyhow::Result<()> {
-    println!("variant_id: {}, weight: {}", variant_id, weight);
     Identities::reset_detached_identities(&mut *conn, params![environment.id, variant_id]).await?;
     Identities::detach_identities_from_variant(
         &mut *conn,

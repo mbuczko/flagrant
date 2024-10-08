@@ -1,6 +1,6 @@
 pub enum BaseResource {
-    Project(u16),
-    Environment(u16),
+    Project(i32),
+    Environment(i32),
 }
 
 impl BaseResource {

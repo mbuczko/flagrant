@@ -99,7 +99,7 @@ pub async fn update(
         bail!("Control variant cannot be updated with new weight as it auto-adjusts itself.");
     }
     let mut tx = conn.begin().await?;
-    let feature_id: u16 =
+    let feature_id: i32 =
         Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
             v.get("feature_id")
         })
@@ -130,7 +130,7 @@ pub async fn update(
 pub async fn get_by_id(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    variant_id: u16,
+    variant_id: i32,
 ) -> anyhow::Result<Variant> {
     let variant = Variants::fetch_variant(conn, params![environment.id, variant_id])
         .await
@@ -158,7 +158,7 @@ pub async fn get_by_identity<T: AsRef<str>>(
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature_id: u16,
+    feature_id: i32,
 ) -> anyhow::Result<Vec<Variant>> {
     let variants = Variants::fetch_variants_for_feature(conn, params![environment.id, feature_id])
         .await
@@ -178,8 +178,8 @@ pub async fn get_all(
 
 /// Permanently deletes a variant of given id and updates control variant weight if necessary.
 ///
-/// Returns error on control variant deletion when there are still other variants existing.
 /// Control variant should be deleted as a last one - when no other variants already exist.
+/// Otherwise an Error is returned.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -201,7 +201,7 @@ pub async fn delete(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;
 
-    let feature_id: u16 =
+    let feature_id: i32 =
         Variants::delete_variant(&mut *tx, params![variant.id], |v| v.get("feature_id"))
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
@@ -237,9 +237,9 @@ pub(crate) async fn update_accumulator(
 async fn update_control_weight(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature_id: u16,
+    feature_id: i32,
 ) -> anyhow::Result<u8> {
-    let (variant_id, weight) = Variants::upsert_default_variant_weight::<_, (u16, u8)>(&mut *conn, params![environment.id, feature_id])
+    let (variant_id, weight) = Variants::upsert_default_variant_weight::<_, (i32, u8)>(&mut *conn, params![environment.id, feature_id])
         .await
         .map_err(|e| {
             FlagrantError::QueryFailed("Could not upsert default variant weight", e)

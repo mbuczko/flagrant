@@ -1,6 +1,6 @@
 #![feature(let_chains)]
 
-use flagrant_client::session::Session;
+use flagrant_client::{http::Auth, session::Session};
 use repl::readline;
 
 mod handlers;
@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let project_id = 1;
     let environment_id = 1;
 
-    let session = Session::init(API_HOST.into(), project_id, environment_id)?;
+    let session = Session::init(API_HOST.into(), Auth::None, project_id, environment_id)?;
     readline::init(session)?;
 
     Ok(())

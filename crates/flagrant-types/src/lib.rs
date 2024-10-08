@@ -20,15 +20,15 @@ pub enum ParseTypeError {
 #[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
     #[sqlx(rename = "project_id")]
-    pub id: u16,
+    pub id: i32,
     pub name: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Environment {
     #[sqlx(rename = "environment_id")]
-    pub id: u16,
-    pub project_id: u16,
+    pub id: i32,
+    pub project_id: i32,
     pub name: String,
     pub description: Option<String>,
 }
@@ -36,8 +36,8 @@ pub struct Environment {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate)]
 pub struct Feature {
     #[sqlx(rename = "feature_id")]
-    pub id: u16,
-    pub project_id: u16,
+    pub id: i32,
+    pub project_id: i32,
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
     #[validate(max_length = 255)]
     pub name: String,
@@ -48,18 +48,18 @@ pub struct Feature {
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Variant {
     #[sqlx(rename = "variant_id")]
-    pub id: u16,
+    pub id: i32,
     pub value: FeatureValue,
     pub weight: u8,
     pub accumulator: i32,
-    pub environment_id: Option<u16>,
+    pub environment_id: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct IdentityVariant {
-    pub variant_id: u16,
-    pub feature_id: u16,
-    pub identity_id: Option<u16>,
+    pub variant_id: i32,
+    pub feature_id: i32,
+    pub identity_id: Option<i32>,
     pub name: String,
     pub value: FeatureValue,
     pub is_detached: bool,
@@ -70,6 +70,13 @@ pub enum FeatureValue {
     Text(String),
     Json(String),
     Toml(String),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeatureResponse {
+    pub feature_id: i32,
+    pub feature_name: String,
+    pub value: FeatureValue,
 }
 
 impl Feature {
@@ -89,7 +96,7 @@ impl Feature {
 }
 
 impl Variant {
-    pub fn build(id: u16, value: FeatureValue, weight: u8) -> Variant {
+    pub fn build(id: i32, value: FeatureValue, weight: u8) -> Variant {
         Variant {
             id,
             value,
@@ -98,7 +105,7 @@ impl Variant {
             environment_id: None,
         }
     }
-    pub fn build_default(environment: &Environment, id: u16, value: FeatureValue) -> Variant {
+    pub fn build_default(environment: &Environment, id: i32, value: FeatureValue) -> Variant {
         Variant {
             id,
             value,

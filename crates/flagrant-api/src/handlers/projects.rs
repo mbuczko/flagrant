@@ -6,7 +6,7 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<u16>,
+    Path(project_id): Path<i32>,
 ) -> Result<Json<Project>, ServiceError> {
     let project = project::get_by_id(&mut conn, project_id).await?;
 

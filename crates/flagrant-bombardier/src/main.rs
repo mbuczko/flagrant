@@ -1,45 +1,73 @@
 use std::{
+    collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, RwLock,
     },
     thread,
+    time::Duration,
 };
 
-use dashmap::{DashMap, DashSet};
-use flagrant_client::session::Session;
-use flagrant_types::FeatureValue;
+use flagrant_client::{http::Auth, session::Session};
+use flagrant_types::{FeatureResponse, FeatureValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{rngs::ThreadRng, Rng};
 use ulid::Ulid;
 
 const IDENTS_COUNT: usize = 100;
 const THREADS_COUNT: usize = 1;
+const PROJECT_ID: i32 = 1;
+const ENVIRONMENT_ID: i32 = 1;
+const FEATURE_ID: i32 = 1;
 
 static IDX: AtomicUsize = AtomicUsize::new(0);
 
+fn feature_value(response: Vec<FeatureResponse>, feature_id: i32) -> Option<FeatureValue> {
+    response
+        .into_iter()
+        .find(|r| r.feature_id == feature_id)
+        .map(|f| f.value)
+}
+
 pub fn main() -> anyhow::Result<()> {
-    let idents = Arc::new(DashMap::<usize, Ulid>::with_capacity(IDENTS_COUNT));
-    let results = Arc::new(DashMap::<String, DashSet<String>>::new());
-    let session = Arc::new(Session::init("http://localhost:3030".into(), 1, 1)?);
+    let idents = Arc::new(RwLock::new(HashMap::<usize, Ulid>::with_capacity(
+        IDENTS_COUNT,
+    )));
+    let buckets = Arc::new(RwLock::new(HashMap::new()));
+    let session = Arc::new(Session::init(
+        "http://localhost:3030".into(),
+        Auth::None,
+        PROJECT_ID,
+        ENVIRONMENT_ID,
+    )?);
 
     thread::scope(|s| {
         for _ in 0..THREADS_COUNT {
             let idents = Arc::clone(&idents);
-            let results = Arc::clone(&results);
+            let buckets = Arc::clone(&buckets);
             let session = Arc::clone(&session);
 
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
                 loop {
-                    if let Some(id) = get_or_generate_id(Arc::clone(&idents), &mut rng) {
-                        if let Some(FeatureValue::Text(value)) = session.get_feature(&id, "spookie")
-                        {
-                            // check if user's ID isn't already assigned to other value.
-                            evict_from_buckets(Arc::clone(&results), &value, &id);
+                    if let Some(ident) = get_or_generate_ident(&idents, &mut rng) {
+                        if let Some(response) = session.get_features(&ident) {
+                            if let Some(fv) = feature_value(response, FEATURE_ID) {
+                                let mut guard = buckets.write().unwrap();
+                                let val = match fv {
+                                    FeatureValue::Json(v) => v,
+                                    FeatureValue::Toml(v) => v,
+                                    FeatureValue::Text(v) => v,
+                                };
+                                // evict ident from all buckets
+                                evict_from_buckets(&mut guard, &ident);
 
-                            // add value to corresponding bucket
-                            results.entry(value).or_default().insert(id);
+                                // add value to corresponding bucket
+                                guard.entry(val).or_insert_with(HashSet::new).insert(ident);
+
+                                std::mem::drop(guard);
+                                thread::sleep(Duration::from_millis(50));
+                            }
                         }
                     }
                 }
@@ -51,26 +79,26 @@ pub fn main() -> anyhow::Result<()> {
             .unwrap()
             .progress_chars("##-");
 
-        let pbs = DashMap::<String, ProgressBar>::new();
+        let mut pbs = HashMap::<String, ProgressBar>::new();
         loop {
-            for res in results.iter() {
-                let (val, set) = res.pair();
+            let guard = buckets.read().unwrap();
+            for (val, set) in guard.iter() {
                 if set.is_empty() {
-                    if let Some((_, pb)) = pbs.remove(val) {
+                    if let Some(pb) = pbs.remove(val) {
                         m.remove(&pb);
                     }
                 } else {
-                    let mut pb = pbs.entry(val.clone()).or_insert_with(|| {
+                    let pb = pbs.entry(val.clone()).or_insert_with(|| {
                         let pb = ProgressBar::new(IDENTS_COUNT as u64);
                         pb.set_style(sty.clone());
                         m.add(pb)
                     });
                     pb.set_message(format!(
                         "{} ({}%)",
-                        val.clone(),
+                        &val,
                         ((100 * set.len()) / IDENTS_COUNT) as u64
                     ));
-                    pb.value_mut().set_position(set.len() as u64);
+                    pb.set_position(set.len() as u64);
                 }
             }
         }
@@ -78,27 +106,24 @@ pub fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_or_generate_id(idents: Arc<DashMap<usize, Ulid>>, rng: &mut ThreadRng) -> Option<String> {
-    if idents.len() >= IDENTS_COUNT {
-        return idents
+fn get_or_generate_ident(
+    idents: &Arc<RwLock<HashMap<usize, Ulid>>>,
+    rng: &mut ThreadRng,
+) -> Option<String> {
+    let mut guard = idents.write().unwrap();
+    if guard.len() >= IDENTS_COUNT {
+        return guard
             .get(&rng.gen_range(0..IDENTS_COUNT))
             .map(|id| id.to_string());
     }
     let ulid = ulid::Ulid::new();
-    let result = ulid.to_string();
 
-    idents.insert(IDX.fetch_add(1, Ordering::SeqCst), ulid);
-    Some(result)
+    guard.insert(IDX.fetch_add(1, Ordering::SeqCst), ulid);
+    Some(ulid.to_string())
 }
 
-fn evict_from_buckets(
-    results: Arc<DashMap<String, DashSet<String>>>,
-    target: &String,
-    id: &String,
-) {
-    for entry in results.iter() {
-        if entry.key() != target {
-            entry.value().remove(id);
-        }
+fn evict_from_buckets(buckets: &mut HashMap<String, HashSet<String>>, ident: &str) {
+    for (_, v) in buckets.iter_mut() {
+            v.remove(ident);
     }
 }
