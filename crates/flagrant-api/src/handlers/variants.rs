@@ -33,7 +33,7 @@ pub async fn update(
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
 
-    variant::update(&mut conn, &env, &var, value, payload.weight).await?;
+    variant::update_one(&mut conn, &env, &var, value, payload.weight).await?;
     Ok(Json(()))
 }
 

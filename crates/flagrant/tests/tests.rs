@@ -397,7 +397,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
     .await
     .unwrap();
 
-    variant::update(
+    variant::update_one(
         &mut conn,
         &environment2,
         &variant,
@@ -430,7 +430,7 @@ async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite
     let feature = create_feature(&mut conn, &environment, Some("foo")).await;
     let default_variant = feature.get_default_variant().unwrap();
 
-    variant::update(
+    variant::update_one(
         &mut conn,
         &environment,
         default_variant,
@@ -476,7 +476,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
     .await
     .unwrap();
 
-    variant::update(
+    variant::update_one(
         &mut conn,
         &environment,
         &variant,
@@ -577,7 +577,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .await
     .unwrap();
 
-    assert!(variant::update(
+    assert!(variant::update_one(
         &mut conn,
         &environment,
         &variant,

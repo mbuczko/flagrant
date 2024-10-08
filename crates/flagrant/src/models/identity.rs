@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use flagrant_types::{Environment, IdentityVariant};
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, SqliteConnection};
@@ -9,6 +11,8 @@ use super::variant;
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/identities.sql"]
 struct Identities {}
+
+static IDX: AtomicUsize = AtomicUsize::new(0);
 
 pub async fn get_variants(
     conn: &mut SqliteConnection,
@@ -27,6 +31,7 @@ pub async fn get_variants(
         // if identity is detached from a variant or hasn't been attached to feature yet
         // it should be re/attached to feature variant chosen by distributor.
         if var.is_detached || var.identity_id.is_none() {
+            println!("{} => {identity} {var:?}", IDX.fetch_add(1, Ordering::SeqCst));
             let variant = distributor::distribute(&mut tx, environment, var.feature_id).await?;
 
             if identity_id.is_none() {
@@ -35,15 +40,9 @@ pub async fn get_variants(
                         .await?;
                 identity_id = Some(id);
             }
-
-            println!(
-                "identity: {:?}, env: {}, feature: {}, variant: {}",
-                identity_id, environment.id, var.feature_id, variant.id
-            );
-
             Identities::upsert_identity_variant(
                 &mut *tx,
-                params![identity_id, environment.id, var.feature_id, variant.id],
+                params![identity_id.unwrap(), environment.id, var.feature_id, variant.id],
             )
             .await
             .map_err(|e| {

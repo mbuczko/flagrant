@@ -84,29 +84,24 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
-/// Updates feature variant with `new_value` and `new_weight`.
-///
-/// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// weight, should be altered with `feature::update` function instead.
-pub async fn update(
+async fn update(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
     new_value: FeatureValue,
     new_weight: u8,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<i32> {
     if variant.is_control() {
-        bail!("Control variant cannot be updated with new weight as it auto-adjusts itself.");
+        bail!("Control variant is immutable. Use feature::update to alter its value.");
     }
-    let mut tx = conn.begin().await?;
     let feature_id: i32 =
-        Variants::update_variant_value(&mut *tx, params![variant.id, new_value], |v| {
+        Variants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
             v.get("feature_id")
         })
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e))?;
 
-    Variants::upsert_variant_weight(&mut *tx, params![environment.id, variant.id, new_weight])
+    Variants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
 
@@ -115,9 +110,48 @@ pub async fn update(
     // to control variant (as its weight needs to accomodate the change) and variant provided
     // here as argument.
 
-    identity::reconcile_attached_identities(&mut tx, environment, variant.id, new_weight).await?;
+    identity::reconcile_attached_identities(&mut *conn, environment, variant.id, new_weight).await?;
+    Ok(feature_id)
+}
+
+/// Updates a single variant with `new_value` and `new_weight`.
+///
+/// This function fails-fast when used to modify control variant which, due to auto-adjustable
+/// nature is immutable and should be altered with `feature::update` function instead.
+pub async fn update_one(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    variant: &Variant,
+    new_value: FeatureValue,
+    new_weight: u8,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+    let feature_id = update(&mut tx, environment, variant, new_value, new_weight).await?;
 
     update_control_weight(&mut tx, environment, feature_id).await?;
+    tx.commit().await?;
+
+    Ok(())
+}
+
+/// Updates a multiple variants at once.
+///
+/// This function fails-fast when used to modify control variant which, due to auto-adjustable
+/// nature is immutable and should be altered with `feature::update` function instead.
+pub async fn update_multi(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    changeset: Vec<(&Variant, FeatureValue, u8)>,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+    let mut feature_id = None;
+
+    for (variant, new_value, new_weight) in changeset {
+        feature_id = Some(update(&mut tx, environment, variant, new_value, new_weight).await?);
+    }
+    if let Some(feature_id) = feature_id {
+        update_control_weight(&mut tx, environment, feature_id).await?;
+    }
     tx.commit().await?;
 
     Ok(())
