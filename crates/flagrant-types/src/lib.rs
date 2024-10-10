@@ -60,9 +60,9 @@ pub struct IdentityVariant {
     pub variant_id: i32,
     pub feature_id: i32,
     pub identity_id: Option<i32>,
+    pub migrated_id: Option<i32>,
     pub name: String,
     pub value: FeatureValue,
-    pub is_detached: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

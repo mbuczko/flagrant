@@ -60,8 +60,8 @@ CREATE TABLE IF NOT EXISTS identity_variants (
   feature_id INTEGER NOT NULL REFERENCES features,
   variant_id INTEGER NOT NULL REFERENCES variants,
   environment_id INTEGER NOT NULL REFERENCES environments,
+  migrated_id INTEGER REFERENCES variants,
   attached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  detached_at DATETIME,
 
   UNIQUE(identity_id, feature_id, environment_id),
 

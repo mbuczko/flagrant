@@ -70,7 +70,7 @@ ORDER BY weight DESC
 
 -- :name fetch_variants_for_identity :<> :*
 -- :doc Fetches feature variants for given identity. Variants attached to identity by distributor are denoted by non-NULL identity_id field.
-SELECT f.feature_id, v.variant_id, f.name, v.value, iv.detached_at IS NOT NULL AS is_detached, max(iv.identity_id) AS identity_id
+SELECT f.feature_id, v.variant_id, f.name, v.value, iv.migrated_id, max(iv.identity_id) AS identity_id
 FROM features f
 JOIN variants v USING(feature_id)
 LEFT JOIN identities i ON i.identity = lower($2)

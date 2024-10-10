@@ -59,7 +59,7 @@ pub async fn update(
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
-    feature::update(
+    feature::update_one(
         &mut conn,
         &env,
         &feature,

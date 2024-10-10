@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 use flagrant_types::{Environment, IdentityVariant};
 use hugsqlx::{params, HugSqlx};
 use sqlx::{Connection, SqliteConnection};
@@ -12,8 +10,6 @@ use super::variant;
 #[queries = "resources/db/queries/identities.sql"]
 struct Identities {}
 
-static IDX: AtomicUsize = AtomicUsize::new(0);
-
 pub async fn get_variants(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -24,20 +20,19 @@ pub async fn get_variants(
     let mut identity_id: Option<i32> = None;
 
     for var in variants.iter_mut() {
-        if let Some(id) = var.identity_id {
-            identity_id = Some(id);
-        }
+        let attach_to_variant = if let Some(id) = var.migrated_id {
+            variant::get_by_id(&mut tx, environment, id).await.ok()
+        } else if var.identity_id.is_none() {
+            Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
+        } else {
+            // cache identity_id to avoid unnecessary query for same information later below
+            identity_id = var.identity_id;
+            None
+        };
 
-        // if identity is detached from a variant or hasn't been attached to feature yet
-        // it should be re/attached to feature variant chosen by distributor.
-        if var.is_detached || var.identity_id.is_none() {
-            println!("{} => {identity} {var:?}", IDX.fetch_add(1, Ordering::SeqCst));
-            let variant = distributor::distribute(&mut tx, environment, var.feature_id).await?;
-
+        if let Some(variant) = attach_to_variant {
             if identity_id.is_none() {
-                let (id, _) =
-                    Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity])
-                        .await?;
+                let (id, _) = Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity]).await?;
                 identity_id = Some(id);
             }
             Identities::upsert_identity_variant(
@@ -58,16 +53,16 @@ pub async fn get_variants(
     Ok(variants)
 }
 
-pub async fn reconcile_attached_identities(
+pub async fn migrate_attached(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    variant_id: i32,
+    from_variant_id: i32,
+    to_variant_id: i32,
     weight: u8,
 ) -> anyhow::Result<()> {
-    Identities::reset_detached_identities(&mut *conn, params![environment.id, variant_id]).await?;
-    Identities::detach_identities_from_variant(
+    Identities::migrate_identities(
         &mut *conn,
-        params![environment.id, variant_id, weight],
+        params![environment.id, from_variant_id, to_variant_id, weight],
     )
     .await?;
     Ok(())

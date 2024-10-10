@@ -118,7 +118,7 @@ pub async fn get_all(
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?)
 }
 
-pub async fn update(
+pub async fn update_one(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,

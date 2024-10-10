@@ -105,12 +105,6 @@ async fn update(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
 
-    // Similarly to variant creation, update needs to take care of attached identities too.
-    // No matter if variant weight goes up or down, update impacts identities assigned both
-    // to control variant (as its weight needs to accomodate the change) and variant provided
-    // here as argument.
-
-    identity::reconcile_attached_identities(&mut *conn, environment, variant.id, new_weight).await?;
     Ok(feature_id)
 }
 
@@ -127,17 +121,22 @@ pub async fn update_one(
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
     let feature_id = update(&mut tx, environment, variant, new_value, new_weight).await?;
+    let (control_variant_id, _) = update_control_weight(&mut tx, environment, feature_id).await?;
+    let (from_variant_id, to_variant_id, diff) = if new_weight > variant.weight {
+        (control_variant_id, variant.id, new_weight - variant.weight)
+    } else {
+        (variant.id, control_variant_id, variant.weight - new_weight)
+    };
 
-    update_control_weight(&mut tx, environment, feature_id).await?;
+    identity::migrate_attached(&mut tx, environment, from_variant_id, to_variant_id, diff).await?;
     tx.commit().await?;
-
     Ok(())
 }
 
-/// Updates a multiple variants at once.
+/// Updates multiple variants at once.
 ///
 /// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// nature is immutable and should be altered with `feature::update` function instead.
+/// nature has immutable weight and should be altered with `feature::update` function instead.
 pub async fn update_multi(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -153,7 +152,6 @@ pub async fn update_multi(
         update_control_weight(&mut tx, environment, feature_id).await?;
     }
     tx.commit().await?;
-
     Ok(())
 }
 
@@ -272,15 +270,14 @@ async fn update_control_weight(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
-) -> anyhow::Result<u8> {
-    let (variant_id, weight) = Variants::upsert_default_variant_weight::<_, (i32, u8)>(&mut *conn, params![environment.id, feature_id])
+) -> anyhow::Result<(i32, u8)> {
+    let result = Variants::upsert_default_variant_weight::<_, (i32, u8)>(&mut *conn, params![environment.id, feature_id])
         .await
         .map_err(|e| {
             FlagrantError::QueryFailed("Could not upsert default variant weight", e)
         })?;
 
-    identity::reconcile_attached_identities(conn, environment, variant_id, weight).await?;
-    Ok(weight)
+    Ok(result)
 }
 
 /// Returns true if variant is default one within given environment.

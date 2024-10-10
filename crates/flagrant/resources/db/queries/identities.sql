@@ -9,25 +9,22 @@ RETURNING identity_id, identity
 -- :doc Connects identity with variant of given id
 INSERT INTO identity_variants(identity_id, environment_id, feature_id, variant_id)
 VALUES($1, $2, $3, $4)
-ON CONFLICT(identity_id, feature_id, environment_id) DO UPDATE SET variant_id = excluded.variant_id, detached_at = NULL
+ON CONFLICT(identity_id, feature_id, environment_id) DO UPDATE SET variant_id = excluded.variant_id, migrated_id = NULL
 
--- :name reset_detached_identities :<> :!
--- :doc Unmarks 'detached' identities for given variant
-UPDATE identity_variants SET detached_at = NULL
-WHERE environment_id = $1 AND variant_id = $2
-
--- :name detach_identities_from_variant :<> :!
--- :doc Marks identity as detached from a feature variant in given environment
+-- :name migrate_identities :<> :!
+-- :doc Migrates number of identities attached to one variant to the other one by given percent
 WITH attached AS (
-  SELECT identity_id, attached_at
+  SELECT identity_id, migrated_id, attached_at
   FROM identity_variants
-  WHERE environment_id = $1 AND variant_id = $2
+  WHERE environment_id = $1 AND ((variant_id = $2 AND migrated_id IS NULL) OR migrated_id = $2)
 )
-UPDATE identity_variants SET detached_at = CURRENT_TIMESTAMP
-WHERE environment_id = $1 AND variant_id = $2 AND identity_id IN (
-  SELECT identity_id FROM attached ORDER BY attached_at
+UPDATE identity_variants SET migrated_id = $3
+WHERE environment_id = $1 AND identity_id IN (
+  SELECT identity_id FROM attached
+  ORDER BY migrated_id DESC, attached_at
   LIMIT (
-    SELECT MAX(0, COUNT(*) - (SELECT CAST((COUNT(*) * $3) / 100 AS INTEGER) FROM identities))
+    -- round division up
+    SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities))
     FROM attached
   )
 )
