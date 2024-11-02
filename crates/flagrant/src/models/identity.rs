@@ -32,12 +32,19 @@ pub async fn get_variants(
 
         if let Some(variant) = attach_to_variant {
             if identity_id.is_none() {
-                let (id, _) = Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity]).await?;
+                let (id, _) =
+                    Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity])
+                        .await?;
                 identity_id = Some(id);
             }
             Identities::upsert_identity_variant(
                 &mut *tx,
-                params![identity_id.unwrap(), environment.id, var.feature_id, variant.id],
+                params![
+                    identity_id.unwrap(),
+                    environment.id,
+                    var.feature_id,
+                    variant.id
+                ],
             )
             .await
             .map_err(|e| {
@@ -58,12 +65,14 @@ pub async fn migrate_attached(
     environment: &Environment,
     from_variant_id: i32,
     to_variant_id: i32,
-    weight: u8,
+    by_percent: u8,
 ) -> anyhow::Result<()> {
-    Identities::migrate_identities(
-        &mut *conn,
-        params![environment.id, from_variant_id, to_variant_id, weight],
-    )
-    .await?;
+    if from_variant_id != to_variant_id {
+        Identities::migrate_identities(
+            &mut *conn,
+            params![environment.id, from_variant_id, to_variant_id, by_percent],
+        )
+        .await?;
+    }
     Ok(())
 }

@@ -2,7 +2,10 @@ use axum::{extract::Path, Json};
 use flagrant::models::{environment, identity};
 use flagrant_types::FeatureResponse;
 
-use crate::{errors::ServiceError, extractors::{DbConnection, Identity}};
+use crate::{
+    errors::ServiceError,
+    extractors::{DbConnection, Identity},
+};
 
 pub async fn get_features(
     DbConnection(mut conn): DbConnection,
@@ -13,12 +16,10 @@ pub async fn get_features(
     let variants = identity::get_variants(&mut conn, &env, identity)
         .await?
         .into_iter()
-        .map(|v| {
-            FeatureResponse {
-                feature_id: v.feature_id,
-                feature_name: v.name,
-                value: v.value
-            }
+        .map(|v| FeatureResponse {
+            feature_id: v.feature_id,
+            feature_name: v.name,
+            value: v.value,
         })
         .collect::<Vec<_>>();
 

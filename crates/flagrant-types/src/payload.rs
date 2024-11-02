@@ -11,7 +11,7 @@ pub struct EnvRequestPayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureRequestPayload {
     pub name: String,
-    pub value: Option<FeatureValue>,
+    pub value: FeatureValue,
     pub description: Option<String>,
     pub is_enabled: bool,
 }
@@ -30,7 +30,8 @@ impl From<Feature> for FeatureRequestPayload {
                 .variants
                 .into_iter()
                 .find(|v| v.environment_id.is_some())
-                .map(|v| v.value),
+                .expect("Feature has no control variant!")
+                .value,
             description: None,
             is_enabled: feature.is_enabled,
         }

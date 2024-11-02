@@ -25,7 +25,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
                 name: name.to_string(),
                 description: args.get(3).map(|d| d.to_string()),
                 is_enabled: false,
-                value: Some(parsed),
+                value: parsed,
             },
         )?;
 
@@ -59,7 +59,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);
 
-            payload.value = Some(cloned);
+            payload.value = cloned;
             session.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated

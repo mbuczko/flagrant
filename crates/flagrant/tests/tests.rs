@@ -40,13 +40,13 @@ async fn create_context(conn: &mut PoolConnection<Sqlite>) -> (Project, Environm
 async fn create_feature(
     conn: &mut PoolConnection<Sqlite>,
     environment: &Environment,
-    value: Option<&str>,
+    value: &str,
 ) -> Feature {
     feature::create(
         conn,
         environment,
         format!("F_{}", random_string(10)),
-        value.map(|v| FeatureValue::Text(v.to_owned())),
+        FeatureValue::Text(value.to_owned()),
         true,
     )
     .await
@@ -62,17 +62,6 @@ async fn create_project(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
-async fn create_feature_with_no_value(mut conn: PoolConnection<Sqlite>) {
-    let (_, environment) = create_context(&mut conn).await;
-    let feature = feature::create(&mut conn, &environment, "sample".to_owned(), None, true)
-        .await
-        .unwrap();
-
-    assert!(feature.is_enabled);
-    assert!(feature.variants.is_empty());
-}
-
-#[sqlx::test]
 async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let value = FeatureValue::Json("{\"foo\": 2}".to_owned());
@@ -80,7 +69,7 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         "featuriozzo".to_owned(),
-        Some(value.clone()),
+        value.clone(),
         true,
     )
     .await
@@ -101,7 +90,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(
 ) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
-    let feature = create_feature(&mut conn, &environment1, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
 
     variant::create(
         &mut conn,
@@ -141,7 +130,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(
 async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<Sqlite>) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
-    let feature = create_feature(&mut conn, &environment1, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
 
     variant::create_control(
         &mut conn,
@@ -174,7 +163,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             &mut conn,
             &environment,
             name.to_owned(),
-            Some(FeatureValue::Text("foo".to_owned())),
+            FeatureValue::Text("foo".to_owned()),
             false,
         )
         .await;
@@ -186,7 +175,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         format!("F_{}", random_string(1024)),
-        Some(FeatureValue::Text("foo".to_owned())),
+        FeatureValue::Text("foo".to_owned()),
         false,
     )
     .await;
@@ -203,7 +192,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         name.to_owned(),
-        Some(FeatureValue::Text("foo".to_owned())),
+        FeatureValue::Text("foo".to_owned()),
         false,
     )
     .await
@@ -213,7 +202,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         name.to_owned(),
-        Some(FeatureValue::Text("foo".to_owned())),
+        FeatureValue::Text("foo".to_owned()),
         false,
     )
     .await
@@ -223,7 +212,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn delete_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
 
     assert!(feature::delete(&mut conn, &environment, &feature)
         .await
@@ -236,7 +225,7 @@ async fn delete_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
 
     variant::create(
         &mut conn,
@@ -269,7 +258,7 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
     let variant = variant::create(
         &mut conn,
         &environment,
@@ -282,24 +271,9 @@ async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
-async fn create_variant_for_feature_with_no_default_variant(mut conn: PoolConnection<Sqlite>) {
-    let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, None).await;
-    let variant = variant::create(
-        &mut conn,
-        &environment,
-        &feature,
-        FeatureValue::build("bar"),
-        10,
-    )
-    .await;
-    assert!(variant.is_err());
-}
-
-#[sqlx::test]
 async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -341,7 +315,7 @@ async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -377,7 +351,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
 async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection<Sqlite>) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
-    let feature = create_feature(&mut conn, &environment1, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
     let variant = variant::create(
         &mut conn,
         &environment1,
@@ -427,7 +401,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
 #[should_panic]
 async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("foo")).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
     let default_variant = feature.get_default_variant().unwrap();
 
     variant::update_one(
@@ -444,7 +418,7 @@ async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite
 #[sqlx::test]
 async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -496,7 +470,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
 #[sqlx::test]
 async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -544,7 +518,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     mut conn: PoolConnection<Sqlite>,
 ) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -600,7 +574,7 @@ async fn disallow_removing_default_variant_when_other_variants_exist(
     mut conn: PoolConnection<Sqlite>,
 ) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
 
     variant::create(
         &mut conn,
@@ -634,7 +608,7 @@ async fn allow_removing_default_variant_when_no_other_variants_exist(
     mut conn: PoolConnection<Sqlite>,
 ) {
     let (_, environment) = create_context(&mut conn).await;
-    let feature = create_feature(&mut conn, &environment, Some("bar")).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
     let variant = feature.get_default_variant().unwrap();
 
     assert!(variant::delete(&mut conn, &environment, variant)

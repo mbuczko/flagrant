@@ -11,4 +11,3 @@ pub enum HttpClient {
     Async(reqwest::Client, Host, Auth),
     Blocking(reqwest::blocking::Client, Host, Auth),
 }
-

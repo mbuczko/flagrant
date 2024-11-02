@@ -25,6 +25,5 @@ WHERE environment_id = $1 AND identity_id IN (
   LIMIT (
     -- round division up
     SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities))
-    FROM attached
   )
 )

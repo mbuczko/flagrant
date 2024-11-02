@@ -21,7 +21,7 @@ pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
     name: String,
-    value: Option<FeatureValue>,
+    value: FeatureValue,
     is_enabled: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
@@ -33,11 +33,9 @@ pub async fn create(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
-    // if default value was provided, turn it into a control variant.
-    if let Some(value) = value {
-        let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
-        feature.variants.push(variant);
-    }
+    // default value gets turned into a control variant.
+    let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
+    feature.variants.push(variant);
 
     feature.validate()?;
     tx.commit().await?;
@@ -123,7 +121,7 @@ pub async fn update_one(
     environment: &Environment,
     feature: &Feature,
     new_name: String,
-    new_value: Option<FeatureValue>,
+    new_value: FeatureValue,
     is_enabled: bool,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
@@ -134,14 +132,12 @@ pub async fn update_one(
         .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
     // ...and then the feature value which is stored as default variant
-    if let Some(value) = new_value {
-        variant::create_control(&mut tx, environment, feature, value)
-            .await
-            .map_err(|e| match e.downcast::<sqlx::Error>() {
-                Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
-                Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
-            })?;
-    }
+    variant::create_control(&mut tx, environment, feature, new_value)
+        .await
+        .map_err(|e| match e.downcast::<sqlx::Error>() {
+            Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
+            Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
+        })?;
 
     tx.commit().await?;
     Ok(())

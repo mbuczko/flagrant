@@ -20,7 +20,7 @@ struct Variants {}
 ///
 /// - when created, weight is initially set up to 100%
 /// - each time new feature variant is being added, modified or removed control weight adjusts
-///   itself so, that all feature variants weights at every single moment sum to 100%.
+///   itself so, that all feature variants weights at every single moment sum up to 100%.
 ///
 /// Control variant, similar to standard variants is optional. No such a variant simply means
 /// that feature has no default value defined yet. This also comes with important consequence -
@@ -50,7 +50,7 @@ pub async fn create_control(
 /// Creates a feature variant with given weight and value.
 ///
 /// Non-control feature variants hold an alternative values shared by defined environments, ie.
-/// any update on feature value is reflected immediately in every environments. Weights on the
+/// any update on feature value is reflected immediately in all environments. Weights on the
 /// other hand prioritize the variant during distribution process and behave exactly the opposite
 /// way - the change impacts single environment only.
 pub async fn create(
@@ -70,13 +70,6 @@ pub async fn create(
     Variants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
-
-    // Each newly added variant decreases control variant weight, so it is
-    // crucial to reconcile identities already attached to control variant.
-    //
-    // In this case reconciliation comes down to marking number of exceeding
-    // identities as detached. Detached identities are considered as "free to
-    // re-attach" to the other variant during distribution process.
 
     update_control_weight(&mut tx, environment, feature.id).await?;
     tx.commit().await?;
@@ -127,8 +120,8 @@ pub async fn update_one(
     } else {
         (variant.id, control_variant_id, variant.weight - new_weight)
     };
-
     identity::migrate_attached(&mut tx, environment, from_variant_id, to_variant_id, diff).await?;
+
     tx.commit().await?;
     Ok(())
 }
@@ -208,10 +201,10 @@ pub async fn get_all(
     Ok(variants)
 }
 
-/// Permanently deletes a variant of given id and updates control variant weight if necessary.
+/// Permanently deletes a variant of given id and triggers control variant weight update.
 ///
-/// Control variant should be deleted as a last one - when no other variants already exist.
-/// Otherwise an Error is returned.
+/// When deleting variants, control variant should be deleted as a last one - when no other
+/// variants already exist. Otherwise an Error gets returned.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -261,9 +254,9 @@ pub(crate) async fn update_accumulator(
 
 /// Inserts or updates control variant weight. Control weight accomodates difference between 100% and
 /// sum of all the other variants weights within single environment.
-/// This function also takes care of already attached identities number of which may happen to exceed
-/// the weight. In this case, exceeding identities (starting from the earliest attached ones) are marked
-/// as "detatched" and eventually re-assigned by distributor to other variants.
+/// This function also takes care of number of already attached identities which, given as percentage,
+/// may happen to exceed the new weight. In this case, exceeding identities are marked as "detatched"
+/// starting from the earliest attached ones, and may be re-assigned by distributor to other variants.
 ///
 /// Returns new control variant weight.
 async fn update_control_weight(
@@ -271,11 +264,12 @@ async fn update_control_weight(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<(i32, u8)> {
-    let result = Variants::upsert_default_variant_weight::<_, (i32, u8)>(&mut *conn, params![environment.id, feature_id])
-        .await
-        .map_err(|e| {
-            FlagrantError::QueryFailed("Could not upsert default variant weight", e)
-        })?;
+    let result = Variants::upsert_default_variant_weight::<_, (i32, u8)>(
+        &mut *conn,
+        params![environment.id, feature_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant weight", e))?;
 
     Ok(result)
 }

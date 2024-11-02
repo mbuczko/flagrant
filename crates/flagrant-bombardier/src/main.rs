@@ -124,6 +124,6 @@ fn get_or_generate_ident(
 
 fn evict_from_buckets(buckets: &mut HashMap<String, HashSet<String>>, ident: &str) {
     for (_, v) in buckets.iter_mut() {
-            v.remove(ident);
+        v.remove(ident);
     }
 }

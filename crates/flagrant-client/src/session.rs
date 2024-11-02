@@ -3,7 +3,10 @@ use std::sync::RwLock;
 use anyhow::bail;
 use flagrant_types::{Environment, FeatureResponse, Project};
 
-use crate::{http::{Auth, HttpClient}, resource::BaseResource};
+use crate::{
+    http::{Auth, HttpClient},
+    resource::BaseResource,
+};
 
 #[derive(Debug)]
 pub struct Session {
@@ -14,7 +17,12 @@ pub struct Session {
 
 impl Session {
     #[cfg(feature = "blocking")]
-    pub fn init(api_host: String, auth: Auth, project_id: i32, environment_id: i32) -> anyhow::Result<Session> {
+    pub fn init(
+        api_host: String,
+        auth: Auth,
+        project_id: i32,
+        environment_id: i32,
+    ) -> anyhow::Result<Session> {
         let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_id}");
 
@@ -78,12 +86,11 @@ impl Session {
     }
 
     #[cfg(feature = "blocking")]
-    pub fn get_features(&self,  identity: &str) -> Option<Vec<FeatureResponse>> {
-        let path = self
-            .environment
-            .as_base_resource()
-            .subpath("/features");
-        self.client.get_with_identity(format!("/api/v1{path}"), Some(identity)).ok()
+    pub fn get_features(&self, identity: &str) -> Option<Vec<FeatureResponse>> {
+        let path = self.environment.as_base_resource().subpath("/features");
+        self.client
+            .get_with_identity(format!("/api/v1{path}"), Some(identity))
+            .ok()
     }
 }
 
