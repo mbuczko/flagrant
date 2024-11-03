@@ -12,7 +12,69 @@ use super::variant;
 #[queries = "resources/db/queries/features.sql"]
 struct Features {}
 
-/// Creates a new on/off feature with given `name` and optional `value`.
+pub struct FeatureUpdater<'a> {
+    conn: &'a mut SqliteConnection,
+    environment: &'a Environment,
+    feature: &'a Feature,
+    new_name: Option<String>,
+    new_value: Option<FeatureValue>,
+    is_enabled: Option<bool>,
+}
+
+impl<'a> FeatureUpdater<'a> {
+    fn new(
+        conn: &'a mut SqliteConnection,
+        environment: &'a Environment,
+        feature: &'a Feature,
+    ) -> Self {
+        Self {
+            conn,
+            environment,
+            feature,
+            new_name: None,
+            new_value: None,
+            is_enabled: None,
+        }
+    }
+    pub fn name(mut self, name: String) -> Self {
+        self.new_name = Some(name);
+        self
+    }
+    pub fn value(mut self, value: FeatureValue) -> Self {
+        self.new_value = Some(value);
+        self
+    }
+    pub fn enabled(mut self, is_enabled: bool) -> Self {
+        self.is_enabled = Some(is_enabled);
+        self
+    }
+    pub async fn update(self) -> anyhow::Result<()> {
+        let name = self.new_name.as_ref().unwrap_or_else(|| &self.feature.name);
+        let value = self
+            .new_value
+            .unwrap_or_else(|| self.feature.get_default_value().clone());
+        let is_enabled = self.is_enabled.unwrap_or_else(|| self.feature.is_enabled);
+        let mut tx = self.conn.begin().await?;
+
+        // in transaction, update feature properties first
+        Features::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
+
+        // ...and then the feature value which is stored as default variant
+        variant::create_control(&mut *tx, self.environment, self.feature, value)
+            .await
+            .map_err(|e| match e.downcast::<sqlx::Error>() {
+                Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
+                Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
+            })?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+}
+
+/// Creates a new on/off feature with given `name` and `value`.
 ///
 /// Feature value is stored as environment-specific control variant which means
 /// it may be different in every other environment and any change on value impacts
@@ -116,31 +178,12 @@ pub async fn get_all(
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?)
 }
 
-pub async fn update_one(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    feature: &Feature,
-    new_name: String,
-    new_value: FeatureValue,
-    is_enabled: bool,
-) -> anyhow::Result<()> {
-    let mut tx = conn.begin().await?;
-
-    // in transaction, update feature properties first
-    Features::update_feature(&mut *tx, params![feature.id, new_name, is_enabled])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
-
-    // ...and then the feature value which is stored as default variant
-    variant::create_control(&mut tx, environment, feature, new_value)
-        .await
-        .map_err(|e| match e.downcast::<sqlx::Error>() {
-            Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
-            Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
-        })?;
-
-    tx.commit().await?;
-    Ok(())
+pub fn update_one<'a>(
+    conn: &'a mut SqliteConnection,
+    environment: &'a Environment,
+    feature: &'a Feature,
+) -> FeatureUpdater<'a> {
+    FeatureUpdater::new(conn, environment, feature)
 }
 
 pub async fn bump_up_accumulators(

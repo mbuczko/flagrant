@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{payload::VariantRequestPayload, Feature, FeatureValue, Variant};
+use flagrant_types::{payload::VariantRequestPayload, Feature, Variant};
 
 use crate::{
     printer::tabular::Tabular,
@@ -30,10 +30,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
             // - if value has been explicitly typed priotitize type over default variant's type
 
             let cloned = val.parse().unwrap_or_else(|_| {
-                feature
-                    .get_default_value()
-                    .map(|v| v.clone_with(&val))
-                    .unwrap_or_else(|| FeatureValue::Text(val.into_owned()))
+                feature.get_default_value().clone_with(&val)
             });
             let weight = match args.get(2) {
                 Some(&weight) => weight.parse::<u8>()?,

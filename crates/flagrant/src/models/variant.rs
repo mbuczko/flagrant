@@ -22,11 +22,9 @@ struct Variants {}
 /// - each time new feature variant is being added, modified or removed control weight adjusts
 ///   itself so, that all feature variants weights at every single moment sum up to 100%.
 ///
-/// Control variant, similar to standard variants is optional. No such a variant simply means
-/// that feature has no default value defined yet. This also comes with important consequence -
-/// it is impossible to create additional variants having no control variant created in a first
-/// place.
-pub async fn create_control(
+/// Control variant is auto-created at the moment when feature is being created which means
+/// that newly created feature already contains a single (control) variant attached.
+pub(crate) async fn create_control(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,

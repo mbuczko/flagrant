@@ -55,7 +55,7 @@ impl Tabular for Feature {
 
         let id_str = self.id.to_string();
         let tgl_str = format!("{toggle} {}", self.is_enabled);
-        let val_str = value.map(|v| v.to_string()).unwrap_or_default();
+        let val_str = value.to_string();
 
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)

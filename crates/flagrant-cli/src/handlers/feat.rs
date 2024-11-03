@@ -50,10 +50,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
 
         if let Ok(feature) = response {
             let cloned = val.parse().unwrap_or_else(|_| {
-                feature
-                    .get_default_value()
-                    .map(|v| v.clone_with(&val))
-                    .unwrap_or_else(|| FeatureValue::Text(val.into_owned()))
+                feature.get_default_value().clone_with(&val)
             });
 
             let subpath = format!("/features/{}", feature.id);
@@ -123,7 +120,7 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
             feat.id.to_string(),
             feat.name.clone(),
             toggle.to_string(),
-            value.map(|v| v.to_string()).unwrap_or_default(),
+            value.to_string(),
         ]);
     }
     Feature::table().render(rows);

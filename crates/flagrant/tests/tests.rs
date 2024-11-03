@@ -76,9 +76,9 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(feature.variants.len(), 1);
-    assert_eq!(feature.get_default_value(), Some(&value));
+    assert_eq!(feature.get_default_value(), &value);
 
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
 
     assert_eq!(default_variant.weight, 100);
     assert!(default_variant.is_control());
@@ -111,14 +111,11 @@ async fn create_feature_with_missing_default_variant_in_other_env(
 
     // after adding default variant, a list consisting of default- and previously created
     // variant should be returned.
-    variant::create_control(
-        &mut conn,
-        &environment2,
-        &feature,
-        FeatureValue::build("bazz"),
-    )
-    .await
-    .unwrap();
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(FeatureValue::build("bazz"))
+        .update()
+        .await
+        .unwrap();
 
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
@@ -132,14 +129,11 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
     let environment2 = create_environment(&mut conn, &project).await;
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
-    variant::create_control(
-        &mut conn,
-        &environment2,
-        &feature,
-        FeatureValue::build("bazz"),
-    )
-    .await
-    .unwrap();
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(FeatureValue::build("bazz"))
+        .update()
+        .await
+        .unwrap();
 
     let fv1 = FeatureValue::Text("foo".to_string());
     let fv2 = FeatureValue::Text("bazz".to_string());
@@ -147,12 +141,12 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
     let feature = feature::get_by_id(&mut conn, &environment1, feature.id)
         .await
         .unwrap();
-    assert_eq!(feature.get_default_value(), Some(&fv1));
+    assert_eq!(feature.get_default_value(), &fv1);
 
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
-    assert_eq!(feature.get_default_value(), Some(&fv2));
+    assert_eq!(feature.get_default_value(), &fv2);
 }
 
 #[sqlx::test]
@@ -308,7 +302,7 @@ async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
     assert_eq!(default_variant.weight, 20);
 }
 
@@ -362,14 +356,11 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
     .await
     .unwrap();
 
-    variant::create_control(
-        &mut conn,
-        &environment2,
-        &feature,
-        FeatureValue::build("bazz"),
-    )
-    .await
-    .unwrap();
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(FeatureValue::build("bazz"))
+        .update()
+        .await
+        .unwrap();
 
     variant::update_one(
         &mut conn,
@@ -402,7 +393,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
 async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "foo").await;
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
 
     variant::update_one(
         &mut conn,
@@ -463,7 +454,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
     assert_eq!(default_variant.weight, 10);
 }
 
@@ -509,7 +500,7 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
     assert_eq!(default_variant.weight, 60);
 }
 
@@ -565,7 +556,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
-    let default_variant = feature.get_default_variant().unwrap();
+    let default_variant = feature.get_default_variant();
     assert_eq!(default_variant.weight, 20);
 }
 
@@ -596,11 +587,11 @@ async fn disallow_removing_default_variant_when_other_variants_exist(
     .await
     .unwrap();
 
-    let variant = feature.get_default_variant().unwrap();
+    let variant = feature.get_default_variant();
     assert!(variant::delete(&mut conn, &environment, variant)
         .await
         .is_err());
-    assert!(feature.get_default_variant().is_some())
+    assert!(feature.get_default_variant().is_control())
 }
 
 #[sqlx::test]
@@ -609,7 +600,7 @@ async fn allow_removing_default_variant_when_no_other_variants_exist(
 ) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "bar").await;
-    let variant = feature.get_default_variant().unwrap();
+    let variant = feature.get_default_variant();
 
     assert!(variant::delete(&mut conn, &environment, variant)
         .await
