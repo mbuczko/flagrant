@@ -23,7 +23,7 @@ struct Variants {}
 ///   itself so, that all feature variants weights at every single moment sum up to 100%.
 ///
 /// Control variant is auto-created at the moment when feature is being created which means
-/// that newly created feature already contains a single (control) variant attached.
+/// that newly created feature already contains at least a single variant - a control one.
 pub(crate) async fn create_control(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -39,7 +39,7 @@ pub(crate) async fn create_control(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e))?;
 
-    update_control_weight(&mut tx, environment, feature.id).await?;
+    update_control_weight(&mut tx, environment, feature.id, variant_id, 0).await?;
     tx.commit().await?;
 
     Ok(Variant::build_default(environment, variant_id, value))
@@ -69,7 +69,7 @@ pub async fn create(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
-    update_control_weight(&mut tx, environment, feature.id).await?;
+    update_control_weight(&mut tx, environment, feature.id, variant_id, weight).await?;
     tx.commit().await?;
 
     Ok(Variant::build(variant_id, value, weight))
@@ -112,15 +112,17 @@ pub async fn update_one(
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
     let feature_id = update(&mut tx, environment, variant, new_value, new_weight).await?;
-    let (control_variant_id, _) = update_control_weight(&mut tx, environment, feature_id).await?;
-    let (from_variant_id, to_variant_id, diff) = if new_weight > variant.weight {
-        (control_variant_id, variant.id, new_weight - variant.weight)
-    } else {
-        (variant.id, control_variant_id, variant.weight - new_weight)
-    };
-    identity::migrate_attached(&mut tx, environment, from_variant_id, to_variant_id, diff).await?;
 
+    // let (from_variant_id, to_variant_id, diff) = if new_weight > variant.weight {
+    //     (control_variant_id, variant.id, new_weight - variant.weight)
+    // } else {
+    //     (variant.id, control_variant_id, variant.weight - new_weight)
+    // };
+    // identity::migrate_attached(&mut tx, environment, from_variant_id, to_variant_id, diff).await?;
+
+    update_control_weight(&mut tx, environment, feature_id, variant.id, new_weight - variant.weight).await?;
     tx.commit().await?;
+
     Ok(())
 }
 
@@ -136,6 +138,7 @@ pub async fn update_multi(
     let mut tx = conn.begin().await?;
     let mut feature_id = None;
 
+    // TODO: check if weights do not exceed 100%
     for (variant, new_value, new_weight) in changeset {
         feature_id = Some(update(&mut tx, environment, variant, new_value, new_weight).await?);
     }
@@ -258,18 +261,31 @@ pub(crate) async fn update_accumulator(
 ///
 /// Returns new control variant weight.
 async fn update_control_weight(
-    conn: &mut SqliteConnection,
+    tx: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
+    variant_id: i32,
+    migration_weight: u8
 ) -> anyhow::Result<(i32, u8)> {
-    let result = Variants::upsert_default_variant_weight::<_, (i32, u8)>(
-        &mut *conn,
+    let (control_variant_id, control_weight) = Variants::upsert_default_variant_weight::<_, (i32, u8)>(
+        &mut *tx,
         params![environment.id, feature_id],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant weight", e))?;
 
-    Ok(result)
+    if variant_id != control_variant_id {
+        identity::migrate_attached(
+            &mut *tx,
+            environment,
+            control_variant_id,
+            variant_id,
+            migration_weight,
+        )
+        .await?;
+    }
+
+    Ok((control_variant_id, control_weight))
 }
 
 /// Returns true if variant is default one within given environment.
