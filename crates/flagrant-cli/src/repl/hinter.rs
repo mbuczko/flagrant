@@ -21,7 +21,7 @@ impl Hint for CommandHint {
     }
 }
 
-impl<'a> Hinter for ReplHinter<'a> {
+impl Hinter for ReplHinter<'_> {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {

@@ -49,11 +49,11 @@ impl<'a> FeatureUpdater<'a> {
         self
     }
     pub async fn update(self) -> anyhow::Result<()> {
-        let name = self.new_name.as_ref().unwrap_or_else(|| &self.feature.name);
+        let name = self.new_name.as_ref().unwrap_or(&self.feature.name);
         let value = self
             .new_value
             .unwrap_or_else(|| self.feature.get_default_value().clone());
-        let is_enabled = self.is_enabled.unwrap_or_else(|| self.feature.is_enabled);
+        let is_enabled = self.is_enabled.unwrap_or(self.feature.is_enabled);
         let mut tx = self.conn.begin().await?;
 
         // in transaction, update feature properties first
@@ -62,7 +62,7 @@ impl<'a> FeatureUpdater<'a> {
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
         // ...and then the feature value which is stored as default variant
-        variant::create_control(&mut *tx, self.environment, self.feature, value)
+        variant::create_control(&mut tx, self.environment, self.feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
                 Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),

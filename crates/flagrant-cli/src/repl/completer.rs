@@ -87,7 +87,7 @@ impl<'a> CommandCompleter<'a> {
     }
 }
 
-impl<'a> Completer for CommandCompleter<'a> {
+impl Completer for CommandCompleter<'_> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {

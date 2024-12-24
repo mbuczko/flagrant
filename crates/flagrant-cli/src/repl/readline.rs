@@ -23,7 +23,7 @@ pub struct ReplHelper<'a> {
 
 pub type ReplEditor<'a> = Editor<ReplHelper<'a>, DefaultHistory>;
 
-impl<'a> Highlighter for ReplHelper<'a> {
+impl Highlighter for ReplHelper<'_> {
     /// Hint in a dark gray
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
         Owned("\x1b[38;5;8m".to_owned() + hint + "\x1b[0m")

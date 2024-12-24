@@ -87,7 +87,7 @@ impl Feature {
             .expect("Feature has no default variant!")
     }
     pub fn get_default_value(&self) -> &FeatureValue {
-        return &self.get_default_variant().value;
+        &self.get_default_variant().value
     }
     pub fn with_variants(mut self, variants: Vec<Variant>) -> Self {
         self.variants = variants;

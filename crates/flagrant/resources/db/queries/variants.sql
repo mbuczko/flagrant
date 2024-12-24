@@ -4,14 +4,14 @@ INSERT INTO variants(feature_id, value)
 VALUES($1, $2)
 RETURNING variant_id
 
--- :name upsert_default_variant :|| :1
+-- :name upsert_control_variant :|| :1
 -- :doc Creates or updates control variant for given feature
 INSERT INTO variants(environment_id, feature_id, value)
 VALUES($1, $2, $3)
 ON CONFLICT(environment_id, feature_id) DO UPDATE SET value = excluded.value
 RETURNING variant_id
 
--- :name upsert_default_variant_weight :<> :1
+-- :name upsert_control_variant_weight :<> :1
 -- :doc Inserts or updates a weight for feature control variant in given environment
 WITH calc AS
   (select coalesce(100 - sum(weight), 100) AS remaining_weight, $1 as environment_id

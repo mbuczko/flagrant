@@ -20,7 +20,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     for n in 1..=10 {
-        identity::get_variants(&mut *conn, &environment, format!("identity_{n}"))
+        identity::get_variants(&mut conn, &environment, format!("identity_{n}"))
             .await
             .unwrap();
     }

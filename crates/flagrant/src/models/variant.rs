@@ -31,7 +31,7 @@ pub(crate) async fn create_control(
     value: FeatureValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
-    let variant_id = Variants::upsert_default_variant(
+    let variant_id = Variants::upsert_control_variant(
         &mut *tx,
         params![environment.id, feature.id, &value],
         |v| v.get("variant_id"),
@@ -39,7 +39,7 @@ pub(crate) async fn create_control(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e))?;
 
-    update_control_weight(&mut tx, environment, feature.id, variant_id, 0).await?;
+    upsert_control_weight(&mut tx, environment, feature.id, variant_id, 0).await?;
     tx.commit().await?;
 
     Ok(Variant::build_default(environment, variant_id, value))
@@ -69,7 +69,7 @@ pub async fn create(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
-    update_control_weight(&mut tx, environment, feature.id, variant_id, weight).await?;
+    upsert_control_weight(&mut tx, environment, feature.id, variant_id, weight as i8).await?;
     tx.commit().await?;
 
     Ok(Variant::build(variant_id, value, weight))
@@ -83,7 +83,7 @@ async fn update(
     new_weight: u8,
 ) -> anyhow::Result<i32> {
     if variant.is_control() {
-        bail!("Control variant is immutable. Use feature::update to alter its value.");
+        bail!("Control variant is immutable. Use feature::update to adjust its value.");
     }
     let feature_id: i32 =
         Variants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
@@ -102,7 +102,7 @@ async fn update(
 /// Updates a single variant with `new_value` and `new_weight`.
 ///
 /// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// nature is immutable and should be altered with `feature::update` function instead.
+/// nature, is immutable and should be altered by `feature::update` function instead.
 pub async fn update_one(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -113,39 +113,16 @@ pub async fn update_one(
     let mut tx = conn.begin().await?;
     let feature_id = update(&mut tx, environment, variant, new_value, new_weight).await?;
 
-    // let (from_variant_id, to_variant_id, diff) = if new_weight > variant.weight {
-    //     (control_variant_id, variant.id, new_weight - variant.weight)
-    // } else {
-    //     (variant.id, control_variant_id, variant.weight - new_weight)
-    // };
-    // identity::migrate_attached(&mut tx, environment, from_variant_id, to_variant_id, diff).await?;
-
-    update_control_weight(&mut tx, environment, feature_id, variant.id, new_weight - variant.weight).await?;
+    upsert_control_weight(
+        &mut tx,
+        environment,
+        feature_id,
+        variant.id,
+        new_weight as i8,
+    )
+    .await?;
     tx.commit().await?;
 
-    Ok(())
-}
-
-/// Updates multiple variants at once.
-///
-/// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// nature has immutable weight and should be altered with `feature::update` function instead.
-pub async fn update_multi(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    changeset: Vec<(&Variant, FeatureValue, u8)>,
-) -> anyhow::Result<()> {
-    let mut tx = conn.begin().await?;
-    let mut feature_id = None;
-
-    // TODO: check if weights do not exceed 100%
-    for (variant, new_value, new_weight) in changeset {
-        feature_id = Some(update(&mut tx, environment, variant, new_value, new_weight).await?);
-    }
-    if let Some(feature_id) = feature_id {
-        update_control_weight(&mut tx, environment, feature_id).await?;
-    }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -233,7 +210,14 @@ pub async fn delete(
             .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
 
     if !is_default(environment, variant) {
-        update_control_weight(&mut tx, environment, feature_id).await?;
+        upsert_control_weight(
+            &mut tx,
+            environment,
+            feature_id,
+            variant.id,
+            -(variant.weight as i8),
+        )
+        .await?;
     }
     tx.commit().await?;
 
@@ -253,24 +237,30 @@ pub(crate) async fn update_accumulator(
     Ok(())
 }
 
-/// Inserts or updates control variant weight. Control weight accomodates difference between 100% and
-/// sum of all the other variants weights within single environment.
-/// This function also takes care of number of already attached identities which, given as percentage,
+/// Inserts or updates control variant to accomadate given weight.
+///
+/// How accomodation works?
+/// If `weight` is associated with `variant_id` other than control variant, positive value decreases
+/// control variant. Imagine this as if the weight would need to be moved from control variant to
+/// `variant_id`. Conversely, negative weight bumps up control variant - just as if `variant_id` would
+/// give its weight back to control variant.
+///
+/// This function also takes care of number of already attached identities which, taken as percentage,
 /// may happen to exceed the new weight. In this case, exceeding identities are marked as "detatched"
-/// starting from the earliest attached ones, and may be re-assigned by distributor to other variants.
+/// starting from the earliest attached ones and thus may be re-assigned by distributor to other variants.
 ///
 /// Returns new control variant weight.
-async fn update_control_weight(
+async fn upsert_control_weight(
     tx: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
     variant_id: i32,
-    migration_weight: u8
+    variant_weight: i8,
 ) -> anyhow::Result<(i32, u8)> {
-    let (control_variant_id, control_weight) = Variants::upsert_default_variant_weight::<_, (i32, u8)>(
-        &mut *tx,
-        params![environment.id, feature_id],
-    )
+    let (control_variant_id, control_weight) = Variants::upsert_control_variant_weight::<
+        _,
+        (i32, u8),
+    >(&mut *tx, params![environment.id, feature_id])
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant weight", e))?;
 
@@ -280,7 +270,7 @@ async fn update_control_weight(
             environment,
             control_variant_id,
             variant_id,
-            migration_weight,
+            (control_weight as i8) - variant_weight,
         )
         .await?;
     }

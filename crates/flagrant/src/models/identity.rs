@@ -82,7 +82,7 @@ pub async fn migrate_attached(
     environment: &Environment,
     from_variant_id: i32,
     to_variant_id: i32,
-    by_percent: u8,
+    by_percent: i8,
 ) -> anyhow::Result<()> {
     if from_variant_id != to_variant_id {
         Identities::migrate_identities(
