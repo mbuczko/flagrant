@@ -17,7 +17,10 @@ pub fn random_string(len: u16) -> String {
         .collect()
 }
 
-pub async fn create_environment(conn: &mut PoolConnection<Sqlite>, project: &Project) -> Environment {
+pub async fn create_environment(
+    conn: &mut PoolConnection<Sqlite>,
+    project: &Project,
+) -> Environment {
     environment::create(
         conn,
         project,
@@ -37,6 +40,7 @@ pub async fn create_context(conn: &mut PoolConnection<Sqlite>) -> (Project, Envi
     (project, environment)
 }
 
+#[allow(dead_code)]
 pub async fn create_feature(
     conn: &mut PoolConnection<Sqlite>,
     environment: &Environment,

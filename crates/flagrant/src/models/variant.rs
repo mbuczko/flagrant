@@ -255,7 +255,7 @@ async fn upsert_control_weight(
     environment: &Environment,
     feature_id: i32,
     variant_id: i32,
-    variant_weight: i8,
+    weight_diff: i8,
 ) -> anyhow::Result<(i32, u8)> {
     let (control_variant_id, control_weight) = Variants::upsert_control_variant_weight::<
         _,
@@ -270,7 +270,7 @@ async fn upsert_control_weight(
             environment,
             control_variant_id,
             variant_id,
-            (control_weight as i8) - variant_weight,
+            weight_diff,
         )
         .await?;
     }

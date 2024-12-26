@@ -1,7 +1,9 @@
-use common::{create_context, create_environment, create_feature, random_string};
+use common::{create_context, create_environment, random_string};
 use flagrant::models::{feature, project, variant};
 use flagrant_types::FeatureValue;
 use sqlx::{pool::PoolConnection, Sqlite};
+
+use crate::common::create_feature;
 
 mod common;
 

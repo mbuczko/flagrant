@@ -1,7 +1,8 @@
-use common::create_context;
 use flagrant::models::{feature, identity, variant};
 use flagrant_types::FeatureValue;
 use sqlx::{pool::PoolConnection, Sqlite};
+
+use crate::common::create_context;
 
 mod common;
 
@@ -24,30 +25,33 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
             .await
             .unwrap();
     }
-    let idents = identity::get_identities(&mut conn, &environment, &feature)
+    let idents_count = identity::get_identities(&mut conn, &environment, &feature)
         .await
         .unwrap()
         .iter()
-        .map(|i| i.migrated_id.is_none())
-        .collect::<Vec<_>>();
-    assert_eq!(idents.len(), 10);
+        .filter(|i| i.migrated_id.is_none())
+        .collect::<Vec<_>>()
+        .len();
 
-    variant::create(
+    assert_eq!(idents_count, 10);
+
+    let variant = variant::create(
         &mut conn,
         &environment,
         &feature,
         FeatureValue::build("bazz"),
-        10,
+        50,
     )
     .await
     .unwrap();
 
-    let idents = identity::get_identities(&mut conn, &environment, &feature)
+    let to_migrate_count = identity::get_identities(&mut conn, &environment, &feature)
         .await
         .unwrap()
         .iter()
-        .map(|i| i.migrated_id.is_none())
-        .collect::<Vec<_>>();
+        .filter(|i| i.migrated_id == Some(variant.id))
+        .collect::<Vec<_>>()
+        .len();
 
-    assert_eq!(idents.len(), 10);
+    assert_eq!(to_migrate_count, 5);
 }
