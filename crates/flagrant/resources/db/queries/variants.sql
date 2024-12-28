@@ -79,16 +79,15 @@ WHERE f.is_enabled = true AND COALESCE(v.environment_id, $1) = $1
 GROUP BY f.feature_id
 ORDER BY identity_id DESC
 
--- :name fetch_count_of_feature_variants :|| :1
+-- :name fetch_count_of_feature_variants :<> :1
 -- :doc Fetches a number of variants that belong to same feature that given variant_id belongs to
-SELECT count(v2.variant_id) AS count
+SELECT v1.feature_id, count(v2.variant_id) AS count
 FROM variants v1 JOIN variants v2 USING(feature_id)
 WHERE COALESCE(v2.environment_id, $1) = $1 AND v1.variant_id = $2
 
--- :name delete_variant :|| :1
+-- :name delete_variant :<> :!
 -- :doc Removes variant of given id
 DELETE FROM variants WHERE variant_id = $1
-RETURNING feature_id
 
 -- :name delete_variant_weights :<> :!
 -- :doc Removes all variant weights

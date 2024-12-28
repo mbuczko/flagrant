@@ -455,6 +455,7 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
         .await
         .unwrap();
     let default_variant = feature.get_default_variant();
+
     assert_eq!(default_variant.weight, 60);
 }
 

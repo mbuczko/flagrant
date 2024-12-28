@@ -18,7 +18,7 @@ FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE environment_id = $1 AND feature_id = $2
 
 -- :name migrate_identities :<> :!
--- :doc Migrates number of identities attached to one variant to the other one by given percent
+-- :doc Migrates given percent of identities attached to some variant to the other variant
 WITH attached AS (
   SELECT identity_id, migrated_id, attached_at
   FROM identity_variants
@@ -33,3 +33,6 @@ WHERE environment_id = $1 AND identity_id IN (
     SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities))
   )
 )
+-- :name delete_attachments :<> :!
+-- :doc Removes attachments of all identitites to given variant. This is executed only on variant deletion.
+DELETE FROM identity_variants WHERE variant_id = $1 OR migrated_id = $1

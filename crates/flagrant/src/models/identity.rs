@@ -77,12 +77,12 @@ pub async fn get_variants(
     Ok(variants)
 }
 
-pub async fn migrate_attached(
+pub async fn migrate_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,
     from_variant_id: i32,
     to_variant_id: i32,
-    by_percent: i8,
+    by_percent: u8,
 ) -> anyhow::Result<()> {
     if from_variant_id != to_variant_id {
         Identities::migrate_identities(
@@ -91,5 +91,13 @@ pub async fn migrate_attached(
         )
         .await?;
     }
+    Ok(())
+}
+
+pub async fn detach_identities(
+    conn: &mut SqliteConnection,
+    from_variant_id: i32,
+) -> anyhow::Result<()> {
+    Identities::delete_attachments(conn, params![from_variant_id]).await?;
     Ok(())
 }

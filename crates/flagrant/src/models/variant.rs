@@ -102,7 +102,7 @@ async fn update(
 /// Updates a single variant with `new_value` and `new_weight`.
 ///
 /// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// nature, is immutable and should be altered by `feature::update` function instead.
+/// nature, has immutable weight and value updatable by `feature::update` function.
 pub async fn update_one(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -118,7 +118,7 @@ pub async fn update_one(
         environment,
         feature_id,
         variant.id,
-        new_weight as i8,
+        new_weight as i8 - variant.weight as i8,
     )
     .await?;
     tx.commit().await?;
@@ -189,38 +189,31 @@ pub async fn delete(
     variant: &Variant,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let variants_count: u16 = Variants::fetch_count_of_feature_variants(
-        &mut *tx,
-        params![environment.id, variant.id],
-        |r| r.get("count"),
-    )
-    .await?;
+    let (feature_id, variants_count): (i32, i8) =
+        Variants::fetch_count_of_feature_variants(&mut *tx, params![environment.id, variant.id])
+            .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
         bail!(FlagrantError::BadRequest("Could not remove control variant as there are still other variants existing for this feature"));
     }
 
+    // all identities need to be detached from variant first to be sure
+    // that there are no more dangling references to given variant_id.
+    identity::detach_identities(&mut tx, variant.id).await?;
+
     Variants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;
 
-    let feature_id: i32 =
-        Variants::delete_variant(&mut *tx, params![variant.id], |v| v.get("feature_id"))
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
+    Variants::delete_variant(&mut *tx, params![variant.id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
 
     if !is_default(environment, variant) {
-        upsert_control_weight(
-            &mut tx,
-            environment,
-            feature_id,
-            variant.id,
-            -(variant.weight as i8),
-        )
-        .await?;
+        upsert_control_weight(&mut tx, environment, feature_id, variant.id, -100).await?;
     }
-    tx.commit().await?;
 
+    tx.commit().await?;
     Ok(())
 }
 
@@ -264,13 +257,19 @@ async fn upsert_control_weight(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant weight", e))?;
 
+    let (from_id, to_id) = if weight_diff > 0 {
+        (control_variant_id, variant_id)
+    } else {
+        (variant_id, control_variant_id)
+    };
+
     if variant_id != control_variant_id {
-        identity::migrate_attached(
+        identity::migrate_identities(
             &mut *tx,
             environment,
-            control_variant_id,
-            variant_id,
-            weight_diff,
+            from_id,
+            to_id,
+            weight_diff.unsigned_abs(),
         )
         .await?;
     }
