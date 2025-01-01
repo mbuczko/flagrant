@@ -46,7 +46,7 @@ async fn idents_count_for_feature_variant(
 /// Smoke tests for identities migrations.
 ///
 /// There are couple of operations which impact variants weights, like:
-///  - adding / deleting variant (impacts control variant)
+///  - adding / deleting variant (impacts control variant weight)
 ///  - updating variant weight up or down
 ///
 /// Variant weight change always triggers a question:

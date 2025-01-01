@@ -32,8 +32,7 @@ reqwest = "0.11"
 
 [profile.release]
 panic = "abort"
+lto = true
+strip = true # "debuginfo"
 opt-level = 'z'  # Optimize for size.
 codegen-units = 1
-lto = true
-strip = true
-#strip = "debuginfo

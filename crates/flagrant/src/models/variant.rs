@@ -48,8 +48,8 @@ pub(crate) async fn create_control(
 /// Creates a feature variant with given weight and value.
 ///
 /// Non-control feature variants hold an alternative values shared by defined environments, ie.
-/// any update on feature value is reflected immediately in all environments. Weights on the
-/// other hand prioritize the variant during distribution process and behave exactly the opposite
+/// any update on feature value is reflected immediately in all environments. Weights, on the
+/// other hand, prioritize the variant during distribution process and behave exactly the opposite
 /// way - the change impacts single environment only.
 pub async fn create(
     conn: &mut SqliteConnection,

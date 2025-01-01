@@ -12,7 +12,7 @@ flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
 serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
-rustyline = {version = "14.0.0", features = ["derive"]}
+rustyline = {version = "15.0.0", features = ["derive"]}
 fancy-table = {path = "../../../fancy-table"}
 
 clap = "4.5.1"

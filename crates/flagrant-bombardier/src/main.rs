@@ -74,11 +74,12 @@ pub fn main() -> anyhow::Result<()> {
             });
         }
 
-        let m = MultiProgress::new();
+        #[allow(clippy::literal_string_with_formatting_args)]
         let sty = ProgressStyle::with_template("[{pos:>7}/{len:7}] {bar:40.cyan/blue} {msg}")
             .unwrap()
             .progress_chars("##-");
 
+        let m = MultiProgress::new();
         let mut pbs = HashMap::<String, ProgressBar>::new();
         loop {
             let guard = buckets.read().unwrap();

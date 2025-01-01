@@ -2,6 +2,9 @@ fn whitespace(ch: char) -> bool {
     ch == ' ' || ch == '\r' || ch == '\n' || ch == '\t'
 }
 
+/// Splits command line input string into a vector of slices:
+/// `[command, operation, arg, arg, ...]`, eg:
+/// `["ENVIRONMENT", "set", "development"]`
 pub fn split_command_line(input: &str) -> anyhow::Result<Vec<&str>> {
     let mut chars = input.char_indices();
     let mut output = Vec::new();
