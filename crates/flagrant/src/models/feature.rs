@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 
 use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
-use hugsqlx::{params, HugSqlx};
+use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
-use sqlx::{sqlite::SqliteRow, Connection, Row, SqliteConnection};
+use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
 use super::variant;
 

@@ -1,4 +1,4 @@
-use axum::{extract::Path, Json};
+use axum::{Json, extract::Path};
 use flagrant::models::project;
 use flagrant_types::Project;
 

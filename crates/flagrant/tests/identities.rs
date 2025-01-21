@@ -1,6 +1,6 @@
 use flagrant::models::{feature, identity, variant};
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
-use sqlx::{pool::PoolConnection, Sqlite};
+use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::common::create_context;
 

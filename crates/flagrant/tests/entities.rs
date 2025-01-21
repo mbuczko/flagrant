@@ -1,7 +1,7 @@
 use common::{create_context, create_environment, random_string};
 use flagrant::models::{feature, project, variant};
 use flagrant_types::FeatureValue;
-use sqlx::{pool::PoolConnection, Sqlite};
+use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::common::create_feature;
 
@@ -162,12 +162,16 @@ async fn delete_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "foo").await;
 
-    assert!(feature::delete(&mut conn, &environment, &feature)
-        .await
-        .is_ok());
-    assert!(feature::get_by_id(&mut conn, &environment, feature.id)
-        .await
-        .is_err());
+    assert!(
+        feature::delete(&mut conn, &environment, &feature)
+            .await
+            .is_ok()
+    );
+    assert!(
+        feature::get_by_id(&mut conn, &environment, feature.id)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test]
@@ -195,12 +199,16 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    assert!(feature::delete(&mut conn, &environment, &feature)
-        .await
-        .is_ok());
-    assert!(feature::get_by_id(&mut conn, &environment, feature.id)
-        .await
-        .is_err());
+    assert!(
+        feature::delete(&mut conn, &environment, &feature)
+            .await
+            .is_ok()
+    );
+    assert!(
+        feature::get_by_id(&mut conn, &environment, feature.id)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test]
@@ -497,15 +505,17 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .await
     .unwrap();
 
-    assert!(variant::update_one(
-        &mut conn,
-        &environment,
-        &variant,
-        FeatureValue::build("new-bar-3"),
-        80
-    )
-    .await
-    .is_err());
+    assert!(
+        variant::update_one(
+            &mut conn,
+            &environment,
+            &variant,
+            FeatureValue::build("new-bar-3"),
+            80
+        )
+        .await
+        .is_err()
+    );
 
     // default weight should retain old value
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
@@ -543,9 +553,11 @@ async fn disallow_removing_default_variant_when_other_variants_exist(
     .unwrap();
 
     let variant = feature.get_default_variant();
-    assert!(variant::delete(&mut conn, &environment, variant)
-        .await
-        .is_err());
+    assert!(
+        variant::delete(&mut conn, &environment, variant)
+            .await
+            .is_err()
+    );
     assert!(feature.get_default_variant().is_control())
 }
 
@@ -557,7 +569,9 @@ async fn allow_removing_default_variant_when_no_other_variants_exist(
     let feature = create_feature(&mut conn, &environment, "bar").await;
     let variant = feature.get_default_variant();
 
-    assert!(variant::delete(&mut conn, &environment, variant)
-        .await
-        .is_ok());
+    assert!(
+        variant::delete(&mut conn, &environment, variant)
+            .await
+            .is_ok()
+    );
 }

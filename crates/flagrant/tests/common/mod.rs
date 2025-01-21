@@ -1,7 +1,7 @@
 use flagrant::models::{environment, feature, project};
 use flagrant_types::{Environment, Feature, FeatureValue, Project};
 use rand::Rng;
-use sqlx::{pool::PoolConnection, Sqlite};
+use sqlx::{Sqlite, pool::PoolConnection};
 
 const KEY_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                              abcdefghijklmnopqrstuvwxyz\

@@ -32,11 +32,10 @@ impl Tabular for Environment {
             .add_title_with_align("ENVIRONMENT", TitleAlign::RightOffset(1))
             .build(80);
 
-        table.render(vec![
-            &["ID", &id_str],
-            &["NAME", &self.name],
-            &["DESCRIPTION", desc_str],
-        ]);
+        table.render(vec![&["ID", &id_str], &["NAME", &self.name], &[
+            "DESCRIPTION",
+            desc_str,
+        ]]);
     }
 }
 
@@ -103,10 +102,8 @@ impl Tabular for Variant {
             .add_title_with_align("VARIANT", TitleAlign::RightOffset(1))
             .build(80);
 
-        table.render(vec![
-            &["ID", &id_str],
-            &["WEIGHT", &wgh_str],
-            &["VALUE", &val_str],
-        ]);
+        table.render(vec![&["ID", &id_str], &["WEIGHT", &wgh_str], &[
+            "VALUE", &val_str,
+        ]]);
     }
 }

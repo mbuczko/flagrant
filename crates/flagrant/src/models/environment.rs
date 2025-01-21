@@ -1,4 +1,4 @@
-use hugsqlx::{params, HugSqlx};
+use hugsqlx::{HugSqlx, params};
 use sqlx::SqliteConnection;
 
 use crate::errors::FlagrantError;
@@ -49,10 +49,10 @@ pub async fn get_by_prefix(
     project: &Project,
     prefix: String,
 ) -> anyhow::Result<Vec<Environment>> {
-    let envs = Environments::fetch_environments_by_pattern::<_, Environment>(
-        conn,
-        params![project.id, format!("{}%", prefix)],
-    )
+    let envs = Environments::fetch_environments_by_pattern::<_, Environment>(conn, params![
+        project.id,
+        format!("{}%", prefix)
+    ])
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of environments", e))?;
 

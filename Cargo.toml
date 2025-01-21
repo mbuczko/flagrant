@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["feature-flags", "cli", "sqlite", "hugsql"]
 categories = ["feature-flags", "cli"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 axum = "0.7.7" 

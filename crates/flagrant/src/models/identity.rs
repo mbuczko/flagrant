@@ -1,5 +1,5 @@
 use flagrant_types::{Environment, Feature, IdentityVariant};
-use hugsqlx::{params, HugSqlx};
+use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError};
@@ -54,15 +54,12 @@ pub async fn get_variants(
                         .await?;
                 identity_id = Some(id);
             }
-            Identities::upsert_identity_variant(
-                &mut *tx,
-                params![
-                    identity_id.unwrap(),
-                    environment.id,
-                    var.feature_id,
-                    variant.id
-                ],
-            )
+            Identities::upsert_identity_variant(&mut *tx, params![
+                identity_id.unwrap(),
+                environment.id,
+                var.feature_id,
+                variant.id
+            ])
             .await
             .map_err(|e| {
                 FlagrantError::QueryFailed("Could not attach identity to given variant", e)
@@ -85,10 +82,12 @@ pub async fn migrate_identities(
     by_percent: u8,
 ) -> anyhow::Result<()> {
     if from_variant_id != to_variant_id {
-        Identities::migrate_identities(
-            conn,
-            params![environment.id, from_variant_id, to_variant_id, by_percent],
-        )
+        Identities::migrate_identities(conn, params![
+            environment.id,
+            from_variant_id,
+            to_variant_id,
+            by_percent
+        ])
         .await?;
     }
     Ok(())

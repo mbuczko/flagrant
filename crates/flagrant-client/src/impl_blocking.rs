@@ -1,5 +1,5 @@
 use reqwest::blocking::Response;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::http::{Auth, HttpClient};
 

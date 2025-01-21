@@ -1,5 +1,5 @@
-use rustyline::hint::{Hint, Hinter};
 use rustyline::Context;
+use rustyline::hint::{Hint, Hinter};
 
 use super::command::ReplCommand;
 

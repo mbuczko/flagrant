@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use axum::{extract::Path, Json};
+use axum::{Json, extract::Path};
 use flagrant::models::{environment, feature, variant};
-use flagrant_types::{payload::VariantRequestPayload, FeatureValue, Variant};
+use flagrant_types::{FeatureValue, Variant, payload::VariantRequestPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 

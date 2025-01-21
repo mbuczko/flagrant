@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
-use sqlx::{encode::IsNull, sqlite::SqliteValueRef, Decode, Encode, Sqlite, Type};
+use sqlx::{Decode, Encode, Sqlite, Type, encode::IsNull, sqlite::SqliteValueRef};
 use std::{fmt, str::FromStr};
 use thiserror::Error;
 

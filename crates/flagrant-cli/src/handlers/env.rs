@@ -1,6 +1,6 @@
 use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{payload::EnvRequestPayload, Environment};
+use flagrant_types::{Environment, payload::EnvRequestPayload};
 
 use crate::{printer::tabular::Tabular, repl::readline::ReplEditor};
 
@@ -8,13 +8,13 @@ use crate::{printer::tabular::Tabular, repl::readline::ReplEditor};
 pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let res = session.project.as_base_resource();
-        let env = session.client.post::<_, Environment>(
-            res.subpath("/envs"),
-            EnvRequestPayload {
-                name: name.to_string(),
-                description: args.get(2).map(|d| d.to_string()),
-            },
-        )?;
+        let env =
+            session
+                .client
+                .post::<_, Environment>(res.subpath("/envs"), EnvRequestPayload {
+                    name: name.to_string(),
+                    description: args.get(2).map(|d| d.to_string()),
+                })?;
 
         env.render();
         return Ok(());

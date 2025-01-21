@@ -79,14 +79,7 @@ pub fn init(session: Session) -> anyhow::Result<()> {
     loop {
         match rl.readline(prompt(&session).as_str()) {
             Ok(line) => {
-                // after a command line split, all the slices turn into
-                // a vector of following elements:
-                //
-                // [command, operation, arg, arg, ...]
-                //
-                // eg: ["ENVIRONMENT", "set", "development"]
                 let slices = split_command_line(&line)?;
-
                 if slices.is_empty() {
                     continue;
                 }

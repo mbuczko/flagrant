@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, Query},
     Json,
+    extract::{Path, Query},
 };
 use flagrant::models::{environment, feature};
-use flagrant_types::{payload::FeatureRequestPayload, Feature};
+use flagrant_types::{Feature, payload::FeatureRequestPayload};
 use serde::Deserialize;
 
 use crate::{errors::ServiceError, extractors::DbConnection};

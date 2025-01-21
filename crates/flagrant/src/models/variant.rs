@@ -1,5 +1,5 @@
 use anyhow::bail;
-use hugsqlx::{params, HugSqlx};
+use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::errors::FlagrantError;
@@ -194,7 +194,9 @@ pub async fn delete(
             .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
-        bail!(FlagrantError::BadRequest("Could not remove control variant as there are still other variants existing for this feature"));
+        bail!(FlagrantError::BadRequest(
+            "Could not remove control variant as there are still other variants existing for this feature"
+        ));
     }
 
     // all identities need to be detached from variant first to be sure

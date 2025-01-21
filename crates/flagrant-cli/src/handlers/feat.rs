@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use flagrant_client::session::{Resource, Session};
-use flagrant_types::{payload::FeatureRequestPayload, Feature, FeatureValue};
+use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
 
 use crate::{
     printer::tabular::Tabular,
@@ -19,15 +19,15 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
             .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
-        let feature = session.client.post::<_, Feature>(
-            res.subpath("/features"),
-            FeatureRequestPayload {
-                name: name.to_string(),
-                description: args.get(3).map(|d| d.to_string()),
-                is_enabled: false,
-                value: parsed,
-            },
-        )?;
+        let feature =
+            session
+                .client
+                .post::<_, Feature>(res.subpath("/features"), FeatureRequestPayload {
+                    name: name.to_string(),
+                    description: args.get(3).map(|d| d.to_string()),
+                    is_enabled: false,
+                    value: parsed,
+                })?;
 
         feature.render();
         return Ok(());
@@ -49,9 +49,9 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
         if let Ok(feature) = response {
-            let cloned = val.parse().unwrap_or_else(|_| {
-                feature.get_default_value().clone_with(&val)
-            });
+            let cloned = val
+                .parse()
+                .unwrap_or_else(|_| feature.get_default_value().clone_with(&val));
 
             let subpath = format!("/features/{}", feature.id);
             let mut payload = FeatureRequestPayload::from(feature);

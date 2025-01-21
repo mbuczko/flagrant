@@ -4,7 +4,7 @@ use axum::{
     http::request::Parts,
 };
 use flagrant::errors::FlagrantError;
-use sqlx::{pool::PoolConnection, Sqlite, SqlitePool};
+use sqlx::{Sqlite, SqlitePool, pool::PoolConnection};
 
 use crate::errors::ServiceError;
 

@@ -1,8 +1,8 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, RwLock,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
     time::Duration,
@@ -11,7 +11,7 @@ use std::{
 use flagrant_client::{http::Auth, session::Session};
 use flagrant_types::{FeatureResponse, FeatureValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rand::{rngs::ThreadRng, Rng};
+use rand::{Rng, rngs::ThreadRng};
 use ulid::Ulid;
 
 const IDENTS_COUNT: usize = 100;

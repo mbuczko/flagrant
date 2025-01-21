@@ -1,4 +1,4 @@
-use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
+use notify_debouncer_mini::{DebounceEventResult, new_debouncer, notify::RecursiveMode};
 use std::{path::Path, time::Duration};
 
 fn main() {

@@ -1,4 +1,4 @@
-use hugsqlx::{params, HugSqlx};
+use hugsqlx::{HugSqlx, params};
 use sqlx::SqliteConnection;
 
 use crate::errors::FlagrantError;

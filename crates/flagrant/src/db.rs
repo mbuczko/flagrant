@@ -1,6 +1,6 @@
+use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::SqlitePool;
 use std::env;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
