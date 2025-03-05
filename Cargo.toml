@@ -29,6 +29,7 @@ serde_valid = "0.20.0"
 anyhow = "1.0.80"
 thiserror = "1.0.29"
 reqwest = "0.11"
+rustyline = { version = "15.0.0", features = ["derive"], git = "https:/github.com/mbuczko/rustyline", branch = "feat/prompt-overlays" }
 
 [profile.release]
 panic = "abort"

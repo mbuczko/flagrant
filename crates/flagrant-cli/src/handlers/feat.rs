@@ -1,33 +1,33 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use flagrant_client::session::{Resource, Session};
+use flagrant_client::connection::{Connection, Resource};
+use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
 
-use crate::{
-    printer::tabular::Tabular,
-    repl::{multiline::multiline_value, readline::ReplEditor},
-};
+use crate::printer::tabular::Tabular;
 
 /// Adds a new feature.
-pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.environment.as_base_resource();
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
         let val = args
             .get(2)
-            .map(|&a| Cow::from(a))
-            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
+            .map(|a| Cow::from(a.to_string()))
+            .unwrap_or(Cow::Owned(String::default()));
+        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
-        let feature =
-            session
-                .client
-                .post::<_, Feature>(res.subpath("/features"), FeatureRequestPayload {
-                    name: name.to_string(),
-                    description: args.get(3).map(|d| d.to_string()),
-                    is_enabled: false,
-                    value: parsed,
-                })?;
+        let feature = ctx.client.post::<_, Feature>(
+            res.subpath("/features"),
+            FeatureRequestPayload {
+                name: name.to_string(),
+                description: args.get(3).map(|d| d.to_string()),
+                is_enabled: false,
+                value: parsed,
+            },
+        )?;
 
         feature.render();
         return Ok(());
@@ -36,15 +36,17 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
 }
 
 /// Changes value of given feature.
-pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.environment.as_base_resource();
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
         let val = args
             .get(2)
-            .map(|&a| Cow::from(a))
-            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
+            .map(|a| Cow::from(a.to_string()))
+            .unwrap_or(Cow::Owned(String::default()));
+        //.unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
-        let response = session
+        let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
@@ -57,10 +59,10 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
             let mut payload = FeatureRequestPayload::from(feature);
 
             payload.value = cloned;
-            session.client.put(res.subpath(&subpath), payload)?;
+            ctx.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature: Feature = session.client.get(res.subpath(&subpath))?;
+            let feature: Feature = ctx.client.get(res.subpath(&subpath))?;
 
             feature.render();
             return Ok(());
@@ -71,20 +73,21 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
 }
 
 /// Switches feature on.
-pub fn on(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn on(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     onoff(args, session, true)
 }
 
 /// Switches feature off.
-pub fn off(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn off(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     onoff(args, session, false)
 }
 
 /// Switches feature on/off.
-fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
+fn onoff(args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.environment.as_base_resource();
-        let response = session
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
+        let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
@@ -93,10 +96,10 @@ fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
             let mut payload = FeatureRequestPayload::from(feature);
 
             payload.is_enabled = on;
-            session.client.put(res.subpath(&subpath), payload)?;
+            ctx.client.put(res.subpath(&subpath), payload)?;
 
             // re-fetch feature to be sure it's updated
-            let feature = session.client.get::<Feature>(res.subpath(&subpath))?;
+            let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
 
             feature.render();
             return Ok(());
@@ -107,9 +110,10 @@ fn onoff(args: &[&str], session: &Session, on: bool) -> anyhow::Result<()> {
 }
 
 /// Lists all features in a project.
-pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
-    let res = session.environment.as_base_resource();
-    let feats: Vec<Feature> = session.client.get(res.subpath("/features"))?;
+pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.environment.as_base_resource();
+    let feats: Vec<Feature> = ctx.client.get(res.subpath("/features"))?;
 
     let mut rows = Vec::with_capacity(feats.len());
     for feat in feats {
@@ -128,16 +132,16 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
 }
 
 /// Deletes existing feature.
-pub fn delete(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.environment.as_base_resource();
-        let response = session
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
+        let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{name}")));
 
         if let Ok(feature) = response {
-            session
-                .client
+            ctx.client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 
             println!("Feature removed.");

@@ -1,5 +1,3 @@
-use std::sync::RwLock;
-
 use anyhow::bail;
 use flagrant_types::{Environment, FeatureResponse, Project};
 
@@ -9,20 +7,20 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Session {
+pub struct Connection {
     pub client: HttpClient,
-    pub project: RwLock<Project>,
-    pub environment: RwLock<Environment>,
+    pub project: Project,
+    pub environment: Environment,
 }
 
-impl Session {
+impl Connection {
     #[cfg(feature = "blocking")]
     pub fn init(
         api_host: String,
         auth: Auth,
         project_id: i32,
         environment_id: i32,
-    ) -> anyhow::Result<Session> {
+    ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_id}");
 
@@ -40,7 +38,7 @@ impl Session {
         api_host: String,
         project_id: i32,
         environment_id: i32,
-    ) -> anyhow::Result<Session> {
+    ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host);
         let path = format!("/projects/{project_id}");
 
@@ -58,31 +56,17 @@ impl Session {
         project: Option<Project>,
         environment: Option<Environment>,
         client: HttpClient,
-    ) -> anyhow::Result<Session> {
+    ) -> anyhow::Result<Connection> {
         match (project, environment) {
-            (Some(project), Some(environment)) => Ok(Session {
+            (Some(project), Some(environment)) => Ok(Connection {
                 client,
-                project: RwLock::new(project),
-                environment: RwLock::new(environment),
+                project,
+                environment,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
             _ => bail!("Neither project nor environment was found."),
         }
-    }
-
-    pub fn _set_project(&self, new_project: Project) {
-        let mut guard = self.project.write().unwrap();
-
-        std::mem::take(&mut *guard);
-        *guard = new_project;
-    }
-
-    pub fn set_environment(&self, new_environment: Environment) {
-        let mut guard = self.environment.write().unwrap();
-
-        std::mem::take(&mut *guard);
-        *guard = new_environment;
     }
 
     #[cfg(feature = "blocking")]
@@ -98,14 +82,14 @@ pub trait Resource {
     fn as_base_resource(&self) -> BaseResource;
 }
 
-impl Resource for RwLock<Project> {
+impl Resource for Project {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Project(self.read().unwrap().id)
+        BaseResource::Project(self.id)
     }
 }
 
-impl Resource for RwLock<Environment> {
+impl Resource for Environment {
     fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Environment(self.read().unwrap().id)
+        BaseResource::Environment(self.id)
     }
 }

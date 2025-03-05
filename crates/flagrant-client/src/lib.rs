@@ -1,6 +1,6 @@
 pub mod http;
+pub mod connection;
 pub mod resource;
-pub mod session;
 
 #[cfg(not(feature = "blocking"))]
 pub mod impl_async;

@@ -1,23 +1,23 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
-use flagrant_client::session::{Resource, Session};
+use flagrant_client::connection::{Connection, Resource};
+use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Feature, Variant, payload::VariantRequestPayload};
 
-use crate::{
-    printer::tabular::Tabular,
-    repl::{multiline::multiline_value, readline::ReplEditor},
-};
+use crate::printer::tabular::Tabular;
 
-pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
-        let res = session.environment.as_base_resource();
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
         let val = args
             .get(3)
-            .map(|&a| Cow::from(a))
-            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
+            .map(|a| Cow::from(a.to_string()))
+            .unwrap_or(Cow::Owned(String::default()));
+        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
-        let response = session
+        let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
 
@@ -32,8 +32,9 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
             let cloned = val
                 .parse()
                 .unwrap_or_else(|_| feature.get_default_value().clone_with(&val));
+
             let weight = match args.get(2) {
-                Some(&weight) => weight.parse::<u8>()?,
+                Some(weight) => weight.parse::<u8>()?,
                 _ => bail!("No weight or value provided."),
             };
 
@@ -41,7 +42,7 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
                 bail!("Variant weight should be positive number in range of <0, 100>.")
             }
 
-            let variant = session.client.post::<_, Variant>(
+            let variant = ctx.client.post::<_, Variant>(
                 res.subpath(format!("/features/{}/variants", feature.id)),
                 VariantRequestPayload {
                     value: cloned.to_string(),
@@ -56,21 +57,24 @@ pub fn add(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow:
     bail!("No feature name provided.")
 }
 
-pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
-        let res = session.environment.as_base_resource();
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
         let val = args
             .get(2)
-            .map(|&a| Cow::from(a))
-            .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
+            .map(|a| Cow::from(a.to_string()))
+            .unwrap_or(Cow::Owned(String::default()));
 
-        let response = session
+        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
+
+        let response = ctx
             .client
             .get::<Variant>(res.subpath(format!("/variants/{variant_id}")));
 
         if let Ok(variant) = response {
             // update variant value according to following rules:
-            // - if given value hasn't been explicitly typed (like json::{"a": 2}) use  current
+            // - if given value hasn't been explicitly typed (like json::{"a": 2}) use current
             //   variant's value type
             // - if value has been explicitly typed priotitize type over current variant's type
 
@@ -78,7 +82,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
                 .parse()
                 .unwrap_or_else(|_| variant.value.clone_with(&val));
 
-            session.client.put(
+            ctx.client.put(
                 res.subpath(format!("/variants/{}", variant.id)),
                 VariantRequestPayload {
                     value: cloned.to_string(),
@@ -86,7 +90,7 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
                 },
             )?;
             // re-fetch variant to be sure it's updated
-            let variant = session
+            let variant = ctx
                 .client
                 .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
@@ -98,10 +102,11 @@ pub fn value(args: &[&str], session: &Session, editor: &mut ReplEditor) -> anyho
     bail!("No variant-id provided.")
 }
 
-pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
-        let res = session.environment.as_base_resource();
-        let response = session
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
+        let response = ctx
             .client
             .get::<Variant>(res.subpath(format!("/variants/{variant_id}")));
 
@@ -112,7 +117,7 @@ pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
                 if !(0..=100).contains(&weight) {
                     bail!("Variant weight should be positive number in range of <0, 100>.")
                 }
-                session.client.put(
+                ctx.client.put(
                     res.subpath(format!("/variants/{}", variant.id)),
                     VariantRequestPayload {
                         value: variant.value.to_string(),
@@ -120,7 +125,7 @@ pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
                     },
                 )?;
                 // re-fetch variant to be sure it's updated
-                let variant = session
+                let variant = ctx
                     .client
                     .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
@@ -134,16 +139,17 @@ pub fn weight(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::R
     bail!("No variant-id provided.")
 }
 
-pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(feature_name) = args.get(1) {
-        let res = session.environment.as_base_resource();
-        let response = session
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
+        let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
 
         match response {
             Ok(feature) => {
-                let variants: Vec<Variant> = session
+                let variants: Vec<Variant> = ctx
                     .client
                     .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
 
@@ -166,12 +172,12 @@ pub fn list(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Res
     bail!("No feature name provided.")
 }
 
-pub fn del(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(variant_id) = args.get(1) {
-        let res = session.environment.as_base_resource();
+        let ctx = session.context.read().unwrap();
+        let res = ctx.environment.as_base_resource();
 
-        session
-            .client
+        ctx.client
             .delete(res.subpath(format!("/variants/{variant_id}")))?;
 
         println!("Removed variant id={variant_id}");

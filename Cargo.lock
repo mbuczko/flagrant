@@ -746,6 +746,7 @@ dependencies = [
  "clap",
  "fancy-table",
  "flagrant-client",
+ "flagrant-repl",
  "flagrant-types",
  "reqwest",
  "rustyline",
@@ -762,6 +763,14 @@ dependencies = [
  "flagrant-types",
  "reqwest",
  "serde",
+]
+
+[[package]]
+name = "flagrant-repl"
+version = "0.0.3"
+dependencies = [
+ "anyhow",
+ "rustyline",
 ]
 
 [[package]]
@@ -2099,8 +2108,7 @@ checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
 [[package]]
 name = "rustyline"
 version = "15.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ee1e066dc922e513bda599c6ccb5f3bb2b0ea5870a579448f2622993f0a9a2f"
+source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#83cb98b6dbb2fecceb1aee739aa828a9947b7604"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if",
@@ -2122,8 +2130,7 @@ dependencies = [
 [[package]]
 name = "rustyline-derive"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327e9d075f6df7e25fbf594f1be7ef55cf0d567a6cb5112eeccbbd51ceb48e0d"
+source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#83cb98b6dbb2fecceb1aee739aa828a9947b7604"
 dependencies = [
  "proc-macro2",
  "quote",

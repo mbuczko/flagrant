@@ -3,8 +3,8 @@ use rustyline::hint::{Hint, Hinter};
 
 use super::command::ReplCommand;
 
-pub struct ReplHinter<'a> {
-    hints: &'a Vec<ReplCommand>,
+pub struct ReplHinter<'a, T> {
+    hints: &'a Vec<ReplCommand<T>>,
 }
 
 #[derive(Hash, Debug, PartialEq, Eq)]
@@ -21,7 +21,7 @@ impl Hint for CommandHint {
     }
 }
 
-impl Hinter for ReplHinter<'_> {
+impl<T> Hinter for ReplHinter<'_, T> {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
@@ -44,8 +44,8 @@ impl Hinter for ReplHinter<'_> {
     }
 }
 
-impl<'a> ReplHinter<'a> {
-    pub fn new(hints: &'a Vec<ReplCommand>) -> ReplHinter<'a> {
+impl<'a, T> ReplHinter<'a, T> {
+    pub fn new(hints: &'a Vec<ReplCommand<T>>) -> ReplHinter<'a, T> {
         ReplHinter { hints }
     }
 }

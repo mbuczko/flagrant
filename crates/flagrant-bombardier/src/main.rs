@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use flagrant_client::{http::Auth, session::Session};
+use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_types::{FeatureResponse, FeatureValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, rngs::ThreadRng};
@@ -34,7 +34,7 @@ pub fn main() -> anyhow::Result<()> {
         IDENTS_COUNT,
     )));
     let buckets = Arc::new(RwLock::new(HashMap::new()));
-    let session = Arc::new(Session::init(
+    let connection = Arc::new(Connection::init(
         "http://localhost:3030".into(),
         Auth::None,
         PROJECT_ID,
@@ -45,13 +45,13 @@ pub fn main() -> anyhow::Result<()> {
         for _ in 0..THREADS_COUNT {
             let idents = Arc::clone(&idents);
             let buckets = Arc::clone(&buckets);
-            let session = Arc::clone(&session);
+            let conn = Arc::clone(&connection);
 
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
                 loop {
                     if let Some(ident) = get_or_generate_ident(&idents, &mut rng) {
-                        if let Some(response) = session.get_features(&ident) {
+                        if let Some(response) = conn.get_features(&ident) {
                             if let Some(fv) = feature_value(response, FEATURE_ID) {
                                 let mut guard = buckets.write().unwrap();
                                 let val = match fv {

@@ -1,20 +1,22 @@
 use anyhow::bail;
-use flagrant_client::session::{Resource, Session};
+use flagrant_client::connection::{Connection, Resource};
+use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Environment, payload::EnvRequestPayload};
 
-use crate::{printer::tabular::Tabular, repl::readline::ReplEditor};
+use crate::printer::tabular::Tabular;
 
 /// Adds a new Environment
-pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.project.as_base_resource();
-        let env =
-            session
-                .client
-                .post::<_, Environment>(res.subpath("/envs"), EnvRequestPayload {
-                    name: name.to_string(),
-                    description: args.get(2).map(|d| d.to_string()),
-                })?;
+        let ctx = session.context.read().unwrap();
+        let res = ctx.project.as_base_resource();
+        let env = ctx.client.post::<_, Environment>(
+            res.subpath("/envs"),
+            EnvRequestPayload {
+                name: name.to_string(),
+                description: args.get(2).map(|d| d.to_string()),
+            },
+        )?;
 
         env.render();
         return Ok(());
@@ -23,11 +25,10 @@ pub fn add(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Resu
 }
 
 /// Lists all environments
-pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
-    let res = session.project.as_base_resource();
-    let envs = session
-        .client
-        .get::<Vec<Environment>>(res.subpath("/envs"))?;
+pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.project.as_base_resource();
+    let envs = ctx.client.get::<Vec<Environment>>(res.subpath("/envs"))?;
 
     let mut rows = Vec::with_capacity(envs.len());
     for env in envs {
@@ -42,16 +43,17 @@ pub fn list(_args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Re
 }
 
 /// Changes current environment in a session
-pub fn switch(args: &[&str], session: &Session, _: &mut ReplEditor) -> anyhow::Result<()> {
+pub fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let res = session.project.as_base_resource();
-        let response = session
+        let mut ctx = session.context.write().unwrap();
+        let res = ctx.project.as_base_resource();
+        let response = ctx
             .client
             .get::<Environment>(res.subpath(format!("/envs/name/{name}")));
 
         if let Ok(env) = response {
             println!("Switching to environment '{}' (id={})", env.name, env.id);
-            session.set_environment(env);
+            ctx.environment = env;
             return Ok(());
         }
         bail!("No such an environment.")
