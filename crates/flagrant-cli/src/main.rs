@@ -75,24 +75,24 @@ fn main() -> anyhow::Result<()> {
     let commands = vec![
         // environments
         Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("to", "environment", handlers::env::switch),
-        Command::Environment.op("ls", "", handlers::env::list),
-        Command::Environment.args("add | to | ls"),
+        Command::Environment.op("switchto", "environment", handlers::env::switch),
+        Command::Environment.op("list", "", handlers::env::list),
+        Command::Environment.args("add | switchto | list"),
         // features
-        Command::Feature.op("ls", "", handlers::feat::list),
+        Command::Feature.op("list", "", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
-        Command::Feature.op("del", "feature", handlers::feat::delete),
-        Command::Feature.op("val", "feature value", handlers::feat::value),
+        Command::Feature.op("delete", "feature", handlers::feat::delete),
+        Command::Feature.op("value", "feature value", handlers::feat::value),
         Command::Feature.op("on", "feature", handlers::feat::on),
         Command::Feature.op("off", "feature", handlers::feat::off),
-        Command::Feature.args("add | del | ls | on | off | val"),
+        Command::Feature.args("add | delete | list | on | off | value"),
         // variants
-        Command::Variant.op("ls", "feature", handlers::var::list),
+        Command::Variant.op("list", "feature", handlers::var::list),
         Command::Variant.op("add", "feature weight value", handlers::var::add),
-        Command::Variant.op("del", "variant-id", handlers::var::del),
-        Command::Variant.op("val", "variant-id value", handlers::var::value),
+        Command::Variant.op("delete", "variant-id", handlers::var::del),
+        Command::Variant.op("value", "variant-id value", handlers::var::value),
         Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
-        Command::Variant.args("add | del | ls | val | weight"),
+        Command::Variant.args("add | delete | list | value | weight"),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
