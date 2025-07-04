@@ -45,6 +45,7 @@ impl Command {
     }
 
     /// Builds a no-op (no-operation) version of command.
+    #[allow(dead_code)]
     pub fn no_op(
         &self,
         hint: &str,

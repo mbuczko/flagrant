@@ -114,14 +114,10 @@ impl Completer for CommandCompleter<'_> {
         let args = split_command_line(line).unwrap();
         let (arg_n, offset) = find_arg_by_position(&args, pos);
 
-        // 0 - nothing entered
-        // 1 - command (partially) provided
-        // 2 - operation (partially) provided
-        // 3.. - arguments (partially) provided
         match args.len() {
-            0..=1 => self.complete_command(&line.to_uppercase()).map_err(|e| {
-                ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
-            }),
+            0..=1 => self
+                .complete_command(&line.to_uppercase())
+                .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string()))),
             n if arg_n < n => {
                 let command = args.first().unwrap().as_ref();
                 let argument = &args[arg_n];
@@ -134,9 +130,7 @@ impl Completer for CommandCompleter<'_> {
                 }
 
                 self.complete_argument(command, &argument[..offset], argument.1)
-                    .map_err(|e| {
-                        ReadlineError::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
-                    })
+                    .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
             }
             _ => Ok((pos, vec![])),
         }

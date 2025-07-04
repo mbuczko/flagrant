@@ -13,14 +13,17 @@ struct Variants {}
 
 /// Creates or updates control variant of given feature.
 ///
-/// Control variant represents environment-specific feature value being returned when either
-/// distributor decided so based on underlaying distribution strategy, or simply no other
-/// variant has been defined yet. It's important to understand that control variant weight is
-/// an auto-adjustable value, being calculated according to following rules:
+/// Control variant represents environment-specific feature value returned when either
+/// distributor decided so based on underlaying distribution strategy, or no other
+/// variant had been defined for feature yet.
+///
+/// Important property of control variant is its auto-adjustable weight, calculated
+/// according to following rules:
 ///
 /// - when created, weight is initially set up to 100%
-/// - each time new feature variant is being added, modified or removed control weight adjusts
-///   itself so, that all feature variants weights at every single moment sum up to 100%.
+/// - each time new feature variant is being added, modified or removed control weight
+///   adjusts itself so, that all feature variants weights at every single moment sum
+///   up to 100%.
 ///
 /// Control variant is auto-created at the moment when feature is being created which means
 /// that newly created feature already contains at least a single variant - a control one.
@@ -170,7 +173,6 @@ pub async fn get_all(
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
     // already exist for other environments - hence the Error as result.
-
     if !variants.iter().any(|v| is_default(environment, v)) {
         bail!(FlagrantError::BadRequest(
             "No feature value set. Use \"FEATURE val ...\" to set default feature value."
@@ -203,6 +205,7 @@ pub async fn delete(
     // that there are no more dangling references to given variant_id.
     identity::detach_identities(&mut tx, variant.id).await?;
 
+    // Remove all identities attached to this variant.
     Variants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;

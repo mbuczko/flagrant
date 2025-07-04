@@ -1,5 +1,5 @@
-pub mod http;
 pub mod connection;
+pub mod http;
 pub mod resource;
 
 #[cfg(not(feature = "blocking"))]

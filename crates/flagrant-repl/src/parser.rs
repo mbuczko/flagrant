@@ -6,7 +6,7 @@ fn whitespace(ch: char) -> bool {
     ch == ' ' || ch == '\r' || ch == '\n' || ch == '\t'
 }
 
-pub fn split_command_line(input: &str) -> anyhow::Result<Vec<Arg>> {
+pub fn split_command_line(input: &str) -> anyhow::Result<Vec<Arg<'_>>> {
     let mut chars = input.char_indices();
     let mut output = Vec::new();
     let mut start: Option<usize> = None;
@@ -70,11 +70,11 @@ mod tests {
     fn split_line() {
         assert_eq!(
             split_command_line("\"foo bar").unwrap(),
-            vec![Arg("foo bar", 0)]
+            vec![Arg("foo bar", 1)]
         );
         assert_eq!(
             split_command_line("FOO \"foo bar").unwrap(),
-            vec![Arg("FOO", 0), Arg("foo bar", 0)]
+            vec![Arg("FOO", 0), Arg("foo bar", 5)]
         );
     }
     #[test]

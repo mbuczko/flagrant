@@ -8,7 +8,7 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 
 /// Creates a new feature variant.
 /// To create a new feature variant, a few pre-conditions must be fulfiled:
-/// - there is still enough weight - all variants' weights should sum up to 100%
+/// - there is still enough weight "free" to create a feature of given weight
 /// - variant should be created for all environments (by default with same value)
 pub async fn create(
     DbConnection(mut conn): DbConnection,

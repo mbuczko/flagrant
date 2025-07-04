@@ -12,7 +12,7 @@ use super::variant;
 #[queries = "resources/db/queries/features.sql"]
 struct Features {}
 
-pub struct FeatureUpdater<'a> {
+pub struct FeatureUpdate<'a> {
     conn: &'a mut SqliteConnection,
     environment: &'a Environment,
     feature: &'a Feature,
@@ -21,7 +21,7 @@ pub struct FeatureUpdater<'a> {
     is_enabled: Option<bool>,
 }
 
-impl<'a> FeatureUpdater<'a> {
+impl<'a> FeatureUpdate<'a> {
     fn new(
         conn: &'a mut SqliteConnection,
         environment: &'a Environment,
@@ -182,8 +182,8 @@ pub fn update_one<'a>(
     conn: &'a mut SqliteConnection,
     environment: &'a Environment,
     feature: &'a Feature,
-) -> FeatureUpdater<'a> {
-    FeatureUpdater::new(conn, environment, feature)
+) -> FeatureUpdate<'a> {
+    FeatureUpdate::new(conn, environment, feature)
 }
 
 pub async fn bump_up_accumulators(

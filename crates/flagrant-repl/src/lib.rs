@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use session::Session;
 
 pub mod command;

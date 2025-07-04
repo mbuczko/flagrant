@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use command::Command;
 use flagrant_client::{
     connection::{Connection, Resource},
