@@ -66,6 +66,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         "featuriozzo".to_owned(),
         FeatureValue::build("foo"),
         true,
+        true,
     )
     .await
     .unwrap();
@@ -182,6 +183,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         &environment,
         "featuriozzo".to_owned(),
         FeatureValue::build("foo"),
+        true,
         true,
     )
     .await

@@ -85,11 +85,12 @@ pub async fn create(
     name: String,
     value: FeatureValue,
     is_enabled: bool,
+    is_active: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
     let mut feature = Features::create_feature(
         &mut *tx,
-        params![environment.project_id, name, is_enabled],
+        params![environment.project_id, name, is_active, is_enabled],
         |row| row_to_feature(row, environment),
     )
     .await

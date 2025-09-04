@@ -25,6 +25,7 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
         "featuriozzo".to_owned(),
         value.clone(),
         true,
+        true,
     )
     .await
     .unwrap();
@@ -113,6 +114,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             name.to_owned(),
             FeatureValue::Text("foo".to_owned()),
             false,
+            true,
         )
         .await;
         assert!(feature.is_err())
@@ -125,6 +127,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         format!("F_{}", random_string(1024)),
         FeatureValue::Text("foo".to_owned()),
         false,
+        true,
     )
     .await;
     assert!(feature.is_err())
@@ -142,6 +145,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         name.to_owned(),
         FeatureValue::Text("foo".to_owned()),
         false,
+        true,
     )
     .await
     .unwrap();
@@ -152,6 +156,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         name.to_owned(),
         FeatureValue::Text("foo".to_owned()),
         false,
+        true,
     )
     .await
     .unwrap();

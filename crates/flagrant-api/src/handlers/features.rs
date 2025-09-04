@@ -25,6 +25,7 @@ pub async fn create(
         payload.name,
         payload.value,
         payload.is_enabled,
+        false,
     )
     .await?;
 

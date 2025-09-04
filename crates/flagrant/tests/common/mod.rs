@@ -52,6 +52,7 @@ pub async fn create_feature(
         format!("F_{}", random_string(10)),
         FeatureValue::Text(value.to_owned()),
         true,
+        true,
     )
     .await
     .unwrap()
