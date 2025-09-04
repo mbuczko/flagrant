@@ -43,6 +43,7 @@ pub struct Feature {
     pub name: String,
     pub variants: Vec<Variant>,
     pub is_enabled: bool,
+    pub is_active: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]

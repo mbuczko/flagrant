@@ -7,7 +7,7 @@ use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
 
 use crate::printer::tabular::Tabular;
 
-/// Adds a new feature.
+/// Adds a new feature - inactive and OFF by default
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();

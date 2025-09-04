@@ -230,7 +230,7 @@ pub async fn delete(
 
 /// Transforms database result serialized as `SqliteRow` into a `Feature` model.
 /// If there is a control variant detected, creates a default variant stored
-/// stores inside feature's `variants` vector.
+/// inside feature's `variants` vector.
 ///
 /// Default variant is what the "default" feature values is meant to be.
 pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Feature {
@@ -249,6 +249,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         id: row.get("feature_id"),
         project_id: row.get("project_id"),
         is_enabled: row.get("is_enabled"),
+        is_active: row.get("is_active"),
         name: row.get("name"),
         variants,
     }

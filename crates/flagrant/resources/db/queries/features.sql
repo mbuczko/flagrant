@@ -1,23 +1,23 @@
 -- :name create_feature :|| :1
 -- :doc Creates a new feature with name, on/off status and value type
 INSERT INTO features(project_id, name, is_enabled) VALUES($1, $2, $3)
-RETURNING feature_id, project_id, name, is_enabled
+RETURNING feature_id, project_id, name, is_active, is_enabled
 
 -- :name fetch_feature :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
-SELECT feature_id, project_id, name, is_enabled
+SELECT feature_id, project_id, name, is_active, is_enabled
 FROM features
 WHERE feature_id = $1
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
-SELECT feature_id, project_id, name, is_enabled
+SELECT feature_id, project_id, name, is_active, is_enabled
 FROM features
 WHERE project_id = $1 AND name = $2
 
 -- :name fetch_features_by_pattern :|| :*
 -- :doc Returns a list of features with names matching given pattern. Each feature is returned along with its control value only.
-SELECT f.feature_id, f.project_id, f.name, f.is_enabled, v.variant_id, v.value
+SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value
 FROM features f
 LEFT OUTER JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
 WHERE f.project_id = $1 AND f.name LIKE $3
@@ -25,10 +25,11 @@ ORDER by length(f.name)
 
 -- :name fetch_features_for_environment :|| :*
 -- :doc Returns all features for given environment. Each feature is returned along with its control value only.
-SELECT f.feature_id, f.project_id, f.name, f.is_enabled, v.variant_id, v.value
+SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value
 FROM features f
 LEFT OUTER JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
 WHERE f.project_id = $1
+ORDER BY f.is_active DESC, f.created_at
 
 -- :name update_feature :<> :!
 -- :doc Updates feature with new values of name and is_enabled flag

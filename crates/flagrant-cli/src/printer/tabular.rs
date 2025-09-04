@@ -29,9 +29,8 @@ impl Tabular for Environment {
             .render(rows);
     }
     fn describe(&self) {
-        let id_str = self.id.to_string();
         let desc_str = self.description.as_deref().unwrap_or("");
-
+        let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(6), Align::Right, Overflow::Truncate, 1)
             .add_column(
@@ -42,14 +41,10 @@ impl Tabular for Environment {
                 1,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align("ENVIRONMENT", TitleAlign::RightOffset(1))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        table.render(vec![
-            &["ID", &id_str],
-            &["NAME", &self.name],
-            &["DESCRIPTION", desc_str],
-        ]);
+        table.render(vec![&["NAME", &self.name], &["DESCRIPTION", desc_str]]);
     }
 }
 
@@ -59,17 +54,23 @@ impl Tabular for Feature {
             .iter()
             .map(|feat| {
                 let value = feat.get_default_value().to_string();
-                let toggle = if feat.is_enabled {
+                let state = if feat.is_enabled {
                     format!("{} ON", "●".green())
                 } else {
                     format!("{} OFF", "●".red())
                 };
-                [feat.name.clone(), toggle, value]
+                let status = if feat.is_active {
+                    String::from("active")
+                } else {
+                    format!("{}", "inactive".dimmed())
+                };
+                [feat.name.clone(), status, state, value]
             })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
+            .add_column_named_with_align("STATUS".into(), Layout::Fixed(10), Align::Center)
             .add_column_named_with_align("STATE".into(), Layout::Slim, Align::Center)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(100), Align::Left)
             .build()
@@ -77,7 +78,7 @@ impl Tabular for Feature {
     }
     fn describe(&self) {
         let value = self.get_default_value();
-        let title = format!("{} (ID={})", &self.name, self.id);
+        let title = format!("Feature: {} (ID={})", &self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
             .add_column(
@@ -90,13 +91,13 @@ impl Tabular for Feature {
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let toggle = if self.is_enabled {
+        let state = if self.is_enabled {
             format!("{} ON", "●".green())
         } else {
             format!("{} OFF", "●".red())
         };
 
-        table.render(vec![&["STATUS", &toggle], &["VALUE", &value.to_string()]]);
+        table.render(vec![&["STATE", &state], &["VALUE", &value.to_string()]]);
     }
 }
 
