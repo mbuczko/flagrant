@@ -18,7 +18,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        env.render();
+        env.describe();
         return Ok(());
     }
     bail!("No environment name provided.")
@@ -28,17 +28,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
-    let envs = ctx.client.get::<Vec<Environment>>(res.subpath("/envs"))?;
 
-    let mut rows = Vec::with_capacity(envs.len());
-    for env in envs {
-        rows.push([
-            env.id.to_string(),
-            env.name,
-            env.description.unwrap_or_default(),
-        ]);
-    }
-    Environment::table().render(rows);
+    Environment::list(
+        ctx.client
+            .get::<Vec<Environment>>(res.subpath("/envs"))?
+            .as_ref(),
+    );
     Ok(())
 }
 

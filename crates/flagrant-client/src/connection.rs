@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_types::{Environment, FeatureResponse, Project};
+use flagrant_types::{Environment, Feature, FeatureResponse, Project};
 
 use crate::{
     http::{Auth, HttpClient},
@@ -10,6 +10,7 @@ use crate::{
 pub struct Connection {
     pub client: HttpClient,
     pub project: Project,
+    pub feature: Option<Feature>,
     pub environment: Environment,
 }
 
@@ -39,7 +40,7 @@ impl Connection {
         project_id: i32,
         environment_id: i32,
     ) -> anyhow::Result<Connection> {
-        let client = HttpClient::new(api_host);
+        let client = HttpClient::new(api_host, Auth::None);
         let path = format!("/projects/{project_id}");
 
         Self::build(
@@ -62,6 +63,7 @@ impl Connection {
                 client,
                 project,
                 environment,
+                feature: None,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),

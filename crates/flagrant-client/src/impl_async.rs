@@ -1,7 +1,7 @@
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::http::HttpClient;
+use crate::http::{Auth, HttpClient};
 
 impl HttpClient {
     pub fn new(host: String, auth: Auth) -> HttpClient {

@@ -267,7 +267,6 @@ async fn upsert_control_weight(
     } else {
         (variant_id, control_variant_id)
     };
-
     if variant_id != control_variant_id {
         identity::migrate_identities(
             &mut *tx,
@@ -278,7 +277,6 @@ async fn upsert_control_weight(
         )
         .await?;
     }
-
     Ok((control_variant_id, control_weight))
 }
 

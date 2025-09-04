@@ -49,7 +49,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                     weight,
                 },
             )?;
-            variant.render();
+            variant.describe();
             return Ok(());
         }
         bail!("Feature not found.")
@@ -94,7 +94,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                 .client
                 .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
-            variant.render();
+            variant.describe();
             return Ok(());
         }
         bail!("No variant of given id found.");
@@ -129,7 +129,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
                     .client
                     .get::<Variant>(res.subpath(format!("/variants/{variant_id}")))?;
 
-                variant.render();
+                variant.describe();
                 return Ok(());
             }
             bail!("No variant weight provided.");
@@ -149,19 +149,13 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
         match response {
             Ok(feature) => {
-                let variants: Vec<Variant> = ctx
-                    .client
-                    .get(res.subpath(format!("/features/{}/variants", feature.id)))?;
-
-                let mut rows = Vec::with_capacity(variants.len());
-                for var in variants {
-                    rows.push([
-                        var.id.to_string(),
-                        bar(var.weight, 10),
-                        var.value.to_string(),
-                    ]);
-                }
-                Variant::table().render(rows);
+                Variant::list(
+                    ctx.client
+                        .get::<Vec<Variant>>(
+                            res.subpath(format!("/features/{}/variants", feature.id)),
+                        )?
+                        .as_ref(),
+                );
                 return Ok(());
             }
             Err(error) => {
@@ -184,14 +178,4 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         return Ok(());
     }
     bail!("No variant-id provided.")
-}
-
-fn bar(weight: u8, width: u16) -> String {
-    let mut bar = vec![' '; width as usize];
-    let progress = (weight as u16 * width) / 100;
-
-    for ch in bar.iter_mut().take(progress as usize) {
-        *ch = '▆';
-    }
-    format!("{0: <3}% {1: <10}", weight, String::from_iter(bar))
 }

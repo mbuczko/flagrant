@@ -29,7 +29,25 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        feature.render();
+        feature.describe();
+        return Ok(());
+    }
+    bail!("No feature name provided.")
+}
+
+/// Switches to the other feature.
+pub fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if let Some(name) = args.get(1) {
+        let mut ctx = session.context.write().unwrap();
+        let res = ctx.environment.as_base_resource();
+        let response = ctx
+            .client
+            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+
+        if let Ok(feature) = response {
+            feature.describe();
+            ctx.feature = Some(feature);
+        }
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -64,7 +82,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             // re-fetch feature to be sure it's updated
             let feature: Feature = ctx.client.get(res.subpath(&subpath))?;
 
-            feature.render();
+            feature.describe();
             return Ok(());
         }
         bail!("Feature not found.");
@@ -101,7 +119,7 @@ fn onoff(args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Resul
             // re-fetch feature to be sure it's updated
             let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
 
-            feature.render();
+            feature.describe();
             return Ok(());
         }
         bail!("No such a feature.")
@@ -113,21 +131,12 @@ fn onoff(args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Resul
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.environment.as_base_resource();
-    let feats: Vec<Feature> = ctx.client.get(res.subpath("/features"))?;
 
-    let mut rows = Vec::with_capacity(feats.len());
-    for feat in feats {
-        let toggle = if feat.is_enabled { "▣" } else { "▢" };
-        let value = feat.get_default_value();
-
-        rows.push([
-            feat.id.to_string(),
-            feat.name.clone(),
-            toggle.to_string(),
-            value.to_string(),
-        ]);
-    }
-    Feature::table().render(rows);
+    Feature::list(
+        ctx.client
+            .get::<Vec<Feature>>(res.subpath("/features"))?
+            .as_ref(),
+    );
     Ok(())
 }
 

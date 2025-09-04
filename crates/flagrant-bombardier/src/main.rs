@@ -50,25 +50,25 @@ pub fn main() -> anyhow::Result<()> {
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
                 loop {
-                    if let Some(ident) = get_or_generate_ident(&idents, &mut rng) {
-                        if let Some(response) = conn.get_features(&ident) {
-                            if let Some(fv) = feature_value(response, FEATURE_ID) {
-                                let mut guard = buckets.write().unwrap();
-                                let val = match fv {
-                                    FeatureValue::Json(v) => v,
-                                    FeatureValue::Toml(v) => v,
-                                    FeatureValue::Text(v) => v,
-                                };
-                                // evict ident from all buckets
-                                evict_from_buckets(&mut guard, &ident);
+                    // TODO: fetch IDENTS_COUNT number of idents from the pool and generate new ones if needed
+                    if let Some(ident) = get_or_generate_ident(&idents, &mut rng)
+                        && let Some(response) = conn.get_features(&ident)
+                        && let Some(fv) = feature_value(response, FEATURE_ID)
+                    {
+                        let mut guard = buckets.write().unwrap();
+                        let val = match fv {
+                            FeatureValue::Json(v) => v,
+                            FeatureValue::Toml(v) => v,
+                            FeatureValue::Text(v) => v,
+                        };
+                        // evict ident from all buckets
+                        evict_from_buckets(&mut guard, &ident);
 
-                                // add value to corresponding bucket
-                                guard.entry(val).or_insert_with(HashSet::new).insert(ident);
+                        // add value to corresponding bucket
+                        guard.entry(val).or_insert_with(HashSet::new).insert(ident);
 
-                                std::mem::drop(guard);
-                                thread::sleep(Duration::from_millis(50));
-                            }
-                        }
+                        std::mem::drop(guard);
+                        thread::sleep(Duration::from_millis(50));
                     }
                 }
             });

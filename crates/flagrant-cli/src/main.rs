@@ -73,12 +73,13 @@ fn main() -> anyhow::Result<()> {
     let commands = vec![
         // environments
         Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("switchto", "environment", handlers::env::switch),
+        Command::Environment.op("set", "environment", handlers::env::switch),
         Command::Environment.op("list", "", handlers::env::list),
-        Command::Environment.args("add | switchto | list"),
+        Command::Environment.args("add | list | set"),
         // features
         Command::Feature.op("list", "", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
+        Command::Feature.op("set", "feature", handlers::feat::switch),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
         Command::Feature.op("value", "feature value", handlers::feat::value),
         Command::Feature.op("on", "feature", handlers::feat::on),
