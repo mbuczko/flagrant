@@ -8,11 +8,11 @@ use super::parser::{find_arg_by_position, split_command_line};
 
 pub struct CommandCompleter<'a> {
     commands: Vec<(String, &'a Option<String>)>,
-    arguments: Option<&'a dyn DynaCompleter>,
+    arguments: Option<&'a dyn AutoCompleter>,
 }
 
-pub trait DynaCompleter {
-    fn dyna_complete(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>>;
+pub trait AutoCompleter {
+    fn complete_by_prefix(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>>;
 }
 
 impl<'a> CommandCompleter<'a> {
@@ -82,7 +82,7 @@ impl<'a> CommandCompleter<'a> {
             pos,
             match self.arguments {
                 Some(arg_completer) => arg_completer
-                    .dyna_complete(command, arg_prefix)?
+                    .complete_by_prefix(command, arg_prefix)?
                     .into_iter()
                     .map(|s| Pair {
                         replacement: s,
@@ -94,7 +94,7 @@ impl<'a> CommandCompleter<'a> {
         ))
     }
 
-    pub fn with_arg_completer(mut self, completer: &'a dyn DynaCompleter) -> Self {
+    pub fn with_arg_completer(mut self, completer: &'a dyn AutoCompleter) -> Self {
         self.arguments = Some(completer);
         self
     }

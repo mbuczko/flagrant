@@ -4,7 +4,7 @@ use flagrant_client::{
     http::Auth,
 };
 use flagrant_repl::{
-    completer::{CommandCompleter, DynaCompleter},
+    completer::{AutoCompleter, CommandCompleter},
     hinter::ReplHinter,
     readline::{self, ReplHelper},
     session::Session,
@@ -22,8 +22,8 @@ struct ArgCompleter<'a> {
     session: &'a Session<Connection>,
 }
 
-impl DynaCompleter for ArgCompleter<'_> {
-    fn dyna_complete(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>> {
+impl AutoCompleter for ArgCompleter<'_> {
+    fn complete_by_prefix(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>> {
         match command.to_uppercase().as_ref() {
             "ENVIRONMENT" => {
                 let ctx = self.session.context.read().unwrap();
