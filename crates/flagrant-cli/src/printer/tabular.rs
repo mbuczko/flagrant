@@ -53,6 +53,7 @@ impl Tabular for Feature {
         let rows = selfs
             .iter()
             .map(|feat| {
+                let tags = feat.tags.to_string();
                 let value = feat.get_default_value().to_string();
                 let state = if feat.is_enabled {
                     format!("{} ON", "●".green())
@@ -64,7 +65,7 @@ impl Tabular for Feature {
                 } else {
                     format!("{}", "inactive".dimmed())
                 };
-                [feat.name.clone(), status, state, value]
+                [feat.name.clone(), status, state, value, tags]
             })
             .collect();
 
@@ -72,7 +73,9 @@ impl Tabular for Feature {
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(10), Align::Center)
             .add_column_named_with_align("STATE".into(), Layout::Slim, Align::Center)
-            .add_column_named_with_align("VALUE".into(), Layout::Expandable(100), Align::Left)
+            .add_column_named_with_align("VALUE".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
+            .width(100)
             .build()
             .render(rows)
     }

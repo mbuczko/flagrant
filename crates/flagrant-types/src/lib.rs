@@ -42,6 +42,7 @@ pub struct Feature {
     #[validate(max_length = 255)]
     pub name: String,
     pub variants: Vec<Variant>,
+    pub tags: TagList,
     pub is_enabled: bool,
     pub is_active: bool,
 }
@@ -72,6 +73,9 @@ pub enum FeatureValue {
     Json(String),
     Toml(String),
 }
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TagList(pub Vec<String>);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureResponse {
@@ -120,20 +124,51 @@ impl Variant {
     }
 }
 
+impl sqlx::Type<sqlx::Sqlite> for TagList {
+    fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+
 impl sqlx::Type<sqlx::Sqlite> for FeatureValue {
     fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
         <String as Type<Sqlite>>::type_info()
     }
 }
 
-impl FromStr for FeatureValue {
-    type Err = ParseTypeError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if let Some((typ, val)) = value.split_once("::") {
-            return Self::new(typ, val);
+// It's not really used. Tags are are normalized and stored in separate table
+// but since entire Feature is Serialize, TagList needs to be Serialize too.
+impl Encode<'_, Sqlite> for TagList {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        if self.0.is_empty() {
+            Ok(IsNull::Yes)
+        } else {
+            Encode::<Sqlite>::encode(self.0.join(","), buf)
         }
-        Err(ParseTypeError::Encoding)
+    }
+}
+
+impl<'r> Decode<'r, Sqlite> for TagList {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        if !value.is_empty() {
+            let tags: Vec<String> = value
+                .split(',')
+                .map(|tag| tag.trim().to_string())
+                .filter(|tag| !tag.is_empty())
+                .collect();
+            return Ok(TagList(tags));
+        }
+        Ok(TagList(Vec::new()))
+    }
+}
+
+impl fmt::Display for TagList {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0.join(","))
     }
 }
 
@@ -194,5 +229,16 @@ impl FeatureValue {
     pub fn clone_with(&self, value: &str) -> Self {
         let (typ, _) = self.decompose();
         Self::new(typ, value).unwrap()
+    }
+}
+
+impl FromStr for FeatureValue {
+    type Err = ParseTypeError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if let Some((typ, val)) = value.split_once("::") {
+            return Self::new(typ, val);
+        }
+        Err(ParseTypeError::Encoding)
     }
 }

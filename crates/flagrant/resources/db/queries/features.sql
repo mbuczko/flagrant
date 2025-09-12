@@ -17,19 +17,23 @@ WHERE project_id = $1 AND name = $2
 
 -- :name fetch_features_by_pattern :|| :*
 -- :doc Returns a list of features with names matching given pattern. Each feature is returned along with its control value only.
-SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value
+SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
-LEFT OUTER JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
+LEFT JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
+LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.project_id = $1 AND f.name LIKE $3
+GROUP BY f.feature_id
 ORDER by length(f.name)
 
 -- :name fetch_features_for_environment :|| :*
 -- :doc Returns all features for given environment. Each feature is returned along with its control value only.
-SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value
+SELECT f.feature_id, f.project_id, f.name, f.is_active, f.is_enabled, v.variant_id, v.value, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
-LEFT OUTER JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
+LEFT JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
+LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.project_id = $1
-ORDER BY f.is_active DESC, f.created_at DESC
+GROUP BY f.feature_id
+ORDER BY f.is_active DESC, f.name
 
 -- :name update_feature :<> :!
 -- :doc Updates feature with new values of name and is_enabled flag

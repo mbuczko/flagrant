@@ -11,6 +11,8 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 #[derive(Debug, Deserialize)]
 pub(crate) struct FeatureQueryParams {
     prefix: Option<String>,
+    status: Option<String>,
+    state: Option<String>,
 }
 
 pub async fn create(

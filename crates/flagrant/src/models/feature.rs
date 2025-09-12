@@ -74,7 +74,7 @@ impl<'a> FeatureUpdate<'a> {
     }
 }
 
-/// Creates a new on/off feature with given `name` and `value`.
+/// Creates a new feature with given `name` and `value`.
 ///
 /// Feature value is stored as environment-specific control variant which means
 /// it may be different in every other environment and any change on value impacts
@@ -252,6 +252,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
+        tags: row.get("tags"),
         variants,
     }
 }
