@@ -8,7 +8,7 @@ use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/identities.sql"]
-struct Identities {}
+struct SQLIdentities {}
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct VariantIdentity {
@@ -23,7 +23,7 @@ pub async fn get_identities(
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<Vec<VariantIdentity>> {
-    let idents = Identities::fetch_identities(conn, params![environment.id, feature.id]).await?;
+    let idents = SQLIdentities::fetch_identities(conn, params![environment.id, feature.id]).await?;
     Ok(idents)
 }
 
@@ -49,12 +49,14 @@ pub async fn get_variants(
 
         if let Some(variant) = attach_to_variant {
             if identity_id.is_none() {
-                let (id, _) =
-                    Identities::upsert_identity::<_, (i32, String)>(&mut *tx, params![&identity])
-                        .await?;
+                let (id, _) = SQLIdentities::upsert_identity::<_, (i32, String)>(
+                    &mut *tx,
+                    params![&identity],
+                )
+                .await?;
                 identity_id = Some(id);
             }
-            Identities::upsert_identity_variant(
+            SQLIdentities::upsert_identity_variant(
                 &mut *tx,
                 params![
                     identity_id.unwrap(),
@@ -85,7 +87,7 @@ pub async fn migrate_identities(
     by_percent: u8,
 ) -> anyhow::Result<()> {
     if from_variant_id != to_variant_id {
-        Identities::migrate_identities(
+        SQLIdentities::migrate_identities(
             conn,
             params![environment.id, from_variant_id, to_variant_id, by_percent],
         )
@@ -98,6 +100,6 @@ pub async fn detach_identities(
     conn: &mut SqliteConnection,
     from_variant_id: i32,
 ) -> anyhow::Result<()> {
-    Identities::delete_attachments(conn, params![from_variant_id]).await?;
+    SQLIdentities::delete_attachments(conn, params![from_variant_id]).await?;
     Ok(())
 }

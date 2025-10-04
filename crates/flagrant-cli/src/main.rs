@@ -9,7 +9,7 @@ use flagrant_repl::{
     readline::{self, ReplHelper},
     session::Session,
 };
-use flagrant_types::{Environment, Feature};
+use flagrant_types::{Environment, Feature, Tag};
 use rustyline::overlay::GenericOverlayer;
 
 mod command;
@@ -22,34 +22,73 @@ struct ArgCompleter<'a> {
     session: &'a Session<Connection>,
 }
 
+fn strip_tag(input: &str) -> (&str, Option<char>, &str) {
+    let (lhs, rhs) = match input.rsplit_once(',') {
+        Some((l, r)) => (l, r),
+        _ => ("", input),
+    };
+    match rhs.char_indices().next() {
+        Some((_, m)) if m == '-' => (lhs, Some(m), &rhs[1..]),
+        _ => (lhs, None, rhs),
+    }
+}
+
+// TODO(michal): move to separate module
 impl AutoCompleter for ArgCompleter<'_> {
     fn complete_by_prefix(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>> {
-        match command.to_uppercase().as_ref() {
-            "ENVIRONMENT" => {
-                let ctx = self.session.context.read().unwrap();
-                let res = ctx.project.as_base_resource();
-
-                Ok(ctx
-                    .client
-                    .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={prefix}")))?
-                    .into_iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>())
+        if let Some((prop, val)) = prefix.split_once(':') {
+            match prop {
+                "tag" => {
+                    let ctx = self.session.context.read().unwrap();
+                    let res = ctx.environment.as_base_resource();
+                    let (lhs, modifier, val) = strip_tag(val);
+                    Ok(ctx
+                        .client
+                        .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={val}")))?
+                        .into_iter()
+                        .map(|c| {
+                            let mut tag = String::with_capacity(c.name.len() + 2);
+                            if !lhs.is_empty() {
+                                tag.push(',');
+                            }
+                            if let Some(m) = modifier {
+                                tag.push(m);
+                            }
+                            tag.push_str(&c.name);
+                            format!("{prop}:{lhs}{tag}")
+                        })
+                        .collect::<Vec<_>>())
+                }
+                _ => Ok(vec![]),
             }
+        } else {
+            match command.to_uppercase().as_ref() {
+                "ENVIRONMENT" => {
+                    let ctx = self.session.context.read().unwrap();
+                    let res = ctx.project.as_base_resource();
 
-            // auto-complete feature name both for "feature" and "variant" commands
-            "FEATURE" | "VARIANT" => {
-                let ctx = self.session.context.read().unwrap();
-                let res = ctx.environment.as_base_resource();
+                    Ok(ctx
+                        .client
+                        .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={prefix}")))?
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>())
+                }
 
-                Ok(ctx
-                    .client
-                    .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
-                    .into_iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>())
+                // auto-complete feature name both for "feature" and "variant" commands
+                "FEATURE" | "VARIANT" => {
+                    let ctx = self.session.context.read().unwrap();
+                    let res = ctx.environment.as_base_resource();
+
+                    Ok(ctx
+                        .client
+                        .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<Vec<_>>())
+                }
+                _ => Ok(vec![]),
             }
-            _ => Ok(vec![]),
         }
     }
 }

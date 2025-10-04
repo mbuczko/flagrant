@@ -75,7 +75,12 @@ pub enum FeatureValue {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct TagList(pub Vec<String>);
+pub struct TagList(pub Vec<Tag>);
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Tag {
+    pub name: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureResponse {
@@ -146,7 +151,14 @@ impl Encode<'_, Sqlite> for TagList {
         if self.0.is_empty() {
             Ok(IsNull::Yes)
         } else {
-            Encode::<Sqlite>::encode(self.0.join(","), buf)
+            Encode::<Sqlite>::encode(
+                self.0
+                    .iter()
+                    .map(|tag| tag.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                buf,
+            )
         }
     }
 }
@@ -155,10 +167,15 @@ impl<'r> Decode<'r, Sqlite> for TagList {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
         if !value.is_empty() {
-            let tags: Vec<String> = value
+            let tags: Vec<Tag> = value
                 .split(',')
-                .map(|tag| tag.trim().to_string())
-                .filter(|tag| !tag.is_empty())
+                .filter_map(|tag| {
+                    let name = tag.trim().to_string();
+                    if name.is_empty() {
+                        return None;
+                    }
+                    Some(Tag { name })
+                })
                 .collect();
             return Ok(TagList(tags));
         }
@@ -168,7 +185,15 @@ impl<'r> Decode<'r, Sqlite> for TagList {
 
 impl fmt::Display for TagList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0.join(","))
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|tag| tag.name.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     }
 }
 

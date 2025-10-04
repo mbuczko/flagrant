@@ -4,8 +4,8 @@ use axum::{
 };
 use sqlx::{Pool, Sqlite};
 
-use crate::api;
 use crate::handlers::{environments, features, projects, variants};
+use crate::{api, handlers::tags};
 
 pub fn init_router() -> Router<Pool<Sqlite>> {
     Router::new()
@@ -22,6 +22,8 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/projects/:project_id/envs/:env_id",
             get(environments::fetch_by_id),
         )
+        // tags
+        .route("/envs/:environment_id/tags", get(tags::list))
         // features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))

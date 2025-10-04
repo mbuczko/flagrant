@@ -10,7 +10,7 @@ use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
-struct Features {}
+struct SQLFeatures {}
 
 pub struct FeatureUpdate<'a> {
     conn: &'a mut SqliteConnection,
@@ -57,7 +57,7 @@ impl<'a> FeatureUpdate<'a> {
         let mut tx = self.conn.begin().await?;
 
         // in transaction, update feature properties first
-        Features::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
+        SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
@@ -88,7 +88,7 @@ pub async fn create(
     is_active: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
-    let mut feature = Features::create_feature(
+    let mut feature = SQLFeatures::create_feature(
         &mut *tx,
         params![environment.project_id, name, is_active, is_enabled],
         |row| row_to_feature(row, environment),
@@ -112,7 +112,7 @@ pub async fn get_by_id(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<Feature> {
-    let feature = Features::fetch_feature(&mut *conn, params![feature_id], |row| {
+    let feature = SQLFeatures::fetch_feature(&mut *conn, params![feature_id], |row| {
         row_to_feature(row, environment)
     })
     .await
@@ -132,12 +132,13 @@ pub async fn get_by_name(
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
-    let feature =
-        Features::fetch_feature_by_name(&mut *conn, params![environment.project_id, name], |row| {
-            row_to_feature(row, environment)
-        })
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
+    let feature = SQLFeatures::fetch_feature_by_name(
+        &mut *conn,
+        params![environment.project_id, name],
+        |row| row_to_feature(row, environment),
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
     let variants = variant::get_all(conn, environment, feature.id)
         .await
@@ -153,7 +154,7 @@ pub async fn get_by_prefix(
     environment: &Environment,
     prefix: String,
 ) -> anyhow::Result<Vec<Feature>> {
-    let features = Features::fetch_features_by_pattern(
+    let features = SQLFeatures::fetch_features_by_pattern(
         conn,
         params![environment.project_id, environment.id, format!("{prefix}%")],
         |row| row_to_feature(row, environment),
@@ -170,7 +171,7 @@ pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
 ) -> anyhow::Result<Vec<Feature>> {
-    Ok(Features::fetch_features_for_environment(
+    Ok(SQLFeatures::fetch_features_for_environment(
         conn,
         params![environment.project_id, environment.id],
         |row| row_to_feature(row, environment),
@@ -192,7 +193,7 @@ pub async fn bump_up_accumulators(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<()> {
-    Features::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
+    SQLFeatures::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
@@ -222,8 +223,8 @@ pub async fn delete(
     }
 
     // ...and then remove feature value and entire feature definition
-    Features::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
-    Features::delete_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;
 
     tx.commit().await?;
     Ok(())
