@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use axum::{
     Json,
     extract::{Path, Query},
@@ -5,6 +7,7 @@ use axum::{
 use flagrant::models::{environment, feature};
 use flagrant_types::{Feature, payload::FeatureRequestPayload};
 use serde::Deserialize;
+use smallvec::smallvec;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -13,6 +16,8 @@ pub(crate) struct FeatureQueryParams {
     prefix: Option<String>,
     status: Option<String>,
     state: Option<String>,
+    tags: Option<String>,
+    pattern: Option<String>,
 }
 
 pub async fn create(
@@ -79,8 +84,58 @@ pub async fn list(
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let features = match params.prefix {
+        // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
-        _ => feature::get_all(&mut conn, &env).await?,
+        _ => {
+            let status = params
+                .status
+                .filter(|s| !s.is_empty())
+                .map(|s| s == "active");
+            let state = params.state.filter(|s| !s.is_empty()).map(|s| s == "on");
+            let pattern = params
+                .pattern
+                .filter(|s| !s.is_empty())
+                .map(|p| format!("%{p}%"));
+            let (tags_included, tags_excluded) = params
+                .tags
+                .as_ref()
+                .map(|tags| {
+                    let (mut included, mut excluded) = (smallvec![], smallvec![]);
+                    for tag in tags.split(',') {
+                        if let Some(tag) = tag.strip_prefix('-')
+                            && !tag.is_empty()
+                        {
+                            excluded.push(tag);
+                        } else if !tag.is_empty() {
+                            included.push(tag);
+                        }
+                    }
+                    (
+                        if included.is_empty() {
+                            None
+                        } else {
+                            Some(included)
+                        },
+                        if excluded.is_empty() {
+                            None
+                        } else {
+                            Some(excluded)
+                        },
+                    )
+                })
+                .unwrap_or((None, None));
+
+            feature::get_all(
+                &mut conn,
+                &env,
+                status,
+                state,
+                pattern,
+                tags_included,
+                tags_excluded,
+            )
+            .await?
+        }
     };
 
     Ok(Json(features))
@@ -94,6 +149,5 @@ pub async fn delete(
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::delete(&mut conn, &env, &feature).await?;
-
     Ok(Json(()))
 }

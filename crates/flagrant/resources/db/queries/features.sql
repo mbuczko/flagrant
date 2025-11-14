@@ -32,6 +32,21 @@ FROM features f
 LEFT JOIN variants v ON v.feature_id = f.feature_id AND v.environment_id = $2
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.project_id = $1
+--~{ is_active
+AND f.is_active = $3
+--~}
+--~{ is_enabled
+AND f.is_enabled = $4
+--~}
+--~{ pattern
+AND f.name LIKE($5)
+--~}
+--~{ tags_included
+AND ft.tag IN (SELECT value FROM json_each($6))
+--~}
+--~{ tags_excluded
+AND ft.tag NOT IN (SELECT value FROM json_each($7))
+--~}
 GROUP BY f.feature_id
 ORDER BY f.is_active DESC, f.name
 

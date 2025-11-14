@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet, ops::Deref};
 
 use anyhow::bail;
 use flagrant_client::connection::{Connection, Resource};
@@ -128,13 +128,24 @@ fn onoff(args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Resul
 }
 
 /// Lists all features in a project.
-pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.environment.as_base_resource();
 
+    let tags = concat_values_for_arg("tag", args);
+    let status = concat_values_for_arg("status", args);
+    let state = concat_values_for_arg("state", args);
+    let pat = args[1..]
+        .iter()
+        .find(|a| !a.contains(":"))
+        .map(Deref::deref)
+        .unwrap_or("");
+
     Feature::list(
         ctx.client
-            .get::<Vec<Feature>>(res.subpath("/features"))?
+            .get::<Vec<Feature>>(res.subpath(format!(
+                "/features?tags={tags}&status={status}&state={state}&pattern={pat}"
+            )))?
             .as_ref(),
     );
     Ok(())
@@ -159,4 +170,39 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("No such a feature.")
     }
     bail!("No feature name or value provided.")
+}
+
+/// Extracts and concatenates all comma-separated values for a specific argument name.
+///
+/// Searches through command arguments for entries matching the pattern `arg:value1,value2,...`,
+/// collects all unique values using a BTreeSet (which deduplicates and sorts them),
+/// and returns them as a single comma-separated string.
+///
+/// # Arguments
+/// * `arg_name` - The argument name to match (e.g., "tag", "status")
+/// * `cmd_args` - Slice of command-line arguments in the format "name:value1,value2,..."
+///
+/// # Returns
+/// A comma-separated string of all unique values found for the given argument.
+///
+/// # Example
+/// ```ignore
+/// let args = vec!["tag:foo,bar", "tag:baz,foo", "status:active"];
+/// let result = concat_values_for_arg("tag", &args);
+/// // result == "bar,baz,foo" (deduplicated and sorted)
+/// ```
+fn concat_values_for_arg(arg_name: &str, cmd_args: &[Arg]) -> String {
+    cmd_args
+        .iter()
+        .fold(BTreeSet::new(), |mut acc, arg| {
+            if let Some((arg, tags)) = arg.split_once(":")
+                && arg == arg_name
+            {
+                acc.extend(tags.split(","));
+            }
+            acc
+        })
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join(",")
 }

@@ -4,6 +4,7 @@ use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
+use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
 use super::variant;
@@ -170,10 +171,34 @@ pub async fn get_by_prefix(
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
+    is_active: Option<bool>,
+    is_enabled: Option<bool>,
+    pattern: Option<String>,
+    tags_included: Option<SmallVec<[&str; 3]>>,
+    tags_excluded: Option<SmallVec<[&str; 3]>>,
 ) -> anyhow::Result<Vec<Feature>> {
+    let has_included = tags_included.as_ref().map(|t| !t.is_empty());
+    let has_excluded = tags_excluded.as_ref().map(|t| !t.is_empty());
+    let has_pattern = pattern.is_some();
+
     Ok(SQLFeatures::fetch_features_for_environment(
         conn,
-        params![environment.project_id, environment.id],
+        |cond_id| match cond_id {
+            FetchFeaturesForEnvironment::Pattern => has_pattern,
+            FetchFeaturesForEnvironment::IsActive => is_active.is_some(),
+            FetchFeaturesForEnvironment::IsEnabled => is_enabled.is_some(),
+            FetchFeaturesForEnvironment::TagsIncluded => has_included.unwrap_or(false),
+            FetchFeaturesForEnvironment::TagsExcluded => has_excluded.unwrap_or(false),
+        },
+        params![
+            environment.project_id,
+            environment.id,
+            is_active,
+            is_enabled,
+            pattern,
+            into_json_string(tags_included),
+            into_json_string(tags_excluded)
+        ],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -238,15 +263,16 @@ pub async fn delete(
 pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Feature {
     let mut variants = Vec::with_capacity(1);
 
-    if let Ok(Some(variant_id)) = row.try_get("variant_id") {
-        if let Ok(Some(variant_value)) = row.try_get("value") {
-            variants.push(Variant::build_default(
-                environment,
-                variant_id,
-                variant_value,
-            ))
-        }
+    if let Ok(Some(variant_id)) = row.try_get("variant_id")
+        && let Ok(Some(variant_value)) = row.try_get("value")
+    {
+        variants.push(Variant::build_default(
+            environment,
+            variant_id,
+            variant_value,
+        ))
     }
+
     Feature {
         id: row.get("feature_id"),
         project_id: row.get("project_id"),
@@ -256,4 +282,19 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         tags: row.get("tags"),
         variants,
     }
+}
+
+fn surround_string(s: &str, open_ch: char, close_ch: char) -> String {
+    let mut buf = String::with_capacity(s.len() + 2);
+    buf.push(open_ch);
+    buf.push_str(s);
+    buf.push(close_ch);
+    buf
+}
+
+fn into_json_string(tags: Option<SmallVec<[&str; 3]>>) -> Option<String> {
+    tags.map(|vt| {
+        let quoted_tags: Vec<String> = vt.iter().map(|t| surround_string(t, '"', '"')).collect();
+        surround_string(&quoted_tags.join(","), '[', ']')
+    })
 }
