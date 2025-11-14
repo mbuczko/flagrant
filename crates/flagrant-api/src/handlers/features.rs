@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use axum::{
     Json,
     extract::{Path, Query},
@@ -7,9 +5,14 @@ use axum::{
 use flagrant::models::{environment, feature};
 use flagrant_types::{Feature, payload::FeatureRequestPayload};
 use serde::Deserialize;
-use smallvec::smallvec;
+use smallvec::{SmallVec, smallvec};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
+
+type TagsTuple<'a> = (
+    Option<SmallVec<[&'a str; 3]>>, // tags included
+    Option<SmallVec<[&'a str; 3]>>, // tags excluded
+);
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FeatureQueryParams {
@@ -20,6 +23,64 @@ pub(crate) struct FeatureQueryParams {
     pattern: Option<String>,
 }
 
+/// Parses status parameter: converts non-empty string to bool (true if "active").
+fn parse_status(status: Option<String>) -> Option<bool> {
+    status.filter(|s| !s.is_empty()).map(|s| s == "active")
+}
+
+/// Parses state parameter: converts non-empty string to bool (true if "on").
+fn parse_state(state: Option<String>) -> Option<bool> {
+    state.filter(|s| !s.is_empty()).map(|s| s == "on")
+}
+
+/// Parses pattern parameter: wraps non-empty string with SQL wildcards.
+fn parse_pattern(pattern: Option<String>) -> Option<String> {
+    pattern.filter(|s| !s.is_empty()).map(|p| format!("%{p}%"))
+}
+
+/// Parses tags parameter into included and excluded tag lists.
+/// Tags prefixed with '-' are excluded, others are included.
+fn parse_tags<'a>(tags: Option<&'a String>) -> TagsTuple<'a> {
+    tags.map(|tags| {
+        let (mut included, mut excluded) = (smallvec![], smallvec![]);
+
+        for tag in tags.split(',') {
+            if let Some(tag) = tag.strip_prefix('-')
+                && !tag.is_empty()
+            {
+                excluded.push(tag);
+            } else if !tag.is_empty() {
+                included.push(tag);
+            }
+        }
+
+        (
+            if included.is_empty() {
+                None
+            } else {
+                Some(included)
+            },
+            if excluded.is_empty() {
+                None
+            } else {
+                Some(excluded)
+            },
+        )
+    })
+    .unwrap_or((None, None))
+}
+
+/// Creates a new feature in the specified environment.
+///
+/// The feature is created as inactive by default, with the enabled state
+/// determined by the payload. The feature value becomes the environment's
+/// control variant.
+///
+/// # Endpoint
+/// `POST /environments/{environment_id}/features`
+///
+/// # Returns
+/// The newly created feature with its control variant.
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(environment_id): Path<i32>,
@@ -39,6 +100,15 @@ pub async fn create(
     Ok(Json(feature))
 }
 
+/// Fetches a feature by its ID within a specific environment.
+///
+/// Returns the feature with all its variants (control and non-control).
+///
+/// # Endpoint
+/// `GET /environments/{environment_id}/features/{feature_id}`
+///
+/// # Returns
+/// The feature with all its associated variants.
 pub async fn fetch_by_id(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -49,6 +119,16 @@ pub async fn fetch_by_id(
     Ok(Json(feature))
 }
 
+/// Fetches a feature by its name within a specific environment.
+///
+/// Feature names are unique within a project, so this returns at most one feature.
+/// Returns the feature with all its variants (control and non-control).
+///
+/// # Endpoint
+/// `GET /environments/{environment_id}/features/name/{feature_name}`
+///
+/// # Returns
+/// The feature matching the given name with all its associated variants.
 pub async fn fetch_by_name(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_name)): Path<(i32, String)>,
@@ -59,6 +139,18 @@ pub async fn fetch_by_name(
     Ok(Json(feature))
 }
 
+/// Updates an existing feature's name, value, and enabled state.
+///
+/// All updates are performed within a transaction. The feature value update
+/// affects the environment's control variant.
+///
+/// # Endpoint
+/// `PUT /environments/{environment_id}/features/{feature_id}`
+///
+/// # Parameters
+/// - `environment_id` - The environment containing the feature
+/// - `feature_id` - The ID of the feature to update
+/// - `payload` - The new feature properties (name, value, is_enabled)
 pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -77,6 +169,23 @@ pub async fn update(
     Ok(Json(()))
 }
 
+/// Lists features in an environment with optional filtering.
+///
+/// Features are returned with their control variants only for performance.
+/// Supports filtering by prefix, status, state, pattern, and tags.
+///
+/// # Endpoint
+/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]`
+///
+/// # Query Parameters
+/// - `prefix` - Filter by name prefix (e.g., "show_" matches "show_banner", "show_notification")
+/// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
+/// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
+/// - `pattern` - SQL LIKE pattern search on feature names (wildcards added automatically)
+/// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
+///
+/// # Returns
+/// List of features matching the filters, each with only its control variant.
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
@@ -86,51 +195,15 @@ pub async fn list(
     let features = match params.prefix {
         // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
-        _ => {
-            let status = params
-                .status
-                .filter(|s| !s.is_empty())
-                .map(|s| s == "active");
-            let state = params.state.filter(|s| !s.is_empty()).map(|s| s == "on");
-            let pattern = params
-                .pattern
-                .filter(|s| !s.is_empty())
-                .map(|p| format!("%{p}%"));
-            let (tags_included, tags_excluded) = params
-                .tags
-                .as_ref()
-                .map(|tags| {
-                    let (mut included, mut excluded) = (smallvec![], smallvec![]);
-                    for tag in tags.split(',') {
-                        if let Some(tag) = tag.strip_prefix('-')
-                            && !tag.is_empty()
-                        {
-                            excluded.push(tag);
-                        } else if !tag.is_empty() {
-                            included.push(tag);
-                        }
-                    }
-                    (
-                        if included.is_empty() {
-                            None
-                        } else {
-                            Some(included)
-                        },
-                        if excluded.is_empty() {
-                            None
-                        } else {
-                            Some(excluded)
-                        },
-                    )
-                })
-                .unwrap_or((None, None));
+        None => {
+            let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());
 
             feature::get_all(
                 &mut conn,
                 &env,
-                status,
-                state,
-                pattern,
+                parse_status(params.status),
+                parse_state(params.state),
+                parse_pattern(params.pattern),
                 tags_included,
                 tags_excluded,
             )
@@ -141,6 +214,18 @@ pub async fn list(
     Ok(Json(features))
 }
 
+/// Deletes a feature and all its associated variants.
+///
+/// Deletion is performed within a transaction. All variants (including control
+/// variants) are deleted before the feature itself. Control variants are deleted
+/// last due to strict deletion policy.
+///
+/// # Endpoint
+/// `DELETE /environments/{environment_id}/features/{feature_id}`
+///
+/// # Parameters
+/// - `environment_id` - The environment containing the feature
+/// - `feature_id` - The ID of the feature to delete
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
