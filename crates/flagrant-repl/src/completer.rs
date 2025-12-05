@@ -74,7 +74,7 @@ impl<'a> ArgsCompleter<'a> {
     fn complete_operation(
         &self,
         command: &str,
-        op_prefix: &str,
+        prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         let pairs = self
@@ -84,7 +84,7 @@ impl<'a> ArgsCompleter<'a> {
                 if command == command_str {
                     return match op {
                         // op starts with prefix - candidate for completion
-                        Some(op) if op.starts_with(op_prefix) => Some(Pair {
+                        Some(op) if op.starts_with(prefix) => Some(Pair {
                             display: op.to_owned(),
                             replacement: op.to_lowercase().to_owned(),
                         }),

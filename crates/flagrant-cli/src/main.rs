@@ -1,5 +1,5 @@
-use autocomplete::ArgCompleter;
 use command::Command;
+use completer::ArgCompleter;
 use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_repl::{
     completer::ArgsCompleter,
@@ -9,8 +9,8 @@ use flagrant_repl::{
 };
 use rustyline::overlay::GenericOverlayer;
 
-mod autocomplete;
 mod command;
+mod completer;
 mod handlers;
 mod printer;
 
