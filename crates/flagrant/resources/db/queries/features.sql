@@ -5,14 +5,16 @@ RETURNING feature_id, project_id, name, is_active, is_enabled
 
 -- :name fetch_feature :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
-SELECT feature_id, project_id, name, is_active, is_enabled
-FROM features
-WHERE feature_id = $1
+SELECT f.feature_id, project_id, name, is_active, is_enabled, GROUP_CONCAT(ft.tag, ',') AS tags
+FROM features f
+LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
+WHERE f.feature_id = $1
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
-SELECT feature_id, project_id, name, is_active, is_enabled
-FROM features
+SELECT f.feature_id, project_id, name, is_active, is_enabled, GROUP_CONCAT(ft.tag, ',') AS tags
+FROM features f
+LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE project_id = $1 AND name = $2
 
 -- :name fetch_features_by_pattern :|| :*
