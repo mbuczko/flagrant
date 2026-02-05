@@ -21,6 +21,7 @@ serde_json = {workspace = true}
 serde_valid = {workspace = true}
 anyhow = {workspace = true}
 thiserror = {workspace = true}
+smallvec = {workspace = true}
 
 # semver = "1.0.14"
 # rust-embed = "6.4.1"

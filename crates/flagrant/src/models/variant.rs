@@ -9,7 +9,7 @@ use super::identity;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/variants.sql"]
-struct Variants {}
+struct SQLVariants {}
 
 /// Creates or updates control variant of given feature.
 ///
@@ -34,7 +34,7 @@ pub(crate) async fn create_control(
     value: FeatureValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
-    let variant_id = Variants::upsert_control_variant(
+    let variant_id = SQLVariants::upsert_control_variant(
         &mut *tx,
         params![environment.id, feature.id, &value],
         |v| v.get("variant_id"),
@@ -62,13 +62,13 @@ pub async fn create(
     weight: u8,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
-    let variant_id = Variants::create_variant(&mut *tx, params![feature.id, &value], |v| {
+    let variant_id = SQLVariants::create_variant(&mut *tx, params![feature.id, &value], |v| {
         v.get("variant_id")
     })
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e))?;
 
-    Variants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight])
+    SQLVariants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
@@ -89,13 +89,13 @@ async fn update(
         bail!("Control variant is immutable. Use feature::update to adjust its value.");
     }
     let feature_id: i32 =
-        Variants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
+        SQLVariants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
             v.get("feature_id")
         })
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e))?;
 
-    Variants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
+    SQLVariants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
 
@@ -138,7 +138,7 @@ pub async fn get_by_id(
     environment: &Environment,
     variant_id: i32,
 ) -> anyhow::Result<Variant> {
-    let variant = Variants::fetch_variant(conn, params![environment.id, variant_id])
+    let variant = SQLVariants::fetch_variant(conn, params![environment.id, variant_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
@@ -152,7 +152,7 @@ pub async fn get_by_identity<T: AsRef<str>>(
     identity: T,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let variants =
-        Variants::fetch_variants_for_identity(conn, params![environment.id, identity.as_ref()])
+        SQLVariants::fetch_variants_for_identity(conn, params![environment.id, identity.as_ref()])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
@@ -166,9 +166,10 @@ pub async fn get_all(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants = Variants::fetch_variants_for_feature(conn, params![environment.id, feature_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
+    let variants =
+        SQLVariants::fetch_variants_for_feature(conn, params![environment.id, feature_id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
     // Be sure that feature has default value set within given environment.
     // No default value makes any additional variants pointless, even if they
@@ -192,7 +193,7 @@ pub async fn delete(
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
     let (feature_id, variants_count): (i32, i8) =
-        Variants::fetch_count_of_feature_variants(&mut *tx, params![environment.id, variant.id])
+        SQLVariants::fetch_count_of_feature_variants(&mut *tx, params![environment.id, variant.id])
             .await?;
 
     if variants_count > 1 && is_default(environment, variant) {
@@ -206,11 +207,11 @@ pub async fn delete(
     identity::detach_identities(&mut tx, variant.id).await?;
 
     // Remove all identities attached to this variant.
-    Variants::delete_variant_weights(&mut *tx, params![variant.id])
+    SQLVariants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;
 
-    Variants::delete_variant(&mut *tx, params![variant.id])
+    SQLVariants::delete_variant(&mut *tx, params![variant.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant", e))?;
 
@@ -228,7 +229,7 @@ pub(crate) async fn update_accumulator(
     variant: &Variant,
     accumulator: i32,
 ) -> anyhow::Result<()> {
-    Variants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
+    SQLVariants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not update variant accumulator", e))?;
 
@@ -255,7 +256,7 @@ async fn upsert_control_weight(
     variant_id: i32,
     weight_diff: i8,
 ) -> anyhow::Result<(i32, u8)> {
-    let (control_variant_id, control_weight) = Variants::upsert_control_variant_weight::<
+    let (control_variant_id, control_weight) = SQLVariants::upsert_control_variant_weight::<
         _,
         (i32, u8),
     >(&mut *tx, params![environment.id, feature_id])

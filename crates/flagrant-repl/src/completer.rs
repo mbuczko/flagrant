@@ -4,21 +4,46 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::{Context, Result};
 
+use crate::command::Arg;
+
 use super::parser::{find_arg_by_position, split_command_line};
 
-pub struct CommandCompleter<'a> {
+pub struct CommandLineCompleter<'a> {
     commands: Vec<(String, &'a Option<String>)>,
-    arguments: Option<&'a dyn DynaCompleter>,
+    arg_completer: Option<&'a dyn AutoCompleter>,
 }
 
-pub trait DynaCompleter {
-    fn dyna_complete(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>>;
+pub trait AutoCompleter {
+    /// Returns possible completions for a command argument at a specific position.
+    ///
+    /// Delegates to the registered `AutoCompleter` to generate context-aware suggestions
+    /// based on the command name, argument position, and the partial text already typed.
+    ///
+    /// # Arguments
+    /// * `command` - The command being completed (e.g., "feature", "environment")
+    /// * `args` - All parsed arguments from the command line
+    /// * `arg_number` - Zero-based index of the argument being completed
+    /// * `arg_prefix` - The partial text of the argument typed so far
+    /// * `pos` - Cursor position in the input line
+    ///
+    /// # Returns
+    /// A tuple of (cursor_position, completion_pairs) where completion_pairs contains
+    /// the matching suggestions. Returns an empty list if no completions could be found.
+    fn complete_by_prefix(
+        &self,
+        command: &str,
+        args: &[Arg],
+        pos: usize,
+        prefix: &str,
+    ) -> anyhow::Result<Vec<String>>;
 }
 
-impl<'a> CommandCompleter<'a> {
-    /// Returns a collection of possible (and unique) command completions.
-    /// To filter out duplicated assumes that commands are provided in
-    /// lexicographical order.
+impl<'a> CommandLineCompleter<'a> {
+    /// Returns unique command completions that match the input line.
+    ///
+    /// Filters duplicates by assuming commands are sorted lexicographically and
+    /// skipping consecutive identical command names. Matches commands that start
+    /// with the input, or returns all commands if the line is empty.
     fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let mut prev_command_str = "";
 
@@ -41,11 +66,15 @@ impl<'a> CommandCompleter<'a> {
         Ok((0, pairs))
     }
 
-    /// Returns a collection of possible operation completions for given command
+    /// Returns operation completions for a specific command that match the given prefix.
+    ///
+    /// Operations are command-specific actions (e.g., "add", "list") that follow the
+    /// command name (like "FEATURE"). Returns matching operations with the display form
+    /// preserved and the replacement form lowercased.
     fn complete_operation(
         &self,
         command: &str,
-        op_prefix: &str,
+        prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         let pairs = self
@@ -55,7 +84,7 @@ impl<'a> CommandCompleter<'a> {
                 if command == command_str {
                     return match op {
                         // op starts with prefix - candidate for completion
-                        Some(op) if op.starts_with(op_prefix) => Some(Pair {
+                        Some(op) if op.starts_with(prefix) => Some(Pair {
                             display: op.to_owned(),
                             replacement: op.to_lowercase().to_owned(),
                         }),
@@ -71,18 +100,24 @@ impl<'a> CommandCompleter<'a> {
         Ok((pos, pairs))
     }
 
-    /// Returns a collection of possible completions for command arguments
+    /// Returns possible completions for a command argument at a specific position.
+    ///
+    /// Delegates to the registered `AutoCompleter` to generate context-aware suggestions
+    /// based on the command name, argument position, and the partial text already typed.
+    /// Returns an empty list if no `AutoCompleter` is registered.
     fn complete_argument(
         &self,
         command: &str,
+        args: &[Arg],
+        arg_number: usize,
         arg_prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         Ok((
             pos,
-            match self.arguments {
+            match self.arg_completer {
                 Some(arg_completer) => arg_completer
-                    .dyna_complete(command, arg_prefix)?
+                    .complete_by_prefix(command, args, arg_number, arg_prefix)?
                     .into_iter()
                     .map(|s| Pair {
                         replacement: s,
@@ -94,20 +129,20 @@ impl<'a> CommandCompleter<'a> {
         ))
     }
 
-    pub fn with_arg_completer(mut self, completer: &'a dyn DynaCompleter) -> Self {
-        self.arguments = Some(completer);
+    pub fn with_arg_completer(mut self, completer: &'a dyn AutoCompleter) -> Self {
+        self.arg_completer = Some(completer);
         self
     }
 
-    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> CommandCompleter<'a> {
+    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> CommandLineCompleter<'a> {
         Self {
             commands,
-            arguments: None,
+            arg_completer: None,
         }
     }
 }
 
-impl Completer for CommandCompleter<'_> {
+impl Completer for CommandLineCompleter<'_> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
@@ -129,7 +164,7 @@ impl Completer for CommandCompleter<'_> {
                     return Ok(candidates);
                 }
 
-                self.complete_argument(command, &argument[..offset], argument.1)
+                self.complete_argument(command, &args, arg_n, &argument[..offset], argument.1)
                     .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
             }
             _ => Ok((pos, vec![])),

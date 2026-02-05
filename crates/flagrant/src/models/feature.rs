@@ -4,13 +4,14 @@ use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Feature, FeatureValue, Variant};
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
+use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
 use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
-struct Features {}
+struct SQLFeatures {}
 
 pub struct FeatureUpdate<'a> {
     conn: &'a mut SqliteConnection,
@@ -57,7 +58,7 @@ impl<'a> FeatureUpdate<'a> {
         let mut tx = self.conn.begin().await?;
 
         // in transaction, update feature properties first
-        Features::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
+        SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
@@ -74,7 +75,7 @@ impl<'a> FeatureUpdate<'a> {
     }
 }
 
-/// Creates a new on/off feature with given `name` and `value`.
+/// Creates a new feature with given `name` and `value`.
 ///
 /// Feature value is stored as environment-specific control variant which means
 /// it may be different in every other environment and any change on value impacts
@@ -88,7 +89,7 @@ pub async fn create(
     is_active: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
-    let mut feature = Features::create_feature(
+    let mut feature = SQLFeatures::create_feature(
         &mut *tx,
         params![environment.project_id, name, is_active, is_enabled],
         |row| row_to_feature(row, environment),
@@ -112,7 +113,7 @@ pub async fn get_by_id(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<Feature> {
-    let feature = Features::fetch_feature(&mut *conn, params![feature_id], |row| {
+    let feature = SQLFeatures::fetch_feature(&mut *conn, params![feature_id], |row| {
         row_to_feature(row, environment)
     })
     .await
@@ -132,12 +133,13 @@ pub async fn get_by_name(
     environment: &Environment,
     name: String,
 ) -> anyhow::Result<Feature> {
-    let feature =
-        Features::fetch_feature_by_name(&mut *conn, params![environment.project_id, name], |row| {
-            row_to_feature(row, environment)
-        })
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
+    let feature = SQLFeatures::fetch_feature_by_name(
+        &mut *conn,
+        params![environment.project_id, name],
+        |row| row_to_feature(row, environment),
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
     let variants = variant::get_all(conn, environment, feature.id)
         .await
@@ -153,7 +155,7 @@ pub async fn get_by_prefix(
     environment: &Environment,
     prefix: String,
 ) -> anyhow::Result<Vec<Feature>> {
-    let features = Features::fetch_features_by_pattern(
+    let features = SQLFeatures::fetch_features_by_pattern(
         conn,
         params![environment.project_id, environment.id, format!("{prefix}%")],
         |row| row_to_feature(row, environment),
@@ -169,10 +171,34 @@ pub async fn get_by_prefix(
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
+    is_active: Option<bool>,
+    is_enabled: Option<bool>,
+    pattern: Option<String>,
+    tags_included: Option<SmallVec<[&str; 3]>>,
+    tags_excluded: Option<SmallVec<[&str; 3]>>,
 ) -> anyhow::Result<Vec<Feature>> {
-    Ok(Features::fetch_features_for_environment(
+    let has_included = tags_included.as_ref().map(|t| !t.is_empty());
+    let has_excluded = tags_excluded.as_ref().map(|t| !t.is_empty());
+    let has_pattern = pattern.is_some();
+
+    Ok(SQLFeatures::fetch_features_for_environment(
         conn,
-        params![environment.project_id, environment.id],
+        |cond_id| match cond_id {
+            FetchFeaturesForEnvironment::Pattern => has_pattern,
+            FetchFeaturesForEnvironment::IsActive => is_active.is_some(),
+            FetchFeaturesForEnvironment::IsEnabled => is_enabled.is_some(),
+            FetchFeaturesForEnvironment::TagsIncluded => has_included.unwrap_or(false),
+            FetchFeaturesForEnvironment::TagsExcluded => has_excluded.unwrap_or(false),
+        },
+        params![
+            environment.project_id,
+            environment.id,
+            is_active,
+            is_enabled,
+            pattern,
+            into_json_string(tags_included),
+            into_json_string(tags_excluded)
+        ],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -192,7 +218,7 @@ pub async fn bump_up_accumulators(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<()> {
-    Features::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
+    SQLFeatures::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
@@ -222,8 +248,8 @@ pub async fn delete(
     }
 
     // ...and then remove feature value and entire feature definition
-    Features::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
-    Features::delete_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;
 
     tx.commit().await?;
     Ok(())
@@ -237,21 +263,38 @@ pub async fn delete(
 pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Feature {
     let mut variants = Vec::with_capacity(1);
 
-    if let Ok(Some(variant_id)) = row.try_get("variant_id") {
-        if let Ok(Some(variant_value)) = row.try_get("value") {
-            variants.push(Variant::build_default(
-                environment,
-                variant_id,
-                variant_value,
-            ))
-        }
+    if let Ok(Some(variant_id)) = row.try_get("variant_id")
+        && let Ok(Some(variant_value)) = row.try_get("value")
+    {
+        variants.push(Variant::build_default(
+            environment,
+            variant_id,
+            variant_value,
+        ))
     }
+
     Feature {
         id: row.get("feature_id"),
         project_id: row.get("project_id"),
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
+        tags: row.get("tags"),
         variants,
     }
+}
+
+fn surround_string(s: &str, open_ch: char, close_ch: char) -> String {
+    let mut buf = String::with_capacity(s.len() + 2);
+    buf.push(open_ch);
+    buf.push_str(s);
+    buf.push(close_ch);
+    buf
+}
+
+fn into_json_string(tags: Option<SmallVec<[&str; 3]>>) -> Option<String> {
+    tags.map(|vt| {
+        let quoted_tags: Vec<String> = vt.iter().map(|t| surround_string(t, '"', '"')).collect();
+        surround_string(&quoted_tags.join(","), '[', ']')
+    })
 }

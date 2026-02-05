@@ -10,7 +10,7 @@ use rustyline::{
 
 use crate::{PromptFn, command::ReplCommand, session::Session};
 
-use super::{completer::CommandCompleter, hinter::ReplHinter, parser::split_command_line};
+use super::{completer::CommandLineCompleter, hinter::ReplHinter, parser::split_command_line};
 
 pub type ReplEditor<'a, T> = Editor<ReplHelper<'a, T>, DefaultHistory>;
 
@@ -20,14 +20,14 @@ pub struct ReplHelper<'a, T> {
     #[rustyline(Hinter)]
     pub hinter: ReplHinter<'a, T>,
     #[rustyline(Completer)]
-    pub completer: CommandCompleter<'a>,
+    pub completer: CommandLineCompleter<'a>,
     #[rustyline(Overlayer)]
     pub overlayer: GenericOverlayer,
 }
 
 impl<T> Highlighter for ReplHelper<'_, T> {
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        Owned("\x1b[38;5;8m".to_owned() + hint + "\x1b[0m")
+        Owned(format!("\x1b[38;5;8m{hint}\x1b[0m"))
     }
 }
 

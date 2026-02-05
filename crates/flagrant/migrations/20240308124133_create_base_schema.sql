@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS environments (
 CREATE TABLE IF NOT EXISTS features (
   feature_id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects,
-  name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
+  name TEXT NOT NULL CHECK(LENGTH(name) <= 128),
   description TEXT CHECK(LENGTH(description) <= 2048),
   is_active BOOLEAN NOT NULL DEFAULT FALSE,
   is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -25,12 +25,17 @@ CREATE TABLE IF NOT EXISTS features (
   UNIQUE(project_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS feature_tags (
+  feature_id INTEGER NOT NULL REFERENCES features,
+  tag TEXT NOT NULL CHECK(LENGTH(tag) <= 32)
+);
+
 CREATE TABLE IF NOT EXISTS variants (
   variant_id INTEGER PRIMARY KEY AUTOINCREMENT,
   feature_id INTEGER NOT NULL REFERENCES features,
   -- environment_id is set only for control value
   environment_id INTEGER REFERENCES environments,
-  value TEXT NOT NULL,
+  value TEXT NOT NULL CHECK(LENGTH(value) <= 1024),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   version INTEGER NOT NULL DEFAULT 0,
 

@@ -1,58 +1,20 @@
 use command::Command;
-use flagrant_client::{
-    connection::{Connection, Resource},
-    http::Auth,
-};
+use completer::ArgCompleter;
+use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_repl::{
-    completer::{CommandCompleter, DynaCompleter},
+    completer::CommandLineCompleter,
     hinter::ReplHinter,
     readline::{self, ReplHelper},
     session::Session,
 };
-use flagrant_types::{Environment, Feature};
 use rustyline::overlay::GenericOverlayer;
 
 mod command;
+mod completer;
 mod handlers;
 mod printer;
 
 const API_HOST: &str = "http://localhost:3030";
-
-struct ArgCompleter<'a> {
-    session: &'a Session<Connection>,
-}
-
-impl DynaCompleter for ArgCompleter<'_> {
-    fn dyna_complete(&self, command: &str, prefix: &str) -> anyhow::Result<Vec<String>> {
-        match command.to_uppercase().as_ref() {
-            "ENVIRONMENT" => {
-                let ctx = self.session.context.read().unwrap();
-                let res = ctx.project.as_base_resource();
-
-                Ok(ctx
-                    .client
-                    .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={prefix}")))?
-                    .into_iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>())
-            }
-
-            // auto-complete feature name both for "feature" and "variant" commands
-            "FEATURE" | "VARIANT" => {
-                let ctx = self.session.context.read().unwrap();
-                let res = ctx.environment.as_base_resource();
-
-                Ok(ctx
-                    .client
-                    .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
-                    .into_iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>())
-            }
-            _ => Ok(vec![]),
-        }
-    }
-}
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
@@ -103,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         prompter,
         hinter: ReplHinter::new(&commands),
         overlayer: GenericOverlayer { pairs: overlays },
-        completer: CommandCompleter::new(
+        completer: CommandLineCompleter::new(
             commands
                 .iter()
                 .map(|c| (c.cmd.to_uppercase(), &c.op))
