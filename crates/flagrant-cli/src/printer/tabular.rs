@@ -81,7 +81,8 @@ impl Tabular for Feature {
     }
     fn describe(&self) {
         let value = self.get_default_value();
-        let title = format!("Feature: {} (ID={})", &self.name, self.id);
+        let title = format!("{} (ID={})", &self.name, self.id);
+        let tags = self.tags.to_string();
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
             .add_column(
@@ -100,7 +101,11 @@ impl Tabular for Feature {
             format!("{} OFF", "●".red())
         };
 
-        table.render(vec![&["STATE", &state], &["VALUE", &value.to_string()]]);
+        table.render(vec![
+            &["STATE", &state],
+            &["VALUE", &value.to_string()],
+            &["TAGS", &tags],
+        ]);
     }
 }
 

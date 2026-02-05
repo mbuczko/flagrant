@@ -36,7 +36,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 }
 
 /// Switches to the other feature.
-pub fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn set(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
         let res = ctx.environment.as_base_resource();

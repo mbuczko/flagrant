@@ -1,3 +1,5 @@
+use clap::builder::styling::Color;
+use colored::Colorize;
 use command::Command;
 use completer::ArgCompleter;
 use flagrant_client::{connection::Connection, http::Auth};
@@ -18,9 +20,15 @@ const API_HOST: &str = "http://localhost:3030";
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
+    let feat = match &ctx.feature {
+        Some(feat) => format!(" → {}", feat.name),
+        _ => String::default(),
+    };
     format!(
-        "[{}/\x1b[35m{}\x1b[0m] > ",
-        ctx.project.name, ctx.environment.name
+        "{}/{}{}\x1b[0m › ",
+        ctx.project.name,
+        ctx.environment.name.purple(),
+        feat.green()
     )
 }
 
@@ -35,18 +43,18 @@ fn main() -> anyhow::Result<()> {
     let commands = vec![
         // environments
         Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("set", "environment", handlers::env::switch),
+        Command::Environment.op("set", "environment", handlers::env::set),
         Command::Environment.op("list", "", handlers::env::list),
         Command::Environment.args("add | list | set"),
         // features
         Command::Feature.op("list", "", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
-        Command::Feature.op("set", "feature", handlers::feat::switch),
+        Command::Feature.op("set", "feature", handlers::feat::set),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
         Command::Feature.op("value", "feature value", handlers::feat::value),
         Command::Feature.op("on", "feature", handlers::feat::on),
         Command::Feature.op("off", "feature", handlers::feat::off),
-        Command::Feature.args("add | delete | list | on | off | value"),
+        Command::Feature.args("add | delete | list | set"),
         // variants
         Command::Variant.op("list", "feature", handlers::var::list),
         Command::Variant.op("add", "feature weight value", handlers::var::add),

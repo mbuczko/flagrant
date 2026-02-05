@@ -38,7 +38,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 }
 
 /// Changes current environment in a session
-pub fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn set(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
         let res = ctx.project.as_base_resource();

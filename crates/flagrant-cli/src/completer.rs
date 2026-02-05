@@ -45,7 +45,7 @@ impl AutoCompleter for ArgCompleter<'_> {
 
                 Ok(match op {
                     // auto-complete feature name
-                    "on" | "off" | "delete" if arg_n == 2 => ctx
+                    "on" | "off" | "delete" | "set" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
                         .into_iter()
