@@ -1,9 +1,10 @@
 .envrc
 .lsp
-target
-history.txt
+.idea
 *.db-shm
 *.db-wal
 *.db
 *.org
-tags
+TAGS
+target
+history.txt

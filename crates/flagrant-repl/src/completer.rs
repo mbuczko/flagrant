@@ -8,9 +8,9 @@ use crate::command::Arg;
 
 use super::parser::{find_arg_by_position, split_command_line};
 
-pub struct ArgsCompleter<'a> {
+pub struct CommandLineCompleter<'a> {
     commands: Vec<(String, &'a Option<String>)>,
-    completer: Option<&'a dyn AutoCompleter>,
+    arg_completer: Option<&'a dyn AutoCompleter>,
 }
 
 pub trait AutoCompleter {
@@ -38,7 +38,7 @@ pub trait AutoCompleter {
     ) -> anyhow::Result<Vec<String>>;
 }
 
-impl<'a> ArgsCompleter<'a> {
+impl<'a> CommandLineCompleter<'a> {
     /// Returns unique command completions that match the input line.
     ///
     /// Filters duplicates by assuming commands are sorted lexicographically and
@@ -115,7 +115,7 @@ impl<'a> ArgsCompleter<'a> {
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         Ok((
             pos,
-            match self.completer {
+            match self.arg_completer {
                 Some(arg_completer) => arg_completer
                     .complete_by_prefix(command, args, arg_number, arg_prefix)?
                     .into_iter()
@@ -130,19 +130,19 @@ impl<'a> ArgsCompleter<'a> {
     }
 
     pub fn with_arg_completer(mut self, completer: &'a dyn AutoCompleter) -> Self {
-        self.completer = Some(completer);
+        self.arg_completer = Some(completer);
         self
     }
 
-    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> ArgsCompleter<'a> {
+    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> CommandLineCompleter<'a> {
         Self {
             commands,
-            completer: None,
+            arg_completer: None,
         }
     }
 }
 
-impl Completer for ArgsCompleter<'_> {
+impl Completer for CommandLineCompleter<'_> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {

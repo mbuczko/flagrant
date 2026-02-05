@@ -2,7 +2,7 @@ use command::Command;
 use completer::ArgCompleter;
 use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_repl::{
-    completer::ArgsCompleter,
+    completer::CommandLineCompleter,
     hinter::ReplHinter,
     readline::{self, ReplHelper},
     session::Session,
@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         prompter,
         hinter: ReplHinter::new(&commands),
         overlayer: GenericOverlayer { pairs: overlays },
-        completer: ArgsCompleter::new(
+        completer: CommandLineCompleter::new(
             commands
                 .iter()
                 .map(|c| (c.cmd.to_uppercase(), &c.op))

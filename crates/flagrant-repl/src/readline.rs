@@ -10,7 +10,7 @@ use rustyline::{
 
 use crate::{PromptFn, command::ReplCommand, session::Session};
 
-use super::{completer::ArgsCompleter, hinter::ReplHinter, parser::split_command_line};
+use super::{completer::CommandLineCompleter, hinter::ReplHinter, parser::split_command_line};
 
 pub type ReplEditor<'a, T> = Editor<ReplHelper<'a, T>, DefaultHistory>;
 
@@ -20,7 +20,7 @@ pub struct ReplHelper<'a, T> {
     #[rustyline(Hinter)]
     pub hinter: ReplHinter<'a, T>,
     #[rustyline(Completer)]
-    pub completer: ArgsCompleter<'a>,
+    pub completer: CommandLineCompleter<'a>,
     #[rustyline(Overlayer)]
     pub overlayer: GenericOverlayer,
 }
