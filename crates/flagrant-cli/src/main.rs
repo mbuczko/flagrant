@@ -1,9 +1,9 @@
-use clap::builder::styling::Color;
 use colored::Colorize;
 use command::Command;
 use completer::ArgCompleter;
 use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_repl::{
+    command::ReplCommand,
     completer::CommandLineCompleter,
     hinter::ReplHinter,
     readline::{self, ReplHelper},
@@ -31,6 +31,12 @@ fn prompter(session: &Session<Connection>) -> String {
         feat.green()
     )
 }
+fn stringify_commands(commands: &[ReplCommand<Connection>]) -> Vec<(String, &Option<String>)> {
+    commands
+        .iter()
+        .map(|c| (c.cmd.to_uppercase(), &c.op))
+        .collect::<Vec<_>>()
+}
 
 fn main() -> anyhow::Result<()> {
     // todo: will be taken from args
@@ -45,23 +51,25 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("add", "environment description", handlers::env::add),
         Command::Environment.op("set", "environment", handlers::env::set),
         Command::Environment.op("list", "", handlers::env::list),
-        Command::Environment.args("add | list | set"),
+        Command::Environment.args("add · list · set"),
         // features
-        Command::Feature.op("list", "", handlers::feat::list),
+        Command::Feature.op("list", "filter", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
-        Command::Feature.op("set", "feature", handlers::feat::set),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
-        Command::Feature.op("value", "feature value", handlers::feat::value),
-        Command::Feature.op("on", "feature", handlers::feat::on),
-        Command::Feature.op("off", "feature", handlers::feat::off),
-        Command::Feature.args("add | delete | list | set"),
+        Command::Feature.op("set", "feature", handlers::feat::set),
+        Command::Feature.args("add · delete · list · set"),
         // variants
         Command::Variant.op("list", "feature", handlers::var::list),
         Command::Variant.op("add", "feature weight value", handlers::var::add),
         Command::Variant.op("delete", "variant-id", handlers::var::del),
         Command::Variant.op("value", "variant-id value", handlers::var::value),
         Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
-        Command::Variant.args("add | delete | list | value | weight"),
+        Command::Variant.args("add · delete · list · value · weight"),
+    ];
+    let feature_setters = vec![
+        Command::Set.op("on", "", handlers::feat::on),
+        Command::Set.op("off", "", handlers::feat::off),
+        Command::Set.op("value", "value", handlers::feat::value),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
@@ -73,12 +81,13 @@ fn main() -> anyhow::Result<()> {
         prompter,
         hinter: ReplHinter::new(&commands),
         overlayer: GenericOverlayer { pairs: overlays },
-        completer: CommandLineCompleter::new(
-            commands
-                .iter()
-                .map(|c| (c.cmd.to_uppercase(), &c.op))
-                .collect::<Vec<_>>(),
-        )
+        completer: CommandLineCompleter::new(stringify_commands(&commands), || {
+            let ctx = &session.context.read().unwrap();
+            if ctx.feature.is_some() {
+                return Some(stringify_commands(&feature_setters));
+            }
+            None
+        })
         .with_arg_completer(&arg_completer),
     };
 

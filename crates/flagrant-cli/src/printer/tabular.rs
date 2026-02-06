@@ -92,6 +92,7 @@ impl Tabular for Feature {
                 Overflow::Truncate,
                 3,
             )
+            .width(100)
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 

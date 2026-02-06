@@ -8,8 +8,16 @@ use crate::command::Arg;
 
 use super::parser::{find_arg_by_position, split_command_line};
 
+/// A list of commands with their optional operations.
+/// Each entry is a tuple of (command_name, optional_operation).
+pub type CommandList<'a> = Vec<(String, &'a Option<String>)>;
+
 pub struct CommandLineCompleter<'a> {
-    commands: Vec<(String, &'a Option<String>)>,
+    /// Base list of commands that are always available for completion
+    commands: CommandList<'a>,
+    /// Dynamic closure that returns context-dependent commands based on current state
+    subcommands: Box<dyn Fn() -> Option<CommandList<'a>> + 'a>,
+    /// Optional completer for providing argument-level completion suggestions
     arg_completer: Option<&'a dyn AutoCompleter>,
 }
 
@@ -46,10 +54,11 @@ impl<'a> CommandLineCompleter<'a> {
     /// with the input, or returns all commands if the line is empty.
     fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let mut prev_command_str = "";
+        let subcommands = (self.subcommands)();
+        let commands_ref = subcommands.as_ref().unwrap_or(&self.commands);
 
         let empty = line.trim().is_empty();
-        let pairs = self
-            .commands
+        let pairs = commands_ref
             .iter()
             .filter_map(|(command_str, _)| {
                 if command_str != prev_command_str && (empty || command_str.starts_with(line)) {
@@ -77,8 +86,10 @@ impl<'a> CommandLineCompleter<'a> {
         prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let pairs = self
-            .commands
+        let subcommands = (self.subcommands)();
+        let commands_ref = subcommands.as_ref().unwrap_or(&self.commands);
+
+        let pairs = commands_ref
             .iter()
             .filter_map(|(command_str, op)| {
                 if command == command_str {
@@ -134,9 +145,13 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
-    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> CommandLineCompleter<'a> {
+    pub fn new<F>(commands: CommandList<'a>, subcommands: F) -> CommandLineCompleter<'a>
+    where
+        F: Fn() -> Option<CommandList<'a>> + 'a,
+    {
         Self {
             commands,
+            subcommands: Box::new(subcommands),
             arg_completer: None,
         }
     }

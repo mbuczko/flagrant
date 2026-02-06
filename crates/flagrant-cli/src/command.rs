@@ -10,6 +10,7 @@ pub enum Command {
     Environment,
     Feature,
     Variant,
+    Set,
 }
 
 impl Command {
