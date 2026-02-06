@@ -3,13 +3,14 @@ use std::{fmt::Display, ops::Deref};
 use super::session::Session;
 
 pub type CommandHandler<T> = fn(&[Arg], &Session<T>) -> anyhow::Result<()>;
+pub type CommandInContext<T> = fn(&Session<T>) -> bool;
 
-#[derive(Debug)]
 pub struct ReplCommand<T> {
     pub cmd: String,
     pub op: Option<String>,
     pub hint: String,
     pub handler: CommandHandler<T>,
+    pub has_context: Option<CommandInContext<T>>,
 }
 
 #[derive(Debug, PartialEq)]

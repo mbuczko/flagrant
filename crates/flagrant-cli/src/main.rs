@@ -3,7 +3,6 @@ use command::Command;
 use completer::ArgCompleter;
 use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_repl::{
-    command::ReplCommand,
     completer::CommandLineCompleter,
     hinter::ReplHinter,
     readline::{self, ReplHelper},
@@ -31,11 +30,10 @@ fn prompter(session: &Session<Connection>) -> String {
         feat.green()
     )
 }
-fn stringify_commands(commands: &[ReplCommand<Connection>]) -> Vec<(String, &Option<String>)> {
-    commands
-        .iter()
-        .map(|c| (c.cmd.to_uppercase(), &c.op))
-        .collect::<Vec<_>>()
+
+fn has_feature_ctx(session: &Session<Connection>) -> bool {
+    let ctx = &session.context.read().unwrap();
+    ctx.feature.is_some()
 }
 
 fn main() -> anyhow::Result<()> {
@@ -45,7 +43,6 @@ fn main() -> anyhow::Result<()> {
 
     let connection = Connection::init(API_HOST.into(), Auth::None, project_id, environment_id)?;
     let session = Session::new(connection);
-
     let commands = vec![
         // environments
         Command::Environment.op("add", "environment description", handlers::env::add),
@@ -65,11 +62,10 @@ fn main() -> anyhow::Result<()> {
         Command::Variant.op("value", "variant-id value", handlers::var::value),
         Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
         Command::Variant.args("add · delete · list · value · weight"),
-    ];
-    let feature_setters = vec![
-        Command::Set.op("on", "", handlers::feat::on),
-        Command::Set.op("off", "", handlers::feat::off),
-        Command::Set.op("value", "value", handlers::feat::value),
+        // feature setters (only available in feature context)
+        Command::Set.op_in_context("on", "", handlers::feat::on, has_feature_ctx),
+        Command::Set.op_in_context("off", "", handlers::feat::off, has_feature_ctx),
+        Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
@@ -81,12 +77,20 @@ fn main() -> anyhow::Result<()> {
         prompter,
         hinter: ReplHinter::new(&commands),
         overlayer: GenericOverlayer { pairs: overlays },
-        completer: CommandLineCompleter::new(stringify_commands(&commands), || {
-            let ctx = &session.context.read().unwrap();
-            if ctx.feature.is_some() {
-                return Some(stringify_commands(&feature_setters));
-            }
-            None
+        completer: CommandLineCompleter::new({
+            let session_ref = &session;
+            commands
+                .iter()
+                .map(|c| {
+                    // Convert function pointer fn(&Session) -> bool to closure Fn() -> bool
+                    // by capturing session_ref. This allows the completer to check context
+                    // without needing direct access to the session.
+                    let context_checker = c.has_context.map(|checker| {
+                        Box::new(move || checker(session_ref)) as Box<dyn Fn() -> bool>
+                    });
+                    (c.cmd.to_uppercase(), &c.op, context_checker)
+                })
+                .collect()
         })
         .with_arg_completer(&arg_completer),
     };

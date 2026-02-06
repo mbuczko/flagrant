@@ -26,23 +26,35 @@ impl Command {
         op: Option<&str>,
         hint: &str,
         handler: Option<CommandHandler<Connection>>,
+        has_context: Option<fn(&Session<Connection>) -> bool>,
     ) -> ReplCommand<Connection> {
         ReplCommand {
             cmd: self.to_string().to_uppercase(),
             op: op.map(String::from),
             hint: hint.to_owned(),
             handler: handler.unwrap_or(Self::no_op_handler),
+            has_context,
         }
     }
 
-    /// Builds a command handling provided operation with `handler` function.
+    /// Builds a command handler for provided operation
     pub fn op(
         &self,
         op: &str,
         hint: &str,
         handler: CommandHandler<Connection>,
     ) -> ReplCommand<Connection> {
-        self.build(Some(op), hint, Some(handler))
+        self.build(Some(op), hint, Some(handler), None)
+    }
+
+    pub fn op_in_context(
+        &self,
+        op: &str,
+        hint: &str,
+        handler: CommandHandler<Connection>,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(Some(op), hint, Some(handler), Some(has_context))
     }
 
     /// Builds a no-op (no-operation) version of command.
@@ -52,11 +64,11 @@ impl Command {
         hint: &str,
         handler: CommandHandler<Connection>,
     ) -> ReplCommand<Connection> {
-        self.build(None, hint, Some(handler))
+        self.build(None, hint, Some(handler), None)
     }
 
     /// When invoked, command will be handled by `no_op_handler` which does nothing.
     pub fn args(&self, hint: &str) -> ReplCommand<Connection> {
-        self.build(None, hint, None)
+        self.build(None, hint, None, None)
     }
 }

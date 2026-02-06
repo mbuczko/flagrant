@@ -101,30 +101,33 @@ pub fn off(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 }
 
 /// Switches feature on/off.
-fn onoff(args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let ctx = session.context.read().unwrap();
+fn onoff(_args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+
+    if let Some(feature) = ctx.feature.as_ref() {
         let res = ctx.environment.as_base_resource();
-        let response = ctx
-            .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+        let subpath = format!("/features/{}", feature.id);
+        let payload = FeatureRequestPayload {
+            name: feature.name.clone(),
+            value: feature
+                .variants
+                .iter()
+                .find(|v| v.environment_id.is_some())
+                .expect("Feature has no control variant!")
+                .value
+                .clone(),
+            description: None,
+            is_enabled: on,
+        };
+        ctx.client.put(res.subpath(&subpath), payload)?;
 
-        if let Ok(feature) = response {
-            let subpath = format!("/features/{}", feature.id);
-            let mut payload = FeatureRequestPayload::from(feature);
+        // re-fetch feature to be sure it's updated
+        let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
 
-            payload.is_enabled = on;
-            ctx.client.put(res.subpath(&subpath), payload)?;
-
-            // re-fetch feature to be sure it's updated
-            let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
-
-            feature.describe();
-            return Ok(());
-        }
-        bail!("No such a feature.")
+        feature.describe();
+        return Ok(());
     }
-    bail!("No feature name provided.")
+    bail!("Not within a feature context.")
 }
 
 /// Lists all features in a project.

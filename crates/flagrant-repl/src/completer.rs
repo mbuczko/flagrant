@@ -9,15 +9,15 @@ use crate::command::Arg;
 use super::parser::{find_arg_by_position, split_command_line};
 
 /// A list of commands with their optional operations.
-/// Each entry is a tuple of (command_name, optional_operation).
-pub type CommandList<'a> = Vec<(String, &'a Option<String>)>;
+/// Each entry is a tuple of (command_name, optional_operation, context_checker).
+pub type CommandList<'a> = Vec<(
+    String,
+    &'a Option<String>,
+    Option<Box<dyn Fn() -> bool + 'a>>,
+)>;
 
 pub struct CommandLineCompleter<'a> {
-    /// Base list of commands that are always available for completion
     commands: CommandList<'a>,
-    /// Dynamic closure that returns context-dependent commands based on current state
-    subcommands: Box<dyn Fn() -> Option<CommandList<'a>> + 'a>,
-    /// Optional completer for providing argument-level completion suggestions
     arg_completer: Option<&'a dyn AutoCompleter>,
 }
 
@@ -54,14 +54,15 @@ impl<'a> CommandLineCompleter<'a> {
     /// with the input, or returns all commands if the line is empty.
     fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let mut prev_command_str = "";
-        let subcommands = (self.subcommands)();
-        let commands_ref = subcommands.as_ref().unwrap_or(&self.commands);
-
         let empty = line.trim().is_empty();
-        let pairs = commands_ref
+        let pairs = self
+            .commands
             .iter()
-            .filter_map(|(command_str, _)| {
-                if command_str != prev_command_str && (empty || command_str.starts_with(line)) {
+            .filter_map(|(command_str, _, within_ctx)| {
+                if command_str != prev_command_str
+                    && (empty || command_str.starts_with(line))
+                    && within_ctx.as_ref().is_none_or(|f| f())
+                {
                     prev_command_str = command_str;
                     return Some(Pair {
                         display: String::default(),
@@ -86,13 +87,11 @@ impl<'a> CommandLineCompleter<'a> {
         prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let subcommands = (self.subcommands)();
-        let commands_ref = subcommands.as_ref().unwrap_or(&self.commands);
-
-        let pairs = commands_ref
+        let pairs = self
+            .commands
             .iter()
-            .filter_map(|(command_str, op)| {
-                if command == command_str {
+            .filter_map(|(command_str, op, within_ctx)| {
+                if command == command_str && within_ctx.as_ref().is_none_or(|f| f()) {
                     return match op {
                         // op starts with prefix - candidate for completion
                         Some(op) if op.starts_with(prefix) => Some(Pair {
@@ -145,13 +144,9 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
-    pub fn new<F>(commands: CommandList<'a>, subcommands: F) -> CommandLineCompleter<'a>
-    where
-        F: Fn() -> Option<CommandList<'a>> + 'a,
-    {
+    pub fn new(commands: CommandList<'a>) -> CommandLineCompleter<'a> {
         Self {
             commands,
-            subcommands: Box::new(subcommands),
             arg_completer: None,
         }
     }
