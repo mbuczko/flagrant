@@ -16,7 +16,6 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             .get(2)
             .map(|a| Cow::from(a.to_string()))
             .unwrap_or(Cow::Owned(String::default()));
-        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
         let feature = ctx.client.post::<_, Feature>(
@@ -36,15 +35,17 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 }
 
 /// Switches to the other feature.
-pub fn set(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
         let res = ctx.environment.as_base_resource();
         let response = ctx
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(feature) = response {
+        if let Ok(features) = response
+            && let Some(feature) = features.into_iter().next()
+        {
             feature.describe();
             ctx.feature = Some(feature);
         }
@@ -62,13 +63,14 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .get(2)
             .map(|a| Cow::from(a.to_string()))
             .unwrap_or(Cow::Owned(String::default()));
-        //.unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let response = ctx
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(feature) = response {
+        if let Ok(mut features) = response
+            && let Some(feature) = features.pop()
+        {
             let cloned = val
                 .parse()
                 .unwrap_or_else(|_| feature.get_default_value().clone_with(&val));
@@ -161,9 +163,11 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         let res = ctx.environment.as_base_resource();
         let response = ctx
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
 
-        if let Ok(feature) = response {
+        if let Ok(mut features) = response
+            && let Some(feature) = features.pop()
+        {
             ctx.client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 

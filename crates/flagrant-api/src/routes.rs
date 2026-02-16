@@ -15,10 +15,6 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
         .route(
-            "/projects/:project_id/envs/name/:env_name",
-            get(environments::fetch_by_name),
-        )
-        .route(
             "/projects/:project_id/envs/:env_id",
             get(environments::fetch_by_id),
         )
@@ -27,10 +23,6 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))
-        .route(
-            "/envs/:environment_id/features/name/:feature_name",
-            get(features::fetch_by_name),
-        )
         .route(
             "/envs/:environment_id/features/:feature_id",
             get(features::fetch_by_id),

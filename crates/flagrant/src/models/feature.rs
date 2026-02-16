@@ -113,16 +113,18 @@ pub async fn get_by_id(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<Feature> {
-    let feature = SQLFeatures::fetch_feature(&mut *conn, params![feature_id], |row| {
+    let mut tx = conn.begin().await?;
+    let feature = SQLFeatures::fetch_feature_by_id(&mut *tx, params![feature_id], |row| {
         row_to_feature(row, environment)
     })
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(conn, environment, feature.id)
+    let variants = variant::get_all(&mut tx, environment, feature.id)
         .await
         .unwrap_or_default();
 
+    tx.commit().await?;
     Ok(feature.with_variants(variants))
 }
 

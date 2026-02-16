@@ -71,4 +71,12 @@ impl Command {
     pub fn args(&self, hint: &str) -> ReplCommand<Connection> {
         self.build(None, hint, None, None)
     }
+
+    pub fn args_in_context(
+        &self,
+        hint: &str,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(None, hint, None, Some(has_context))
+    }
 }

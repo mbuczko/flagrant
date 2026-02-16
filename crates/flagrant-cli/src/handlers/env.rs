@@ -38,18 +38,21 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 }
 
 /// Changes current environment in a session
-pub fn set(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
         let res = ctx.project.as_base_resource();
         let response = ctx
             .client
-            .get::<Environment>(res.subpath(format!("/envs/name/{name}")));
+            .get::<Vec<Environment>>(res.subpath(format!("/envs?name={name}")));
 
-        if let Ok(env) = response {
-            println!("Switching to environment '{}' (id={})", env.name, env.id);
-            ctx.environment = env;
-            return Ok(());
+        if let Ok(envs) = response {
+            if let Some(env) = envs.into_iter().next() {
+                println!("Switching to environment '{}' (id={})", env.name, env.id);
+                ctx.environment = env;
+                ctx.feature = None;
+                return Ok(());
+            }
         }
         bail!("No such an environment.")
     }

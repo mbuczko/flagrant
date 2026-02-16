@@ -3,7 +3,7 @@
 INSERT INTO features(project_id, name, is_active, is_enabled) VALUES($1, $2, $3, $4)
 RETURNING feature_id, project_id, name, is_active, is_enabled
 
--- :name fetch_feature :|| :1
+-- :name fetch_feature_by_id :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
 SELECT f.feature_id, project_id, name, is_active, is_enabled, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f

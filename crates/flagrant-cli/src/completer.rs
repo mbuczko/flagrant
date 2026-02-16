@@ -44,15 +44,15 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    // auto-complete feature name
-                    "on" | "off" | "delete" | "set" if arg_n == 2 => ctx
+                    // Auto-complete feature name
+                    "delete" | "use" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
                         .into_iter()
                         .map(|c| c.name)
                         .collect::<Vec<_>>(),
 
-                    // auto-complete feature attributes names like tags or status
+                    // Auto-complete feature attributes names like tags or status
                     // along with attribute value (if completable)
                     "list" => match prefix.split_once(':') {
                         Some(("tag", val)) => {

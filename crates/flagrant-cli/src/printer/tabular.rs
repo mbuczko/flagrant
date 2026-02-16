@@ -80,9 +80,8 @@ impl Tabular for Feature {
             .render(rows)
     }
     fn describe(&self) {
-        let value = self.get_default_value();
         let title = format!("{} (ID={})", &self.name, self.id);
-        let tags = self.tags.to_string();
+        let tags = format!("{}", self.tags.to_string().dimmed());
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
             .add_column(
@@ -96,6 +95,23 @@ impl Tabular for Feature {
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
+        let vcount = self.variants.len();
+        let variants = self
+            .variants
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                format!(
+                    "{}{} {} {}",
+                    if i == vcount - 1 { "╰╴" } else { "├╴" },
+                    bar(v.weight, 10),
+                    v.value,
+                    "[*]".red(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
         let state = if self.is_enabled {
             format!("{} ON", "●".green())
         } else {
@@ -104,7 +120,7 @@ impl Tabular for Feature {
 
         table.render(vec![
             &["STATE", &state],
-            &["VALUE", &value.to_string()],
+            &["VARIANTS", &variants],
             &["TAGS", &tags],
         ]);
     }
@@ -114,12 +130,20 @@ impl Tabular for Variant {
     fn list(selfs: &[Self]) {
         let rows = selfs
             .iter()
-            .map(|var| [bar(var.weight, 10), var.value.to_string()])
+            .map(|var| {
+                [
+                    var.id.to_string(),
+                    bar(var.weight, 10),
+                    var.value.to_string(),
+                ]
+            })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
+            .add_column_named_with_align("ID".into(), Layout::Fixed(10), Align::Left)
             .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(120), Align::Left)
+            .width(100)
             .build()
             .render(rows)
     }
@@ -153,7 +177,7 @@ fn bar(weight: u8, width: u16) -> String {
     let progress = (weight as u16 * width) / 100;
 
     for ch in bar.iter_mut().take(progress as usize) {
-        *ch = '▆';
+        *ch = '━';
     }
-    format!("{0: <3}% {1: <10}", weight, String::from_iter(bar))
+    format!("{0: <3}% {1: <10}", weight, String::from_iter(bar).red())
 }

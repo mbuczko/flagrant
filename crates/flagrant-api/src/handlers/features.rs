@@ -16,6 +16,10 @@ type TagsTuple<'a> = (
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FeatureQueryParams {
+    // Single feature lookup
+    name: Option<String>,
+    id: Option<i32>,
+    // List filtering
     prefix: Option<String>,
     status: Option<String>,
     state: Option<String>,
@@ -119,26 +123,6 @@ pub async fn fetch_by_id(
     Ok(Json(feature))
 }
 
-/// Fetches a feature by its name within a specific environment.
-///
-/// Feature names are unique within a project, so this returns at most one feature.
-/// Returns the feature with all its variants (control and non-control).
-///
-/// # Endpoint
-/// `GET /environments/{environment_id}/features/name/{feature_name}`
-///
-/// # Returns
-/// The feature matching the given name with all its associated variants.
-pub async fn fetch_by_name(
-    DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_name)): Path<(i32, String)>,
-) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let feature = feature::get_by_name(&mut conn, &env, feature_name).await?;
-
-    Ok(Json(feature))
-}
-
 /// Updates an existing feature's name, value, and enabled state.
 ///
 /// All updates are performed within a transaction. The feature value update
@@ -169,15 +153,23 @@ pub async fn update(
     Ok(Json(()))
 }
 
-/// Lists features in an environment with optional filtering.
+/// Lists features or fetches a single feature in an environment.
 ///
-/// Features are returned with their control variants only for performance.
-/// Supports filtering by prefix, status, state, pattern, and tags.
+/// When `name` or `id` query parameter is provided, fetches and returns a single feature
+/// along with all its variants. Otherwise, lists features with optional filtering.
+/// Listed features are returned with their control variants only for performance reasons.
 ///
 /// # Endpoint
-/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]`
+/// `GET /environments/{environment_id}/features?name=foo` - fetch by name
+/// `GET /environments/{environment_id}/features?id=123` - fetch by ID
+/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]` - list with filters
 ///
 /// # Query Parameters
+/// Single feature lookup (returns one feature in array):
+/// - `name` - Feature name to fetch
+/// - `id` - Feature ID to fetch (takes precedence over name)
+///
+/// List filtering:
 /// - `prefix` - Filter by name prefix (e.g., "show_" matches "show_banner", "show_notification")
 /// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
 /// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
@@ -185,13 +177,27 @@ pub async fn update(
 /// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 ///
 /// # Returns
-/// List of features matching the filters, each with only its control variant.
+/// Array with single feature or list of features matching the filters, each with only its control variant.
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
     Path(environment_id): Path<i32>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
+
+    // Check if this is a single-feature fetch request
+    if params.id.is_some() || params.name.is_some() {
+        let feature = if let Some(id) = params.id {
+            feature::get_by_id(&mut conn, &env, id).await?
+        } else if let Some(name) = params.name {
+            feature::get_by_name(&mut conn, &env, name).await?
+        } else {
+            unreachable!()
+        };
+        return Ok(Json(vec![feature]));
+    }
+
+    // Otherwise, list features with filters
     let features = match params.prefix {
         // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,

@@ -46,25 +46,36 @@ fn main() -> anyhow::Result<()> {
     let commands = vec![
         // environments
         Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("set", "environment", handlers::env::set),
+        Command::Environment.op("use", "environment", handlers::env::r#use),
         Command::Environment.op("list", "", handlers::env::list),
-        Command::Environment.args("add · list · set"),
+        Command::Environment.args("add · list · use"),
         // features
         Command::Feature.op("list", "filter", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
-        Command::Feature.op("set", "feature", handlers::feat::set),
-        Command::Feature.args("add · delete · list · set"),
+        Command::Feature.op("use", "feature", handlers::feat::r#use),
+        Command::Feature.args("add · delete · list · use"),
         // variants
-        Command::Variant.op("list", "feature", handlers::var::list),
-        Command::Variant.op("add", "feature weight value", handlers::var::add),
-        Command::Variant.op("delete", "variant-id", handlers::var::del),
-        Command::Variant.op("value", "variant-id value", handlers::var::value),
-        Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
-        Command::Variant.args("add · delete · list · value · weight"),
+        Command::Variant.op_in_context("list", "", handlers::var::list, has_feature_ctx),
+        Command::Variant.op_in_context("add", "weight value", handlers::var::add, has_feature_ctx),
+        Command::Variant.op_in_context("delete", "variant-id", handlers::var::del, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "value",
+            "variant-id value",
+            handlers::var::value,
+            has_feature_ctx,
+        ),
+        Command::Variant.op_in_context(
+            "weight",
+            "variant-id weight",
+            handlers::var::weight,
+            has_feature_ctx,
+        ),
+        Command::Variant.args_in_context("list · add · delete · value", has_feature_ctx),
         // feature setters (only available in feature context)
         Command::Set.op_in_context("on", "", handlers::feat::on, has_feature_ctx),
         Command::Set.op_in_context("off", "", handlers::feat::off, has_feature_ctx),
+        Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
         Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
     ];
     let overlays = vec![

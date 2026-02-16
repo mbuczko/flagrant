@@ -15,14 +15,15 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             .get(3)
             .map(|a| Cow::from(a.to_string()))
             .unwrap_or(Cow::Owned(String::default()));
-        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let response = ctx
             .client
-            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features?name={feature_name}")));
 
-        if let Ok(feature) = response {
-            // take default variant's value type and use it to construct value for
+        if let Ok(mut features) = response
+            && let Some(feature) = features.pop()
+        {
+            // Take default variant's value type and use it to construct value for
             // variant being created, according to following rules:
             //
             // - if given value hasn't been explicitly typed (like json::{"a": 2}) use default
@@ -65,8 +66,6 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .get(2)
             .map(|a| Cow::from(a.to_string()))
             .unwrap_or(Cow::Owned(String::default()));
-
-        // .unwrap_or_else(|| Cow::from(multiline_value(editor).unwrap()));
 
         let response = ctx
             .client
@@ -139,29 +138,12 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     bail!("No variant-id provided.")
 }
 
-pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(feature_name) = args.get(1) {
-        let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
-        let response = ctx
-            .client
-            .get::<Feature>(res.subpath(format!("/features/name/{feature_name}")));
+pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
 
-        match response {
-            Ok(feature) => {
-                Variant::list(
-                    ctx.client
-                        .get::<Vec<Variant>>(
-                            res.subpath(format!("/features/{}/variants", feature.id)),
-                        )?
-                        .as_ref(),
-                );
-                return Ok(());
-            }
-            Err(error) => {
-                bail!(error)
-            }
-        }
+    if let Some(feature) = ctx.feature.as_ref() {
+        Variant::list(&feature.variants);
+        return Ok(());
     }
     bail!("No feature name provided.")
 }
