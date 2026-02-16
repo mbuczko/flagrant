@@ -18,7 +18,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
         let response = ctx
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={feature_name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features/{feature_name}")));
 
         if let Ok(mut features) = response
             && let Some(feature) = features.pop()

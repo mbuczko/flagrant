@@ -16,15 +16,30 @@ type TagsTuple<'a> = (
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FeatureQueryParams {
-    // Single feature lookup
-    name: Option<String>,
-    id: Option<i32>,
-    // List filtering
     prefix: Option<String>,
     status: Option<String>,
     state: Option<String>,
     tags: Option<String>,
     pattern: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) enum FeatureId {
+    Id(i32),
+    Name(String),
+}
+
+impl<'de> Deserialize<'de> for FeatureId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.parse::<i32>() {
+            Ok(id) => Ok(FeatureId::Id(id)),
+            Err(_) => Ok(FeatureId::Name(s)),
+        }
+    }
 }
 
 /// Parses status parameter: converts non-empty string to bool (true if "active").
@@ -113,13 +128,15 @@ pub async fn create(
 ///
 /// # Returns
 /// The feature with all its associated variants.
-pub async fn fetch_by_id(
+pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((environment_id, feature_id)): Path<(i32, FeatureId)>,
 ) -> Result<Json<Feature>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-
+    let feature = match feature_id {
+        FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
+        FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, name).await?,
+    };
     Ok(Json(feature))
 }
 
@@ -153,23 +170,13 @@ pub async fn update(
     Ok(Json(()))
 }
 
-/// Lists features or fetches a single feature in an environment.
-///
-/// When `name` or `id` query parameter is provided, fetches and returns a single feature
-/// along with all its variants. Otherwise, lists features with optional filtering.
+/// Lists features with optional filtering.
 /// Listed features are returned with their control variants only for performance reasons.
 ///
 /// # Endpoint
-/// `GET /environments/{environment_id}/features?name=foo` - fetch by name
-/// `GET /environments/{environment_id}/features?id=123` - fetch by ID
 /// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]` - list with filters
 ///
 /// # Query Parameters
-/// Single feature lookup (returns one feature in array):
-/// - `name` - Feature name to fetch
-/// - `id` - Feature ID to fetch (takes precedence over name)
-///
-/// List filtering:
 /// - `prefix` - Filter by name prefix (e.g., "show_" matches "show_banner", "show_notification")
 /// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
 /// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
@@ -184,20 +191,6 @@ pub async fn list(
     Path(environment_id): Path<i32>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-
-    // Check if this is a single-feature fetch request
-    if params.id.is_some() || params.name.is_some() {
-        let feature = if let Some(id) = params.id {
-            feature::get_by_id(&mut conn, &env, id).await?
-        } else if let Some(name) = params.name {
-            feature::get_by_name(&mut conn, &env, name).await?
-        } else {
-            unreachable!()
-        };
-        return Ok(Json(vec![feature]));
-    }
-
-    // Otherwise, list features with filters
     let features = match params.prefix {
         // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,

@@ -41,11 +41,9 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         let res = ctx.environment.as_base_resource();
         let response = ctx
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Feature>(res.subpath(format!("/features/{name}")));
 
-        if let Ok(features) = response
-            && let Some(feature) = features.into_iter().next()
-        {
+        if let Ok(feature) = response {
             feature.describe();
             ctx.feature = Some(feature);
         }
@@ -66,7 +64,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         let response = ctx
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Vec<Feature>>(res.subpath(format!("/features/{name}")));
 
         if let Ok(mut features) = response
             && let Some(feature) = features.pop()
@@ -163,11 +161,9 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         let res = ctx.environment.as_base_resource();
         let response = ctx
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features?name={name}")));
+            .get::<Feature>(res.subpath(format!("/features/{name}")));
 
-        if let Ok(mut features) = response
-            && let Some(feature) = features.pop()
-        {
+        if let Ok(feature) = response {
             ctx.client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 

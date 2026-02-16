@@ -10,11 +10,26 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 
 #[derive(Debug, Deserialize)]
 pub struct EnvQueryParams {
-    // Single environment lookup
-    name: Option<String>,
-    id: Option<i32>,
-    // List filtering
     prefix: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) enum EnvironmentId {
+    Id(i32),
+    Name(String),
+}
+
+impl<'de> Deserialize<'de> for EnvironmentId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.parse::<i32>() {
+            Ok(id) => Ok(EnvironmentId::Id(id)),
+            Err(_) => Ok(EnvironmentId::Name(s)),
+        }
+    }
 }
 
 pub async fn create(
@@ -28,31 +43,26 @@ pub async fn create(
     Ok(Json(env))
 }
 
-pub async fn fetch_by_id(
+pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((_project_id, env_id)): Path<(i32, i32)>,
+    Path((project_id, env_id)): Path<(i32, EnvironmentId)>,
 ) -> Result<Json<Environment>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, env_id).await?;
-
+    let env = match env_id {
+        EnvironmentId::Id(id) => environment::get_by_id(&mut conn, id).await?,
+        EnvironmentId::Name(name) => {
+            let project = project::get_by_id(&mut conn, project_id).await?;
+            environment::get_by_name(&mut conn, &project, name).await?
+        }
+    };
     Ok(Json(env))
 }
 
-/// Lists environments or fetches a single environment in a project.
-///
-/// When `name` or `id` query parameter is provided, fetches and returns a single environment.
-/// Otherwise, lists environments with optional filtering.
+/// Lists environments with optional filtering.
 ///
 /// # Endpoint
-/// `GET /projects/{project_id}/envs?name=foo` - fetch by name
-/// `GET /projects/{project_id}/envs?id=123` - fetch by ID
 /// `GET /projects/{project_id}/envs?[prefix=...]` - list with filters
 ///
 /// # Query Parameters
-/// Single environment lookup (returns one environment in array):
-/// - `name` - Environment name to fetch
-/// - `id` - Environment ID to fetch (takes precedence over name)
-///
-/// List filtering:
 /// - `prefix` - Filter by name prefix
 ///
 /// # Returns
@@ -63,20 +73,6 @@ pub async fn list(
     Path(project_id): Path<i32>,
 ) -> Result<Json<Vec<Environment>>, ServiceError> {
     let project = project::get_by_id(&mut conn, project_id).await?;
-
-    // Check if this is a single-environment fetch request
-    if params.id.is_some() || params.name.is_some() {
-        let env = if let Some(id) = params.id {
-            environment::get_by_id(&mut conn, id).await?
-        } else if let Some(name) = params.name {
-            environment::get_by_name(&mut conn, &project, name).await?
-        } else {
-            unreachable!()
-        };
-        return Ok(Json(vec![env]));
-    }
-
-    // Otherwise, list environments with filters
     let envs = match params.prefix {
         Some(prefix) => environment::get_by_prefix(&mut conn, &project, prefix).await?,
         _ => environment::get_by_project(&mut conn, &project).await?,
