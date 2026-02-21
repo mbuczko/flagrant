@@ -52,9 +52,10 @@ fn main() -> anyhow::Result<()> {
         // features
         Command::Feature.op("list", "filter", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
+        Command::Feature.op("describe", "feature", handlers::feat::describe),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
         Command::Feature.op("use", "feature", handlers::feat::r#use),
-        Command::Feature.args("add · delete · list · use"),
+        Command::Feature.args("add · delete · describe · list · use"),
         // variants
         Command::Variant.op_in_context("list", "", handlers::var::list, has_feature_ctx),
         Command::Variant.op_in_context("add", "weight value", handlers::var::add, has_feature_ctx),
@@ -73,10 +74,15 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Variant.args_in_context("list · add · delete · value", has_feature_ctx),
         // feature setters (only available in feature context)
-        Command::Set.op_in_context("on", "", handlers::feat::on, has_feature_ctx),
-        Command::Set.op_in_context("off", "", handlers::feat::off, has_feature_ctx),
+        Command::Set.op_in_context("state", "on|off", handlers::feat::state, has_feature_ctx),
+        Command::Set.op_in_context(
+            "status",
+            "active|inactive",
+            handlers::feat::status,
+            has_feature_ctx,
+        ),
         Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
-        Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
+        Command::Set.args_in_context("state · status · value", has_feature_ctx),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),

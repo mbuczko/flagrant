@@ -1,4 +1,5 @@
 use anyhow::bail;
+use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Environment, payload::EnvRequestPayload};
@@ -44,15 +45,12 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         let res = ctx.project.as_base_resource();
         let response = ctx
             .client
-            .get::<Vec<Environment>>(res.subpath(format!("/envs?name={name}")));
+            .get::<Environment>(res.subpath(format!("/envs/{name}")));
 
-        if let Ok(envs) = response {
-            if let Some(env) = envs.into_iter().next() {
-                println!("Switching to environment '{}' (id={})", env.name, env.id);
-                ctx.environment = env;
-                ctx.feature = None;
-                return Ok(());
-            }
+        if let Ok(env) = response {
+            println!("Switching environment → {}", env.name.bold());
+            ctx.environment = env;
+            return Ok(());
         }
         bail!("No such an environment.")
     }

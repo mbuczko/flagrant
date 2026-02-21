@@ -25,6 +25,7 @@ impl Tabular for Environment {
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
             .rseparator(None)
+            .width(100)
             .build()
             .render(rows);
     }
@@ -81,7 +82,7 @@ impl Tabular for Feature {
     }
     fn describe(&self) {
         let title = format!("{} (ID={})", &self.name, self.id);
-        let tags = format!("{}", self.tags.to_string().dimmed());
+        let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
             .add_column(
@@ -102,11 +103,10 @@ impl Tabular for Feature {
             .enumerate()
             .map(|(i, v)| {
                 format!(
-                    "{}{} {} {}",
+                    "{}{} {}",
                     if i == vcount - 1 { "╰╴" } else { "├╴" },
                     bar(v.weight, 10),
                     v.value,
-                    "[*]".red(),
                 )
             })
             .collect::<Vec<_>>()
@@ -117,8 +117,13 @@ impl Tabular for Feature {
         } else {
             format!("{} OFF", "●".red())
         };
-
+        let status = if self.is_active {
+            "active".to_string()
+        } else {
+            "inactive".dimmed().to_string()
+        };
         table.render(vec![
+            &["STATUS", &status],
             &["STATE", &state],
             &["VARIANTS", &variants],
             &["TAGS", &tags],
@@ -173,11 +178,22 @@ impl Tabular for Variant {
 }
 
 fn bar(weight: u8, width: u16) -> String {
-    let mut bar = vec![' '; width as usize];
-    let progress = (weight as u16 * width) / 100;
+    let total_halves = weight as u32 * width as u32 * 2 / 100;
+    let full_chars = (total_halves / 2) as usize;
+    let half = total_halves % 2 == 1;
 
-    for ch in bar.iter_mut().take(progress as usize) {
-        *ch = '━';
+    let half_char = if half { '╸' } else { ' ' };
+    let filled = full_chars + half as usize;
+
+    let mut bar = String::with_capacity(width as usize);
+    for _ in 0..full_chars {
+        bar.push('━');
     }
-    format!("{0: <3}% {1: <10}", weight, String::from_iter(bar).red())
+    if filled < width as usize {
+        bar.push(half_char);
+    }
+    for _ in filled..width as usize {
+        bar.push(' ');
+    }
+    format!("{0: <3}% {1: <10}", weight, bar.red())
 }

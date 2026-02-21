@@ -7,6 +7,13 @@ use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
 
 use crate::printer::tabular::Tabular;
 
+fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.environment.as_base_resource();
+    ctx.client
+        .get::<Feature>(res.subpath(format!("/features/{name}")))
+}
+
 /// Adds a new feature - inactive and OFF by default
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
@@ -37,19 +44,27 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Switches to the other feature.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let mut ctx = session.context.write().unwrap();
-        let res = ctx.environment.as_base_resource();
-        let response = ctx
-            .client
-            .get::<Feature>(res.subpath(format!("/features/{name}")));
+        let feature = fetch_feature(name, session)?;
 
-        if let Ok(feature) = response {
-            feature.describe();
-            ctx.feature = Some(feature);
-        }
+        feature.describe();
+        session.context.write().unwrap().feature = Some(feature);
         return Ok(());
     }
     bail!("No feature name provided.")
+}
+
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if let Some(name) = args.get(1) {
+        fetch_feature(name, session)?.describe();
+    } else {
+        let ctx = session.context.read().unwrap();
+        if let Some(feature) = &ctx.feature {
+            feature.describe();
+        } else {
+            bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
+        }
+    }
+    Ok(())
 }
 
 /// Changes value of given feature.
@@ -64,11 +79,9 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         let response = ctx
             .client
-            .get::<Vec<Feature>>(res.subpath(format!("/features/{name}")));
+            .get::<Feature>(res.subpath(format!("/features/{name}")));
 
-        if let Ok(mut features) = response
-            && let Some(feature) = features.pop()
-        {
+        if let Ok(feature) = response {
             let cloned = val
                 .parse()
                 .unwrap_or_else(|_| feature.get_default_value().clone_with(&val));
@@ -90,44 +103,63 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     bail!("No feature name provided.");
 }
 
-/// Switches feature on.
-pub fn on(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    onoff(args, session, true)
-}
+/// Switches the feature on/off
+pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let enabled = args
+        .get(1)
+        .map(|arg| matches!(arg.to_lowercase().as_str(), "on"));
 
-/// Switches feature off.
-pub fn off(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    onoff(args, session, false)
-}
-
-/// Switches feature on/off.
-fn onoff(_args: &[Arg], session: &Session<Connection>, on: bool) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-
-    if let Some(feature) = ctx.feature.as_ref() {
-        let res = ctx.environment.as_base_resource();
-        let subpath = format!("/features/{}", feature.id);
-        let payload = FeatureRequestPayload {
-            name: feature.name.clone(),
-            value: feature
-                .variants
-                .iter()
-                .find(|v| v.environment_id.is_some())
-                .expect("Feature has no control variant!")
-                .value
-                .clone(),
-            description: None,
-            is_enabled: on,
-        };
-        ctx.client.put(res.subpath(&subpath), payload)?;
-
-        // re-fetch feature to be sure it's updated
-        let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
-
-        feature.describe();
+    if let Some(feature) = &mut ctx.feature
+        && let Some(enabled) = enabled
+    {
+        feature.is_enabled = enabled;
         return Ok(());
     }
-    bail!("Not within a feature context.")
+    bail!("Not enough arguments provided")
+
+    // let ctx = session.context.read().unwrap();
+
+    // if let Some(feature) = ctx.feature.as_ref() {
+    //     let res = ctx.environment.as_base_resource();
+    //     let subpath = format!("/features/{}", feature.id);
+    //     let payload = FeatureRequestPayload {
+    //         name: feature.name.clone(),
+    //         value: feature
+    //             .variants
+    //             .iter()
+    //             .find(|v| v.environment_id.is_some())
+    //             .expect("Feature has no control variant!")
+    //             .value
+    //             .clone(),
+    //         description: None,
+    //         is_enabled: true,
+    //     };
+    //     ctx.client.put(res.subpath(&subpath), payload)?;
+
+    //     // re-fetch feature to be sure it's updated
+    //     let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
+
+    //     feature.describe();
+    //     return Ok(());
+    // }
+    // bail!("Not within a feature context.")
+}
+
+/// Toggles the feature status - enabled/disabled
+pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let active = args
+        .get(1)
+        .map(|arg| matches!(arg.to_lowercase().as_str(), "active"));
+
+    if let Some(feature) = &mut ctx.feature
+        && let Some(active) = active
+    {
+        feature.is_active = active;
+        return Ok(());
+    }
+    bail!("Not enough arguments provided")
 }
 
 /// Lists all features in a project.

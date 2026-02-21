@@ -91,7 +91,9 @@ impl<'a> CommandLineCompleter<'a> {
             .commands
             .iter()
             .filter_map(|(command_str, op, within_ctx)| {
-                if command == command_str && within_ctx.as_ref().is_none_or(|f| f()) {
+                if command_str.eq_ignore_ascii_case(command)
+                    && within_ctx.as_ref().is_none_or(|f| f())
+                {
                     return match op {
                         // op starts with prefix - candidate for completion
                         Some(op) if op.starts_with(prefix) => Some(Pair {

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, FeatureValue, Variant};
+use flagrant_types::{Environment, Feature, FeatureValue, TagList, Variant};
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
@@ -250,6 +250,7 @@ pub async fn delete(
     }
 
     // ...and then remove feature value and entire feature definition
+    SQLFeatures::delete_tags_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;
 
@@ -281,7 +282,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
-        tags: row.get("tags"),
+        tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }
 }
