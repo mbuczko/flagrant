@@ -19,7 +19,9 @@ const API_HOST: &str = "http://localhost:3030";
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
+    let dirty = ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
     let feat = match &ctx.feature {
+        Some(feat) if dirty => format!(" → {}*", feat.name),
         Some(feat) => format!(" → {}", feat.name),
         _ => String::default(),
     };
@@ -72,7 +74,7 @@ fn main() -> anyhow::Result<()> {
             handlers::var::weight,
             has_feature_ctx,
         ),
-        Command::Variant.args_in_context("list · add · delete · value", has_feature_ctx),
+        Command::Variant.args_in_context("list · add · delete · weight · value", has_feature_ctx),
         // feature setters (only available in feature context)
         Command::Set.op_in_context("state", "on|off", handlers::feat::state, has_feature_ctx),
         Command::Set.op_in_context(
@@ -81,8 +83,11 @@ fn main() -> anyhow::Result<()> {
             handlers::feat::status,
             has_feature_ctx,
         ),
-        Command::Set.op_in_context("value", "value", handlers::feat::value, has_feature_ctx),
+        Command::Set.op_in_context("value", "value", handlers::feat::set_value, has_feature_ctx),
         Command::Set.args_in_context("state · status · value", has_feature_ctx),
+        // commit / discard (only available in feature context)
+        Command::Commit.no_op("commit staged changes", handlers::feat::commit),
+        Command::Discard.no_op("discard staged changes", handlers::feat::discard),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),

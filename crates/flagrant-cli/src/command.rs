@@ -11,6 +11,8 @@ pub enum Command {
     Feature,
     Variant,
     Set,
+    Commit,
+    Discard,
 }
 
 impl Command {

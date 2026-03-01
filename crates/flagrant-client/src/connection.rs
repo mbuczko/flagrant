@@ -1,5 +1,5 @@
 use anyhow::bail;
-use flagrant_types::{Environment, Feature, FeatureResponse, Project};
+use flagrant_types::{Environment, Feature, FeatureResponse, Project, payload::FeaturePatch};
 
 use crate::{
     http::{Auth, HttpClient},
@@ -12,6 +12,7 @@ pub struct Connection {
     pub project: Project,
     pub feature: Option<Feature>,
     pub environment: Environment,
+    pub pending: Option<FeaturePatch>,
 }
 
 impl Connection {
@@ -64,11 +65,20 @@ impl Connection {
                 project,
                 environment,
                 feature: None,
+                pending: None,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
             _ => bail!("Neither project nor environment was found."),
         }
+    }
+
+    pub fn get_or_init_pending(&mut self) -> &mut FeaturePatch {
+        self.pending.get_or_insert_with(FeaturePatch::default)
+    }
+
+    pub fn discard_pending(&mut self) {
+        self.pending = None;
     }
 
     #[cfg(feature = "blocking")]

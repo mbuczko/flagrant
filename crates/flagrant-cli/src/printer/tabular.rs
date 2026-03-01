@@ -105,7 +105,7 @@ impl Tabular for Feature {
                 format!(
                     "{}{} {}",
                     if i == vcount - 1 { "╰╴" } else { "├╴" },
-                    bar(v.weight, 10),
+                    bar(v.weight, 10).red(),
                     v.value,
                 )
             })
@@ -177,23 +177,21 @@ impl Tabular for Variant {
     }
 }
 
-fn bar(weight: u8, width: u16) -> String {
+pub fn bar(weight: u8, width: u16) -> String {
     let total_halves = weight as u32 * width as u32 * 2 / 100;
     let full_chars = (total_halves / 2) as usize;
     let half = total_halves % 2 == 1;
-
-    let half_char = if half { '╸' } else { ' ' };
     let filled = full_chars + half as usize;
 
     let mut bar = String::with_capacity(width as usize);
     for _ in 0..full_chars {
         bar.push('━');
     }
-    if filled < width as usize {
-        bar.push(half_char);
+    if half {
+        bar.push('╸');
     }
     for _ in filled..width as usize {
         bar.push(' ');
     }
-    format!("{0: <3}% {1: <10}", weight, bar.red())
+    format!("{0: <3}% {1: <10}", weight, bar)
 }

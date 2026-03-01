@@ -3,7 +3,10 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, feature};
-use flagrant_types::{Feature, payload::FeatureRequestPayload};
+use flagrant_types::{
+    Feature,
+    payload::{FeaturePatch, FeatureRequestPayload},
+};
 use serde::Deserialize;
 use smallvec::{SmallVec, smallvec};
 
@@ -234,4 +237,30 @@ pub async fn delete(
 
     feature::delete(&mut conn, &env, &feature).await?;
     Ok(Json(()))
+}
+
+/// Applies a batch of staged changes to a feature atomically.
+///
+/// All changes (feature properties and variant operations) are applied within
+/// a single transaction. Validation errors are returned as 4xx responses.
+///
+/// # Endpoint
+/// `POST /environments/{environment_id}/features/{feature_id}/patch`
+///
+/// # Parameters
+/// - `environment_id` - The environment containing the feature
+/// - `feature_id` - The ID of the feature to patch
+/// - `patch` - The set of changes to apply
+pub async fn patch(
+    DbConnection(mut conn): DbConnection,
+    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Json(patch): Json<FeaturePatch>,
+) -> Result<Json<Feature>, ServiceError> {
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
+
+    feature::apply_patch(&mut conn, &env, &feature, patch).await?;
+
+    let updated = feature::get_by_id(&mut conn, &env, feature_id).await?;
+    Ok(Json(updated))
 }

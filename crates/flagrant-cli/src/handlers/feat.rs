@@ -44,6 +44,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Switches to the other feature.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
+        {
+            let ctx = session.context.read().unwrap();
+            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
+            }
+        }
         let feature = fetch_feature(name, session)?;
 
         feature.describe();
@@ -67,42 +73,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Changes value of given feature.
-pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
-        let val = args
-            .get(2)
-            .map(|a| Cow::from(a.to_string()))
-            .unwrap_or(Cow::Owned(String::default()));
-
-        let response = ctx
-            .client
-            .get::<Feature>(res.subpath(format!("/features/{name}")));
-
-        if let Ok(feature) = response {
-            let cloned = val
-                .parse()
-                .unwrap_or_else(|_| feature.get_default_value().clone_with(&val));
-
-            let subpath = format!("/features/{}", feature.id);
-            let mut payload = FeatureRequestPayload::from(feature);
-
-            payload.value = cloned;
-            ctx.client.put(res.subpath(&subpath), payload)?;
-
-            // re-fetch feature to be sure it's updated
-            let feature: Feature = ctx.client.get(res.subpath(&subpath))?;
-
-            feature.describe();
-            return Ok(());
-        }
-        bail!("Feature not found.");
-    }
-    bail!("No feature name provided.");
-}
-
 /// Switches the feature on/off
 pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
@@ -110,56 +80,97 @@ pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .get(1)
         .map(|arg| matches!(arg.to_lowercase().as_str(), "on"));
 
-    if let Some(feature) = &mut ctx.feature
+    if ctx.feature.is_some()
         && let Some(enabled) = enabled
     {
-        feature.is_enabled = enabled;
+        ctx.get_or_init_pending().is_enabled = Some(enabled);
+        println!("Staged: state = {}", if enabled { "on" } else { "off" });
         return Ok(());
     }
     bail!("Not enough arguments provided")
-
-    // let ctx = session.context.read().unwrap();
-
-    // if let Some(feature) = ctx.feature.as_ref() {
-    //     let res = ctx.environment.as_base_resource();
-    //     let subpath = format!("/features/{}", feature.id);
-    //     let payload = FeatureRequestPayload {
-    //         name: feature.name.clone(),
-    //         value: feature
-    //             .variants
-    //             .iter()
-    //             .find(|v| v.environment_id.is_some())
-    //             .expect("Feature has no control variant!")
-    //             .value
-    //             .clone(),
-    //         description: None,
-    //         is_enabled: true,
-    //     };
-    //     ctx.client.put(res.subpath(&subpath), payload)?;
-
-    //     // re-fetch feature to be sure it's updated
-    //     let feature = ctx.client.get::<Feature>(res.subpath(&subpath))?;
-
-    //     feature.describe();
-    //     return Ok(());
-    // }
-    // bail!("Not within a feature context.")
 }
 
-/// Toggles the feature status - enabled/disabled
+/// Toggles the feature status - active/inactive
 pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let active = args
         .get(1)
         .map(|arg| matches!(arg.to_lowercase().as_str(), "active"));
 
-    if let Some(feature) = &mut ctx.feature
+    if ctx.feature.is_some()
         && let Some(active) = active
     {
-        feature.is_active = active;
+        ctx.get_or_init_pending().is_active = Some(active);
+        println!(
+            "Staged: status = {}",
+            if active { "active" } else { "inactive" }
+        );
         return Ok(());
     }
     bail!("Not enough arguments provided")
+}
+
+/// Stages a new value for the current feature (buffered - use `commit` to apply).
+pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if let Some(feature) = &ctx.feature {
+        if let Some(raw) = args.get(1) {
+            let parsed = raw
+                .parse()
+                .unwrap_or_else(|_| feature.get_default_value().clone_with(raw));
+            let display = parsed.to_string();
+            ctx.get_or_init_pending().value = Some(parsed);
+            println!("Staged: value = {display}");
+            return Ok(());
+        }
+        bail!("No value provided.")
+    }
+    bail!("Not within a feature context.")
+}
+
+/// Commits all staged changes for the current feature to the API atomically.
+pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+
+    let feature_id = ctx
+        .feature
+        .as_ref()
+        .map(|f| f.id)
+        .ok_or_else(|| anyhow::anyhow!("Not within a feature context."))?;
+
+    let patch = match &ctx.pending {
+        Some(p) if !p.is_empty() => p.clone(),
+        _ => {
+            println!("No pending changes to commit.");
+            return Ok(());
+        }
+    };
+
+    let path = ctx
+        .environment
+        .as_base_resource()
+        .subpath(format!("/features/{feature_id}"));
+
+    match ctx.client.patch::<_, Feature>(path, patch) {
+        Ok(updated) => {
+            updated.describe();
+            ctx.pending = None;
+            ctx.feature = Some(updated);
+        }
+        Err(err) => eprintln!("Commit failed: {err}"),
+    }
+    Ok(())
+}
+
+/// Discards all staged changes for the current feature.
+pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if ctx.pending.take().is_some() {
+        println!("Pending changes discarded.");
+    } else {
+        println!("No pending changes.");
+    }
+    Ok(())
 }
 
 /// Lists all features in a project.

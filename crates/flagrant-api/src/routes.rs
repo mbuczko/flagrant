@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use sqlx::{Pool, Sqlite};
 
@@ -34,6 +34,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route(
             "/envs/:environment_id/features/:feature_id",
             delete(features::delete),
+        )
+        .route(
+            "/envs/:environment_id/features/:feature_id",
+            patch(features::patch),
         )
         // variants
         .route(

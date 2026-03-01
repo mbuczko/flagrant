@@ -58,6 +58,10 @@ UPDATE features
 SET name = $2, is_enabled = $3
 WHERE feature_id = $1
 
+-- :name update_feature_is_active :<> :!
+-- :doc Updates is_active flag of a feature
+UPDATE features SET is_active = $2 WHERE feature_id = $1
+
 -- :name update_feature_variants_accumulators :<> :!
 -- :doc Updates feature variants accumulators by given value
 UPDATE variant_weights
