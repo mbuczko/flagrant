@@ -4,44 +4,45 @@ use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{FeatureValue, Variant, payload::VariantPatchOp};
 
-use crate::printer::tabular::{Tabular, VariantRow, bar};
+use crate::printer::tabular::{VariantRow, bar, variant_list};
 
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
-    // Extract the data upfront to avoid holding an immutable borrow
-    // through the later mutable write to ctx.variant_index.
-    let (variants, ops, default_value) = match ctx.feature.as_ref() {
-        None => bail!("No feature name provided."),
-        Some(f) => {
-            let variants: Vec<Variant> = f.variants.clone();
-            let ops: Vec<VariantPatchOp> = ctx
-                .pending
-                .as_ref()
-                .map(|p| p.variants.clone())
-                .unwrap_or_default();
-            let default_value = f.get_default_value().clone();
-            (variants, ops, default_value)
-        }
-    };
+    if ctx.feature.is_none() {
+        bail!("No feature name provided.");
+    }
+
+    // SAFETY: checked above; borrow only the two fields we need so that the
+    // immutable borrows of `feature` and `pending` end before the mutable
+    // write to `ctx.variant_index` further below.
+    let variants: &[Variant] = &ctx.feature.as_ref().unwrap().variants;
+    let default_value = ctx.feature.as_ref().unwrap().get_default_value();
+    let ops: &[VariantPatchOp] = ctx
+        .pending
+        .as_ref()
+        .map(|p| p.variants.as_slice())
+        .unwrap_or_default();
 
     // Committed variants go first (sorted ascending by id).
-    let mut sorted_variants = variants;
+    let mut sorted_variants: Vec<&Variant> = variants.iter().collect();
     sorted_variants.sort_by_key(|v| v.id);
 
-    if ops.is_empty() {
-        ctx.variant_index = sorted_variants
-            .iter()
-            .map(|v| VariantRef::Committed(v.id))
-            .collect();
+    let mut var_index = sorted_variants
+        .iter()
+        .map(|v| VariantRef::Committed(v.id))
+        .collect();
 
+    if ops.is_empty() {
         let rows: Vec<VariantRow> = sorted_variants
             .iter()
             .enumerate()
             .map(|(i, var)| VariantRow::committed(i + 1, var))
             .collect();
 
-        VariantRow::list(&rows);
+        variant_list(rows);
+
+        ctx.variant_index = var_index;
         return Ok(());
     }
 
@@ -60,7 +61,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let mut weight_overrides: std::collections::HashMap<i32, Option<u8>> =
         std::collections::HashMap::new();
 
-    for op in &ops {
+    for op in ops {
         match op {
             VariantPatchOp::SetValue { id, value } => {
                 value_overrides.insert(*id, Some(value.clone()));
@@ -72,7 +73,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
     }
 
-    // Staged Add ops — collect (ops-vec-index, value, weight) in staging order.
+    // Staged Add ops - collect (ops-vec-index, value, weight) in staging order.
     let staged_adds: Vec<(usize, &str, u8)> = ops
         .iter()
         .enumerate()
@@ -81,16 +82,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             _ => None,
         })
         .collect();
-
-    // Build the positional index: committed first (by id), then staged.
-    let mut new_index: Vec<VariantRef> = sorted_variants
-        .iter()
-        .map(|v| VariantRef::Committed(v.id))
-        .collect();
-    for staged_pos in 0..staged_adds.len() {
-        new_index.push(VariantRef::Staged(staged_pos));
-    }
-    ctx.variant_index = new_index;
 
     let mut rows: Vec<VariantRow> = Vec::new();
 
@@ -144,6 +135,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         let fv = value
             .parse::<FeatureValue>()
             .unwrap_or_else(|_| default_value.clone_with(value));
+
         rows.push(VariantRow {
             index: display_idx.to_string().green().to_string(),
             id: "-".green().to_string(),
@@ -153,7 +145,13 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         });
     }
 
-    VariantRow::list(&rows);
+    variant_list(rows);
+
+    // Build the positional index: committed first (by id), then staged.
+    for staged_pos in 0..staged_adds.len() {
+        var_index.push(VariantRef::Staged(staged_pos));
+    }
+    ctx.variant_index = var_index;
     Ok(())
 }
 
