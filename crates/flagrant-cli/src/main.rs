@@ -61,20 +61,24 @@ fn main() -> anyhow::Result<()> {
         // variants
         Command::Variant.op_in_context("list", "", handlers::var::list, has_feature_ctx),
         Command::Variant.op_in_context("add", "weight value", handlers::var::add, has_feature_ctx),
-        Command::Variant.op_in_context("delete", "variant-id", handlers::var::del, has_feature_ctx),
+        Command::Variant.op_in_context("delete", "index", handlers::var::del, has_feature_ctx),
+        Command::Variant.op_in_context("discard", "index", handlers::var::discard, has_feature_ctx),
         Command::Variant.op_in_context(
             "value",
-            "variant-id value",
+            "index value",
             handlers::var::value,
             has_feature_ctx,
         ),
         Command::Variant.op_in_context(
             "weight",
-            "variant-id weight",
+            "index weight",
             handlers::var::weight,
             has_feature_ctx,
         ),
-        Command::Variant.args_in_context("list · add · delete · weight · value", has_feature_ctx),
+        Command::Variant.args_in_context(
+            "list · add · delete · discard · weight · value",
+            has_feature_ctx,
+        ),
         // feature setters (only available in feature context)
         Command::Set.op_in_context("state", "on|off", handlers::feat::state, has_feature_ctx),
         Command::Set.op_in_context(

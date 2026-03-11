@@ -131,26 +131,83 @@ impl Tabular for Feature {
     }
 }
 
-impl Tabular for Variant {
-    fn list(selfs: &[Self]) {
-        let rows = selfs
-            .iter()
-            .map(|var| {
-                [
-                    var.id.to_string(),
-                    bar(var.weight, 10),
-                    var.value.to_string(),
-                ]
-            })
-            .collect();
+/// A single row for the variant listing table.
+/// All strings are pre-colored by the caller.
+/// When `state` is `None` the STATE column is omitted entirely.
+pub struct VariantRow {
+    pub index: String,
+    pub id: String,
+    pub weight: String,
+    pub value: String,
+    pub state: Option<String>,
+}
 
-        FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("ID".into(), Layout::Fixed(10), Align::Left)
-            .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
-            .add_column_named_with_align("VALUE".into(), Layout::Expandable(120), Align::Left)
-            .width(100)
-            .build()
-            .render(rows)
+impl VariantRow {
+    pub fn committed(index: usize, var: &Variant) -> Self {
+        VariantRow {
+            index: index.to_string(),
+            id: var.id.to_string(),
+            weight: bar(var.weight, 10),
+            value: var.value.to_string(),
+            state: None,
+        }
+    }
+}
+
+impl Tabular for VariantRow {
+    /// Render a variant listing table.
+    ///
+    /// If any row carries a `state`, a STATE column is added for all rows.
+    /// Pass rows built with pre-applied ANSI colours so that both the
+    /// committed-only and mixed-state views share a single render path.
+    fn list(rows: &[VariantRow]) {
+        let with_state = rows.iter().any(|r| r.state.is_some());
+
+        if with_state {
+            let data: Vec<[String; 5]> = rows
+                .iter()
+                .map(|r| {
+                    [
+                        r.index.clone(),
+                        r.id.clone(),
+                        r.weight.clone(),
+                        r.value.clone(),
+                        r.state.clone().unwrap_or_default(),
+                    ]
+                })
+                .collect();
+
+            FancyTable::create(FancyTableOpts::default())
+                .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
+                .add_column_named_with_align("ID".into(), Layout::Fixed(8), Align::Left)
+                .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
+                .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
+                .add_column_named_with_align("STATE".into(), Layout::Fixed(10), Align::Left)
+                .width(100)
+                .build()
+                .render(data);
+        } else {
+            let data: Vec<[String; 4]> = rows
+                .iter()
+                .map(|r| {
+                    [
+                        r.index.clone(),
+                        r.id.clone(),
+                        r.weight.clone(),
+                        r.value.clone(),
+                    ]
+                })
+                .collect();
+
+            FancyTable::create(FancyTableOpts::default())
+                .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
+                .add_column_named_with_align("ID".into(), Layout::Fixed(8), Align::Left)
+                .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
+                .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
+                .width(100)
+                .build()
+                .render(data);
+        }
     }
     fn describe(&self) {
         let id_str = self.id.to_string();

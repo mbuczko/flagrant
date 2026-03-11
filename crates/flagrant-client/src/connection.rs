@@ -6,6 +6,15 @@ use crate::{
     resource::BaseResource,
 };
 
+/// A reference to a variant that is stable within a single listing session.
+/// Committed variants are addressed by their DB id; staged additions are
+/// addressed by their position (0-based) in the pending `Add` ops list.
+#[derive(Debug, Clone)]
+pub enum VariantRef {
+    Committed(i32),
+    Staged(usize),
+}
+
 #[derive(Debug)]
 pub struct Connection {
     pub client: HttpClient,
@@ -13,6 +22,9 @@ pub struct Connection {
     pub feature: Option<Feature>,
     pub environment: Environment,
     pub pending: Option<FeaturePatch>,
+    /// Positional index that maps 1-based display index → VariantRef.
+    /// Invalidated whenever pending ops change.
+    pub variant_index: Vec<VariantRef>,
 }
 
 impl Connection {
@@ -66,6 +78,7 @@ impl Connection {
                 environment,
                 feature: None,
                 pending: None,
+                variant_index: Vec::new(),
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
