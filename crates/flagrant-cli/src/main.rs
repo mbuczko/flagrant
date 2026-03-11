@@ -91,7 +91,7 @@ fn main() -> anyhow::Result<()> {
         Command::Set.args_in_context("state · status · value", has_feature_ctx),
         // commit / discard (only available in feature context)
         Command::Commit.no_op("commit staged changes", handlers::feat::commit),
-        Command::Discard.no_op("discard staged changes", handlers::feat::discard),
+        Command::Discard.no_op("<index>|all", handlers::feat::discard),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),

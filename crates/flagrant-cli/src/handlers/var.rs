@@ -155,15 +155,45 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
+/// Committed variants come first (sorted by id), followed by staged additions in order.
+fn rebuild_index(ctx: &mut flagrant_client::connection::Connection) {
+    let variants = ctx
+        .feature
+        .as_ref()
+        .map(|f| f.variants.as_slice())
+        .unwrap_or_default();
+    let staged_count = ctx
+        .pending
+        .as_ref()
+        .map(|p| {
+            p.variants
+                .iter()
+                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
+                .count()
+        })
+        .unwrap_or(0);
+
+    let mut sorted_ids: Vec<i32> = variants.iter().map(|v| v.id).collect();
+    sorted_ids.sort_unstable();
+
+    let mut index: Vec<VariantRef> = sorted_ids.into_iter().map(VariantRef::Committed).collect();
+    for staged_pos in 0..staged_count {
+        index.push(VariantRef::Staged(staged_pos));
+    }
+    ctx.variant_index = index;
+}
+
 /// Resolve a 1-based display index from the last `var list` output to a VariantRef.
 fn resolve_index(
     ctx: &flagrant_client::connection::Connection,
     raw: &Arg,
 ) -> anyhow::Result<VariantRef> {
     let idx: usize = raw.parse::<usize>()?;
+
     if idx == 0 || idx > ctx.variant_index.len() {
         bail!(
-            "Index {} out of range (1–{}). Run `var list` to refresh.",
+            "Index {} out of range (1–{}). Run `VARIANT list` to refresh.",
             idx,
             ctx.variant_index.len()
         );
@@ -193,8 +223,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             value: value.clone(),
             weight,
         });
-    ctx.variant_index.clear();
     println!("Staged: variant add weight={weight} value={value}");
+
+    rebuild_index(&mut ctx);
     Ok(())
 }
 
@@ -213,30 +244,40 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         None => bail!("No value provided."),
     };
 
-    let variant_id = match variant_ref {
-        VariantRef::Committed(id) => id,
-        VariantRef::Staged(_) => bail!(
-            "Cannot set value on a staged (not yet committed) variant. Discard and re-add it instead."
-        ),
-    };
-
     let ops = &mut ctx.get_or_init_pending().variants;
-    if let Some(op) = ops
-        .iter_mut()
-        .find(|op| matches!(op, VariantPatchOp::SetValue { id, .. } if *id == variant_id))
-    {
-        *op = VariantPatchOp::SetValue {
-            id: variant_id,
-            value: raw.clone(),
-        };
-    } else {
-        ops.push(VariantPatchOp::SetValue {
-            id: variant_id,
-            value: raw.clone(),
-        });
+    match variant_ref {
+        VariantRef::Committed(id) => {
+            if let Some(op) = ops
+                .iter_mut()
+                .find(|op| matches!(op, VariantPatchOp::SetValue { id: oid, .. } if *oid == id))
+            {
+                *op = VariantPatchOp::SetValue {
+                    id,
+                    value: raw.clone(),
+                };
+            } else {
+                ops.push(VariantPatchOp::SetValue {
+                    id,
+                    value: raw.clone(),
+                });
+            }
+            println!("Staged: variant value id={id} value={raw}");
+        }
+        VariantRef::Staged(staged_pos) => {
+            let add_op = ops
+                .iter_mut()
+                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
+                .nth(staged_pos);
+            match add_op {
+                Some(VariantPatchOp::Add { value, .. }) => {
+                    *value = raw.clone();
+                    println!("Updated staged variant value to {raw}");
+                }
+                _ => bail!("Staged variant not found."),
+            }
+        }
     }
-    ctx.variant_index.clear();
-    println!("Staged: variant value id={variant_id} value={raw}");
+    rebuild_index(&mut ctx);
     Ok(())
 }
 
@@ -258,30 +299,41 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Variant weight should be positive number in range of <0, 100>.")
     }
 
-    let variant_id = match variant_ref {
-        VariantRef::Committed(id) => id,
-        VariantRef::Staged(_) => bail!(
-            "Cannot set weight on a staged (not yet committed) variant. Discard and re-add it instead."
-        ),
-    };
-
     let ops = &mut ctx.get_or_init_pending().variants;
-    if let Some(op) = ops
-        .iter_mut()
-        .find(|op| matches!(op, VariantPatchOp::SetWeight { id, .. } if *id == variant_id))
-    {
-        *op = VariantPatchOp::SetWeight {
-            id: variant_id,
-            weight: new_weight,
-        };
-    } else {
-        ops.push(VariantPatchOp::SetWeight {
-            id: variant_id,
-            weight: new_weight,
-        });
+    match variant_ref {
+        VariantRef::Committed(id) => {
+            if let Some(op) = ops
+                .iter_mut()
+                .find(|op| matches!(op, VariantPatchOp::SetWeight { id: oid, .. } if *oid == id))
+            {
+                *op = VariantPatchOp::SetWeight {
+                    id,
+                    weight: new_weight,
+                };
+            } else {
+                ops.push(VariantPatchOp::SetWeight {
+                    id,
+                    weight: new_weight,
+                });
+            }
+            println!("Staged: variant weight id={id} weight={new_weight}");
+        }
+        VariantRef::Staged(staged_pos) => {
+            let add_op = ops
+                .iter_mut()
+                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
+                .nth(staged_pos);
+            match add_op {
+                Some(VariantPatchOp::Add { weight, .. }) => {
+                    *weight = new_weight;
+                    println!("Updated staged variant weight to {new_weight}");
+                }
+                _ => bail!("Staged variant not found."),
+            }
+        }
     }
-    ctx.variant_index.clear();
-    println!("Staged: variant weight id={variant_id} weight={new_weight}");
+
+    rebuild_index(&mut ctx);
     Ok(())
 }
 
@@ -299,7 +351,7 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let variant_id = match variant_ref {
         VariantRef::Committed(id) => id,
         VariantRef::Staged(_) => {
-            bail!("Cannot delete a staged variant. Use `var discard <index>` to remove it.")
+            bail!("Cannot delete a staged variant. Use `VARIANT discard <index>` to remove it.")
         }
     };
 
@@ -310,9 +362,10 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             if *id == variant_id
         )
     });
-    ops.push(VariantPatchOp::Delete { id: variant_id });
-    ctx.variant_index.clear();
     println!("Staged: variant delete id={variant_id}");
+    ops.push(VariantPatchOp::Delete { id: variant_id });
+
+    rebuild_index(&mut ctx);
     Ok(())
 }
 
@@ -325,9 +378,24 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
+    if args.get(1).map(|a| a.0) == Some("all") {
+        let pending = match ctx.pending.as_mut() {
+            Some(p) => p,
+            None => {
+                println!("No pending variant changes.");
+                return Ok(());
+            }
+        };
+        pending.variants.clear();
+        println!("Discarded all pending variant changes.");
+
+        rebuild_index(&mut ctx);
+        return Ok(());
+    }
+
     let variant_ref = match args.get(1) {
         Some(idx) => resolve_index(&ctx, idx)?,
-        None => bail!("No variant index provided."),
+        None => bail!("No variant index provided. Use an index or 'all'."),
     };
 
     let pending = match ctx.pending.as_mut() {
@@ -378,6 +446,6 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     }
 
-    ctx.variant_index.clear();
+    rebuild_index(&mut ctx);
     Ok(())
 }
