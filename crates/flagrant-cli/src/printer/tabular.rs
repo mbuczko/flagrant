@@ -90,7 +90,7 @@ impl Tabular for Feature {
                 Layout::Expandable(120),
                 Align::Left,
                 Overflow::Truncate,
-                3,
+                10,
             )
             .width(100)
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
@@ -145,7 +145,11 @@ pub struct VariantRow {
 impl VariantRow {
     pub fn committed(index: usize, var: &Variant) -> Self {
         VariantRow {
-            index: index.to_string(),
+            index: if var.is_control() {
+                format!("{}★", index)
+            } else {
+                index.to_string()
+            },
             id: var.id.to_string(),
             weight: bar(var.weight, 10),
             value: var.value.to_string(),
@@ -198,6 +202,8 @@ pub fn variant_list(rows: Vec<VariantRow>) {
             .build()
             .render(data);
     }
+
+    println!("  {} control variant\n", "★".dimmed());
 }
 
 pub fn bar(weight: u8, width: u16) -> String {

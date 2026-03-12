@@ -2,7 +2,10 @@ use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{FeatureValue, Variant, payload::VariantPatchOp};
+use flagrant_types::{
+    FeatureValue, Variant,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
@@ -21,7 +24,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .map(|p| p.variants.as_slice())
         .unwrap_or_default();
 
-    // Committed variants go first (sorted ascending by id).
+    // committed variants go first (sorted ascending by id).
     let mut sorted_variants: Vec<&Variant> = variants.iter().collect();
     let committed_count = sorted_variants.len();
 
@@ -32,6 +35,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .map(|v| VariantRef::Committed(v.id))
         .collect();
 
+    // short circuit - if no modifications were added simply list current variants
     if ops.is_empty() {
         let rows: Vec<VariantRow> = sorted_variants
             .iter()
@@ -45,7 +49,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         return Ok(());
     }
 
-    // Track which committed variant ids are deleted.
+    // track which committed variant ids are deleted
     let deleted_ids: std::collections::HashSet<i32> = ops
         .iter()
         .filter_map(|op| match op {
@@ -54,7 +58,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         })
         .collect();
 
-    // Collect value/weight overrides by id.
+    // collect value/weight overrides by id
     let mut value_overrides: std::collections::HashMap<i32, Option<String>> =
         std::collections::HashMap::new();
     let mut weight_overrides: std::collections::HashMap<i32, Option<u8>> =
@@ -72,7 +76,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
     }
 
-    // Staged Add ops - collect (ops-vec-index, value, weight) in staging order.
+    // staged Add ops - collect (ops-vec-index, value, weight) in staging order
     let staged_adds: Vec<(usize, &str, u8)> = ops
         .iter()
         .enumerate()
@@ -84,20 +88,24 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
     let mut rows: Vec<VariantRow> = Vec::new();
 
-    // Committed variants (with pending modifications overlaid).
+    // committed variants (with pending modifications overlaid).
     for (display_idx, var) in sorted_variants.iter().enumerate() {
         let is_deleted = deleted_ids.contains(&var.id);
         let new_value = value_overrides.get(&var.id).and_then(|v| v.as_deref());
         let new_weight = weight_overrides.get(&var.id).and_then(|w| *w);
         let is_modified = new_value.is_some() || new_weight.is_some();
 
-        let idx_str = (display_idx + 1).to_string();
         let id_str = var.id.to_string();
         let weight = new_weight.unwrap_or(var.weight);
         let weight_str = bar(weight, 10);
         let value_str = match new_value {
             Some(v) => var.value.clone_with(v).to_string(),
             None => var.value.to_string(),
+        };
+        let idx_str = if var.is_control() {
+            format!("{}★", display_idx + 1)
+        } else {
+            (display_idx + 1).to_string()
         };
 
         rows.push(if is_deleted {
@@ -144,7 +152,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
     variant_list(rows);
 
-    // Build the positional index: committed first (by id), then staged.
+    // Build the positional index: committed first (by id), then staged
     for staged_pos in 0..staged_adds.len() {
         var_index.push(VariantRef::Staged(staged_pos));
     }
@@ -166,6 +174,17 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     if !(0..=100).contains(&weight) {
         bail!("Variant weight should be positive number in range of <0, 100>.")
+    }
+
+    let total = weight as u32
+        + total_non_control_weight(
+            ctx.feature.as_ref().unwrap(),
+            ctx.pending.as_ref(),
+            &VariantRef::Staged(usize::MAX),
+            weight,
+        );
+    if total > 100 {
+        bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
     ctx.get_or_init_pending()
@@ -250,6 +269,28 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if !(0..=100).contains(&new_weight) {
         bail!("Variant weight should be positive number in range of <0, 100>.")
     }
+    if let VariantRef::Committed(id) = &variant_ref {
+        let is_control = ctx
+            .feature
+            .as_ref()
+            .and_then(|f| f.variants.iter().find(|v| v.id == *id))
+            .map(|v| v.is_control())
+            .unwrap_or(false);
+
+        if is_control {
+            bail!("Control variant weight is managed automatically and cannot be changed.");
+        }
+    }
+
+    let total = total_non_control_weight(
+        ctx.feature.as_ref().unwrap(),
+        ctx.pending.as_ref(),
+        &variant_ref,
+        new_weight,
+    );
+    if total > 100 {
+        bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
+    }
 
     let ops = &mut ctx.get_or_init_pending().variants;
     match variant_ref {
@@ -299,11 +340,23 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         Some(idx) => resolve_index(&ctx, idx)?,
         None => bail!("No variant index provided."),
     };
+    if let VariantRef::Committed(id) = &variant_ref {
+        let is_control = ctx
+            .feature
+            .as_ref()
+            .and_then(|f| f.variants.iter().find(|v| v.id == *id))
+            .map(|v| v.is_control())
+            .unwrap_or(false);
 
+        if is_control {
+            bail!("Control variant is managed automatically and cannot be deleted.");
+        }
+    }
     let variant_id = match variant_ref {
         VariantRef::Committed(id) => id,
         VariantRef::Staged(_) => {
-            bail!("Cannot delete a staged variant. Use `VARIANT discard <index>` to remove it.")
+            drop(ctx);
+            return discard(args, session);
         }
     };
 
@@ -400,6 +453,67 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     rebuild_index(&mut ctx);
     Ok(())
+}
+
+/// Computes the total weight of all non-control variants, applying pending overrides and
+/// substituting `new_weight` for the variant identified by `variant_ref`.
+fn total_non_control_weight(
+    feature: &flagrant_types::Feature,
+    pending: Option<&FeaturePatch>,
+    variant_ref: &VariantRef,
+    new_weight: u8,
+) -> u32 {
+    let deleted_ids: std::collections::HashSet<i32> = pending
+        .map(|p| {
+            p.variants
+                .iter()
+                .filter_map(|op| match op {
+                    VariantPatchOp::Delete { id } => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let committed: u32 = feature
+        .variants
+        .iter()
+        .filter(|v| !v.is_control() && !deleted_ids.contains(&v.id))
+        .map(|v| {
+            (match variant_ref {
+                VariantRef::Committed(id) if *id == v.id => new_weight,
+                _ => pending
+                    .and_then(|p| {
+                        p.variants.iter().find_map(|op| match op {
+                            VariantPatchOp::SetWeight { id, weight } if *id == v.id => {
+                                Some(*weight)
+                            }
+                            _ => None,
+                        })
+                    })
+                    .unwrap_or(v.weight),
+            }) as u32
+        })
+        .sum();
+
+    let staged: u32 = pending
+        .map(|p| {
+            p.variants
+                .iter()
+                .enumerate()
+                .filter(|(_, op)| matches!(op, VariantPatchOp::Add { .. }))
+                .map(|(i, op)| match op {
+                    VariantPatchOp::Add { weight, .. } => match variant_ref {
+                        VariantRef::Staged(pos) if *pos == i => new_weight as u32,
+                        _ => *weight as u32,
+                    },
+                    _ => 0,
+                })
+                .sum()
+        })
+        .unwrap_or(0);
+
+    committed + staged
 }
 
 /// Resolve a 1-based display index from the last `var list` output to a VariantRef.
