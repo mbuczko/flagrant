@@ -13,11 +13,8 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("No feature name provided.");
     }
 
-    // SAFETY: checked above; borrow only the two fields we need so that the
-    // immutable borrows of `feature` and `pending` end before the mutable
-    // write to `ctx.variant_index` further below.
+    let default = ctx.feature.as_ref().unwrap().get_default_value();
     let variants: &[Variant] = &ctx.feature.as_ref().unwrap().variants;
-    let default_value = ctx.feature.as_ref().unwrap().get_default_value();
     let ops: &[VariantPatchOp] = ctx
         .pending
         .as_ref()
@@ -26,6 +23,8 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
     // Committed variants go first (sorted ascending by id).
     let mut sorted_variants: Vec<&Variant> = variants.iter().collect();
+    let committed_count = sorted_variants.len();
+
     sorted_variants.sort_by_key(|v| v.id);
 
     let mut var_index = sorted_variants
@@ -128,13 +127,11 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         });
     }
 
-    // Staged additions (no real id yet).
-    let committed_count = sorted_variants.len();
     for (staged_pos, (_, value, weight)) in staged_adds.iter().enumerate() {
         let display_idx = committed_count + staged_pos + 1;
         let fv = value
             .parse::<FeatureValue>()
-            .unwrap_or_else(|_| default_value.clone_with(value));
+            .unwrap_or_else(|_| default.clone_with(value));
 
         rows.push(VariantRow {
             index: display_idx.to_string().green().to_string(),
@@ -153,52 +150,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     }
     ctx.variant_index = var_index;
     Ok(())
-}
-
-/// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
-/// Committed variants come first (sorted by id), followed by staged additions in order.
-fn rebuild_index(ctx: &mut flagrant_client::connection::Connection) {
-    let variants = ctx
-        .feature
-        .as_ref()
-        .map(|f| f.variants.as_slice())
-        .unwrap_or_default();
-    let staged_count = ctx
-        .pending
-        .as_ref()
-        .map(|p| {
-            p.variants
-                .iter()
-                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                .count()
-        })
-        .unwrap_or(0);
-
-    let mut sorted_ids: Vec<i32> = variants.iter().map(|v| v.id).collect();
-    sorted_ids.sort_unstable();
-
-    let mut index: Vec<VariantRef> = sorted_ids.into_iter().map(VariantRef::Committed).collect();
-    for staged_pos in 0..staged_count {
-        index.push(VariantRef::Staged(staged_pos));
-    }
-    ctx.variant_index = index;
-}
-
-/// Resolve a 1-based display index from the last `var list` output to a VariantRef.
-fn resolve_index(
-    ctx: &flagrant_client::connection::Connection,
-    raw: &Arg,
-) -> anyhow::Result<VariantRef> {
-    let idx: usize = raw.parse::<usize>()?;
-
-    if idx == 0 || idx > ctx.variant_index.len() {
-        bail!(
-            "Index {} out of range (1–{}). Run `VARIANT list` to refresh.",
-            idx,
-            ctx.variant_index.len()
-        );
-    }
-    Ok(ctx.variant_index[idx - 1].clone())
 }
 
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -223,8 +174,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             value: value.clone(),
             weight,
         });
-    println!("Staged: variant add weight={weight} value={value}");
 
+    println!("Staged: variant add weight={weight} value={value}");
     rebuild_index(&mut ctx);
     Ok(())
 }
@@ -277,6 +228,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             }
         }
     }
+
     rebuild_index(&mut ctx);
     Ok(())
 }
@@ -448,4 +400,50 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     rebuild_index(&mut ctx);
     Ok(())
+}
+
+/// Resolve a 1-based display index from the last `var list` output to a VariantRef.
+fn resolve_index(
+    ctx: &flagrant_client::connection::Connection,
+    raw: &Arg,
+) -> anyhow::Result<VariantRef> {
+    let idx: usize = raw.parse::<usize>()?;
+
+    if idx == 0 || idx > ctx.variant_index.len() {
+        bail!(
+            "Index {} out of range (1–{}). Run `VARIANT list` to refresh.",
+            idx,
+            ctx.variant_index.len()
+        );
+    }
+    Ok(ctx.variant_index[idx - 1].clone())
+}
+
+/// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
+/// Committed variants come first (sorted by id), followed by staged additions in order.
+fn rebuild_index(ctx: &mut flagrant_client::connection::Connection) {
+    let variants = ctx
+        .feature
+        .as_ref()
+        .map(|f| f.variants.as_slice())
+        .unwrap_or_default();
+    let staged_count = ctx
+        .pending
+        .as_ref()
+        .map(|p| {
+            p.variants
+                .iter()
+                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
+                .count()
+        })
+        .unwrap_or(0);
+
+    let mut sorted_ids: Vec<i32> = variants.iter().map(|v| v.id).collect();
+    sorted_ids.sort_unstable();
+
+    let mut index: Vec<VariantRef> = sorted_ids.into_iter().map(VariantRef::Committed).collect();
+    for staged_pos in 0..staged_count {
+        index.push(VariantRef::Staged(staged_pos));
+    }
+    ctx.variant_index = index;
 }
