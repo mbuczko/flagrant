@@ -114,7 +114,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             None
         };
 
-        let id_str = var.id.to_string();
         let weight = new_weight.or(adjusted_control_weight).unwrap_or(var.weight);
         let weight_str = bar(weight, 10);
         let value_str = match new_value {
@@ -130,7 +129,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         rows.push(if is_deleted {
             VariantRow {
                 index: idx_str.dimmed().to_string(),
-                id: id_str.dimmed().to_string(),
                 weight: weight_str.dimmed().to_string(),
                 value: value_str.dimmed().to_string(),
                 state: Some("deleted".red().to_string()),
@@ -138,7 +136,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         } else if is_modified {
             VariantRow {
                 index: idx_str.yellow().to_string(),
-                id: id_str.yellow().to_string(),
                 weight: weight_str.yellow().to_string(),
                 value: value_str.yellow().to_string(),
                 state: Some("modified".yellow().to_string()),
@@ -146,7 +143,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         } else if adjusted_control_weight.is_some() {
             VariantRow {
                 index: idx_str.yellow().to_string(),
-                id: id_str.yellow().to_string(),
                 weight: weight_str.yellow().to_string(),
                 value: value_str.yellow().to_string(),
                 state: Some("adjusted".yellow().to_string()),
@@ -154,7 +150,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         } else {
             VariantRow {
                 index: idx_str,
-                id: id_str,
                 weight: weight_str,
                 value: value_str,
                 state: Some(String::new()),
@@ -170,7 +165,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         rows.push(VariantRow {
             index: display_idx.to_string().green().to_string(),
-            id: "-".green().to_string(),
             weight: bar(*weight, 10).green().to_string(),
             value: fv.to_string().green().to_string(),
             state: Some("staged".green().to_string()),

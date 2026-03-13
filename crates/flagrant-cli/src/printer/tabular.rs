@@ -136,7 +136,6 @@ impl Tabular for Feature {
 /// When `state` is `None` the STATE column is omitted entirely.
 pub struct VariantRow {
     pub index: String,
-    pub id: String,
     pub weight: String,
     pub value: String,
     pub state: Option<String>,
@@ -150,7 +149,6 @@ impl VariantRow {
             } else {
                 index.to_string()
             },
-            id: var.id.to_string(),
             weight: bar(var.weight, 10),
             value: var.value.to_string(),
             state: None,
@@ -165,22 +163,13 @@ pub fn variant_list(rows: Vec<VariantRow>) {
     let with_state = rows.iter().any(|r| r.state.is_some());
 
     if with_state {
-        let data: Vec<[String; 5]> = rows
+        let data: Vec<[String; 4]> = rows
             .into_iter()
-            .map(|r| {
-                [
-                    r.index,
-                    r.id,
-                    r.weight,
-                    r.value,
-                    r.state.unwrap_or_default(),
-                ]
-            })
+            .map(|r| [r.index, r.weight, r.value, r.state.unwrap_or_default()])
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
-            .add_column_named_with_align("ID".into(), Layout::Fixed(8), Align::Left)
             .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
             .add_column_named_with_align("STATE".into(), Layout::Fixed(10), Align::Left)
@@ -188,14 +177,13 @@ pub fn variant_list(rows: Vec<VariantRow>) {
             .build()
             .render(data);
     } else {
-        let data: Vec<[String; 4]> = rows
+        let data: Vec<[String; 3]> = rows
             .into_iter()
-            .map(|r| [r.index, r.id, r.weight, r.value])
+            .map(|r| [r.index, r.weight, r.value])
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
-            .add_column_named_with_align("ID".into(), Layout::Fixed(8), Align::Left)
             .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
             .width(100)
