@@ -163,7 +163,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 }
 
 /// Discards all staged changes for the current feature.
-pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if !args.is_empty() {
+        bail!(
+            "To discard a single change use `FEATURE discard <name | state | status | tags>` or `VARIANT discard <index>`."
+        );
+    }
     let mut ctx = session.context.write().unwrap();
     if ctx.pending.take().is_some() {
         println!("Pending changes discarded.");

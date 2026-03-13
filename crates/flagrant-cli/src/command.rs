@@ -69,6 +69,16 @@ impl Command {
         self.build(None, hint, Some(handler), None)
     }
 
+    #[allow(dead_code)]
+    pub fn no_op_in_context(
+        &self,
+        hint: &str,
+        handler: CommandHandler<Connection>,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(None, hint, Some(handler), Some(has_context))
+    }
+
     /// When invoked, command will be handled by `no_op_handler` which does nothing.
     pub fn args(&self, hint: &str) -> ReplCommand<Connection> {
         self.build(None, hint, None, None)

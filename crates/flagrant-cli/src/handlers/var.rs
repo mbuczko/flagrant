@@ -206,7 +206,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(&ctx, idx)?,
+        Some(idx) => resolve_index(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let raw = match args.get(2) {
@@ -259,7 +259,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(&ctx, idx)?,
+        Some(idx) => resolve_index(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let new_weight = match args.get(2) {
@@ -337,7 +337,7 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(&ctx, idx)?,
+        Some(idx) => resolve_index(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     if let VariantRef::Committed(id) = &variant_ref {
@@ -374,32 +374,18 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Discard a single pending change for the variant at the given display index.
-/// For committed variants: removes any SetValue/SetWeight/Delete ops for that id.
-/// For staged additions: removes the Add op entirely.
+/// Discard a single pending change for the variant at the given display index:
+///  - for committed variants: removes any SetValue/SetWeight/Delete ops for that id
+///  - for staged additions: removes the Add op entirely
 pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
-    if args.get(1).map(|a| a.0) == Some("all") {
-        let pending = match ctx.pending.as_mut() {
-            Some(p) => p,
-            None => {
-                println!("No pending variant changes.");
-                return Ok(());
-            }
-        };
-        pending.variants.clear();
-        println!("Discarded all pending variant changes.");
-
-        rebuild_index(&mut ctx);
-        return Ok(());
-    }
 
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(&ctx, idx)?,
+        Some(idx) => resolve_index(idx, &ctx)?,
         None => bail!("No variant index provided. Use an index or 'all'."),
     };
 
@@ -429,8 +415,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
             }
         }
         VariantRef::Staged(staged_pos) => {
-            // Find the nth Add op and remove it.
-            let mut add_count = 0usize;
+            let mut add_count = 0;
             let mut remove_at = None;
             for (i, op) in pending.variants.iter().enumerate() {
                 if matches!(op, VariantPatchOp::Add { .. }) {
@@ -516,16 +501,16 @@ fn total_non_control_weight(
     committed + staged
 }
 
-/// Resolve a 1-based display index from the last `var list` output to a VariantRef.
-fn resolve_index(
-    ctx: &flagrant_client::connection::Connection,
-    raw: &Arg,
-) -> anyhow::Result<VariantRef> {
+/// Resolve a 1-based display index from the last `VARIANT list` output to a VariantRef.
+fn resolve_index(raw: &Arg, ctx: &Connection) -> anyhow::Result<VariantRef> {
     let idx: usize = raw.parse::<usize>()?;
 
+    if ctx.variant_index.is_empty() {
+        bail!("Run `VARIANT list` to refresh indices.")
+    }
     if idx == 0 || idx > ctx.variant_index.len() {
         bail!(
-            "Index {} out of range (1–{}). Run `VARIANT list` to refresh.",
+            "Index {} out of range (1–{}).",
             idx,
             ctx.variant_index.len()
         );
@@ -535,7 +520,7 @@ fn resolve_index(
 
 /// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
 /// Committed variants come first (sorted by id), followed by staged additions in order.
-fn rebuild_index(ctx: &mut flagrant_client::connection::Connection) {
+fn rebuild_index(ctx: &mut Connection) {
     let variants = ctx
         .feature
         .as_ref()

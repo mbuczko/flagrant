@@ -37,6 +37,10 @@ fn has_feature_ctx(session: &Session<Connection>) -> bool {
     let ctx = &session.context.read().unwrap();
     ctx.feature.is_some()
 }
+fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
+    let ctx = &session.context.read().unwrap();
+    ctx.feature.is_some() && ctx.pending.is_some()
+}
 
 fn main() -> anyhow::Result<()> {
     // todo: will be taken from args
@@ -90,8 +94,16 @@ fn main() -> anyhow::Result<()> {
         Command::Set.op_in_context("value", "value", handlers::feat::set_value, has_feature_ctx),
         Command::Set.args_in_context("state · status · value", has_feature_ctx),
         // commit / discard (only available in feature context)
-        Command::Commit.no_op("commit staged changes", handlers::feat::commit),
-        Command::Discard.no_op("<index>|all", handlers::feat::discard),
+        Command::Commit.no_op_in_context(
+            "→ commit staged changes",
+            handlers::feat::commit,
+            has_feature_with_pending_ctx,
+        ),
+        Command::Discard.no_op_in_context(
+            "→ discard staged changes",
+            handlers::feat::discard,
+            has_feature_with_pending_ctx,
+        ),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
