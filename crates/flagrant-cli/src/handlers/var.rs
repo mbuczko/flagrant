@@ -95,8 +95,27 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         let new_weight = weight_overrides.get(&var.id).and_then(|w| *w);
         let is_modified = new_value.is_some() || new_weight.is_some();
 
+        // for the control variant, compute the auto-adjusted weight based on pending ops.
+        // note, control variant cannot have its own pending modification - it's always auto-adjusted.
+        let adjusted_control_weight: Option<u8> = if var.is_control() {
+            let non_control_total = total_non_control_weight(
+                ctx.feature.as_ref().unwrap(),
+                ctx.pending.as_ref(),
+                &VariantRef::Staged(usize::MAX), // no substitution – use all pending weights as-is
+                0,
+            );
+            let adjusted = 100u32.saturating_sub(non_control_total) as u8;
+            if adjusted != var.weight {
+                Some(adjusted)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let id_str = var.id.to_string();
-        let weight = new_weight.unwrap_or(var.weight);
+        let weight = new_weight.or(adjusted_control_weight).unwrap_or(var.weight);
         let weight_str = bar(weight, 10);
         let value_str = match new_value {
             Some(v) => var.value.clone_with(v).to_string(),
@@ -123,6 +142,14 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                 weight: weight_str.yellow().to_string(),
                 value: value_str.yellow().to_string(),
                 state: Some("modified".yellow().to_string()),
+            }
+        } else if adjusted_control_weight.is_some() {
+            VariantRow {
+                index: idx_str.yellow().to_string(),
+                id: id_str.yellow().to_string(),
+                weight: weight_str.yellow().to_string(),
+                value: value_str.yellow().to_string(),
+                state: Some("adjusted".yellow().to_string()),
             }
         } else {
             VariantRow {
