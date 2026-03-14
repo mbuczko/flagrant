@@ -1,12 +1,15 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
-use flagrant_types::{Environment, Feature, Variant};
+use flagrant_types::{
+    Environment, Feature, Variant,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 
 pub trait Tabular {
     fn list(rows: &[Self])
     where
         Self: Sized;
-    fn describe(&self);
+    fn describe(&self, patch: impl Into<Option<FeaturePatch>>);
 }
 
 impl Tabular for Environment {
@@ -29,7 +32,7 @@ impl Tabular for Environment {
             .build()
             .render(rows);
     }
-    fn describe(&self) {
+    fn describe(&self, _patch: impl Into<Option<FeaturePatch>>) {
         let desc_str = self.description.as_deref().unwrap_or("");
         let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
@@ -80,7 +83,10 @@ impl Tabular for Feature {
             .build()
             .render(rows)
     }
-    fn describe(&self) {
+
+    fn describe(&self, patch: impl Into<Option<FeaturePatch>>) {
+        let patch: Option<FeaturePatch> = patch.into();
+
         let title = format!("{} (ID={})", &self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
@@ -96,32 +102,144 @@ impl Tabular for Feature {
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let vcount = self.variants.len();
-        let variants = self
+        let ops = patch
+            .as_ref()
+            .map(|p| p.variants.as_slice())
+            .unwrap_or_default();
+
+        let deleted_ids: std::collections::HashSet<i32> = ops
+            .iter()
+            .filter_map(|op| match op {
+                VariantPatchOp::Delete { id } => Some(*id),
+                _ => None,
+            })
+            .collect();
+
+        let value_overrides: std::collections::HashMap<i32, &str> = ops
+            .iter()
+            .filter_map(|op| match op {
+                VariantPatchOp::SetValue { id, value } => Some((*id, value.as_str())),
+                _ => None,
+            })
+            .collect();
+
+        let weight_overrides: std::collections::HashMap<i32, u8> = ops
+            .iter()
+            .filter_map(|op| match op {
+                VariantPatchOp::SetWeight { id, weight } => Some((*id, *weight)),
+                _ => None,
+            })
+            .collect();
+
+        let staged_adds: Vec<(&str, u8)> = ops
+            .iter()
+            .filter_map(|op| match op {
+                VariantPatchOp::Add { value, weight } => Some((value.as_str(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        // compute adjusted control weight when there are pending ops that affect non-control
+        // variants, mirroring the auto-adjustment done on the backend.
+        let non_control_total: u32 = self
             .variants
             .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                format!(
-                    "{}{} {}",
-                    if i == vcount - 1 { "╰╴" } else { "├╴" },
-                    bar(v.weight, 10),
-                    v.value,
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+            .filter(|v| !v.is_control() && !deleted_ids.contains(&v.id))
+            .map(|v| *weight_overrides.get(&v.id).unwrap_or(&v.weight) as u32)
+            .sum::<u32>()
+            + staged_adds.iter().map(|(_, w)| *w as u32).sum::<u32>();
 
-        let state = if self.is_enabled {
-            format!("{} ON", "●".green())
-        } else {
-            format!("{} OFF", "●".red())
+        let mut sorted_variants: Vec<&Variant> = self.variants.iter().collect();
+        sorted_variants.sort_by_key(|v| v.id);
+
+        let total_lines = sorted_variants.len() + staged_adds.len();
+        let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
+
+        for (i, v) in sorted_variants.iter().enumerate() {
+            let connector = if i + 1 == total_lines {
+                "╰╴"
+            } else {
+                "├╴"
+            };
+            let is_deleted = deleted_ids.contains(&v.id);
+            let new_value = value_overrides.get(&v.id).copied();
+            let new_weight = weight_overrides.get(&v.id).copied();
+
+            let weight = if v.is_control() && ops.is_empty() {
+                v.weight
+            } else if v.is_control() {
+                100u32.saturating_sub(non_control_total) as u8
+            } else {
+                new_weight.unwrap_or(v.weight)
+            };
+
+            let value_str = match new_value {
+                Some(nv) => v.value.clone_with(nv).to_string(),
+                None => v.value.to_string(),
+            };
+
+            let line = format!("{}{} {}", connector, bar(weight, 10), value_str);
+
+            variant_lines.push(if is_deleted {
+                line.dimmed().to_string()
+            } else if new_value.is_some()
+                || new_weight.is_some()
+                || (v.is_control() && !ops.is_empty() && weight != v.weight)
+            {
+                line.yellow().to_string()
+            } else {
+                line
+            });
+        }
+
+        for (i, (value, weight)) in staged_adds.iter().enumerate() {
+            let connector = if sorted_variants.len() + i + 1 == total_lines {
+                "╰╴"
+            } else {
+                "├╴"
+            };
+            let fv = value
+                .parse::<flagrant_types::FeatureValue>()
+                .unwrap_or_else(|_| self.get_default_value().clone_with(value));
+            variant_lines.push(
+                format!("{}{} {}", connector, bar(*weight, 10), fv)
+                    .green()
+                    .to_string(),
+            );
+        }
+
+        let variants = variant_lines.join("\n");
+
+        // resolve a pending override against a committed bool, color the result string yellow
+        // when the pending value is present, otherwise return it as-is.
+        let resolve = |pending: Option<bool>, committed: bool, on: &str, off: &str| -> String {
+            let (effective, is_pending) = match pending {
+                Some(v) => (v, true),
+                None => (committed, false),
+            };
+            let s = if effective {
+                on.to_string()
+            } else {
+                off.to_string()
+            };
+            if is_pending {
+                s.yellow().to_string()
+            } else {
+                s
+            }
         };
-        let status = if self.is_active {
-            "active".to_string()
-        } else {
-            "inactive".dimmed().to_string()
-        };
+
+        let pending_enabled = patch.as_ref().and_then(|p| p.is_enabled);
+        let pending_active = patch.as_ref().and_then(|p| p.is_active);
+
+        let state = resolve(
+            pending_enabled,
+            self.is_enabled,
+            &format!("{} ON", "●".green()),
+            &format!("{} OFF", "●".red()),
+        );
+        let status = resolve(pending_active, self.is_active, "active", "inactive");
+
         table.render(vec![
             &["STATUS", &status],
             &["STATE", &state],
@@ -156,7 +274,7 @@ impl VariantRow {
     }
 }
 
-/// Render a variant listing table, consuming the rows to avoid cloning.
+/// Render a variant listing table, consuming the rows.
 ///
 /// If any row carries a `state`, a STATE column is added for all rows.
 pub fn variant_list(rows: Vec<VariantRow>) {

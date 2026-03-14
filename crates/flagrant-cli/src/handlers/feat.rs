@@ -35,7 +35,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        feature.describe();
+        feature.describe(None);
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -52,7 +52,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
         let feature = fetch_feature(name, session)?;
 
-        feature.describe();
+        feature.describe(None);
         session.context.write().unwrap().feature = Some(feature);
         return Ok(());
     }
@@ -61,11 +61,12 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_feature(name, session)?.describe();
+        fetch_feature(name, session)?.describe(None);
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(feature) = &ctx.feature {
-            feature.describe();
+            let patch = ctx.pending.as_ref().filter(|p| !p.is_empty()).cloned();
+            feature.describe(patch);
         } else {
             bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
         }
@@ -153,7 +154,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     match ctx.client.patch::<_, Feature>(path, patch) {
         Ok(updated) => {
-            updated.describe();
+            updated.describe(None);
             ctx.pending = None;
             ctx.feature = Some(updated);
         }

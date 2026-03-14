@@ -167,7 +167,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             index: display_idx.to_string().green().to_string(),
             weight: bar(*weight, 10).green().to_string(),
             value: fv.to_string().green().to_string(),
-            state: Some("staged".green().to_string()),
+            state: Some("added".green().to_string()),
         });
     }
 
