@@ -11,22 +11,21 @@ use super::identity;
 #[queries = "resources/db/queries/variants.sql"]
 struct SQLVariants {}
 
-/// Creates or updates control variant of given feature.
+/// Creates or updates the control variant of the given feature.
 ///
-/// Control variant represents environment-specific feature value returned when either
-/// distributor decided so based on underlaying distribution strategy, or no other
-/// variant had been defined for feature yet.
+/// The control variant represents the environment-specific feature value returned when either
+/// the distributor decides so based on the underlying distribution strategy, or no other
+/// variant has been defined for the feature yet.
 ///
-/// Important property of control variant is its auto-adjustable weight, calculated
-/// according to following rules:
+/// An important property of the control variant is its auto-adjustable weight, calculated
+/// according to the following rules:
 ///
-/// - when created, weight is initially set up to 100%
-/// - each time new feature variant is being added, modified or removed control weight
-///   adjusts itself so, that all feature variants weights at every single moment sum
-///   up to 100%.
+/// - when created, weight is initially set to 100%
+/// - each time a new feature variant is added, modified, or removed, the control weight
+///   adjusts itself so that all feature variant weights always sum to 100%.
 ///
-/// Control variant is auto-created at the moment when feature is being created which means
-/// that newly created feature already contains at least a single variant - a control one.
+/// The control variant is auto-created when a feature is created, which means
+/// a newly created feature always contains at least one variant - the control one.
 pub(crate) async fn create_control(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -48,12 +47,12 @@ pub(crate) async fn create_control(
     Ok(Variant::build_default(environment, variant_id, value))
 }
 
-/// Creates a feature variant with given weight and value.
+/// Creates a feature variant with the given weight and value.
 ///
-/// Non-control feature variants hold an alternative values shared by defined environments, ie.
-/// any update on feature value is reflected immediately in all environments. Weights, on the
-/// other hand, prioritize the variant during distribution process and behave exactly the opposite
-/// way - the change impacts single environment only.
+/// Non-control feature variants hold alternative values shared across all environments, i.e.
+/// any update to a feature value is reflected immediately in all environments. Weights, on the
+/// other hand, prioritize the variant during the distribution process and behave the opposite
+/// way - a weight change impacts a single environment only.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -104,8 +103,8 @@ async fn update(
 
 /// Updates a single variant with `new_value` and `new_weight`.
 ///
-/// This function fails-fast when used to modify control variant which, due to auto-adjustable
-/// nature, has immutable weight and value updatable by `feature::update` function.
+/// Rejects modifications to the control variant, whose weight is auto-adjusted and
+/// whose value can only be changed via `feature::update`.
 pub async fn update_one(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -171,9 +170,9 @@ pub async fn get_all(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
-    // Be sure that feature has default value set within given environment.
-    // No default value makes any additional variants pointless, even if they
-    // already exist for other environments - hence the Error as result.
+    // Ensure the feature has a default value set in the given environment.
+    // Without a default value, any additional variants are pointless, even if they
+    // already exist in other environments - hence the error result.
     if !variants.iter().any(|v| is_default(environment, v)) {
         bail!(FlagrantError::BadRequest(
             "No feature value set. Use \"FEATURE val ...\" to set default feature value."
@@ -202,11 +201,11 @@ pub async fn delete(
         ));
     }
 
-    // all identities need to be detached from variant first to be sure
-    // that there are no more dangling references to given variant_id.
+    // All identities must be detached from the variant first to ensure
+    // there are no dangling references to the given variant_id.
     identity::detach_identities(&mut tx, variant.id).await?;
 
-    // Remove all identities attached to this variant.
+    // Remove all weight entries attached to this variant.
     SQLVariants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not remove variant weights", e))?;
@@ -236,19 +235,18 @@ pub(crate) async fn update_accumulator(
     Ok(())
 }
 
-/// Inserts or updates control variant to accomadate given weight.
+/// Inserts or updates the control variant to accommodate the given weight.
 ///
-/// How accomodation works?
-/// If `weight` is associated with `variant_id` other than control variant, positive value decreases
-/// control variant. Imagine this as if the weight would need to be moved from control variant to
-/// `variant_id`. Conversely, negative weight bumps up control variant - just as if `variant_id` would
-/// give its weight back to control variant.
+/// If `weight` is associated with a `variant_id` other than the control variant, a positive value
+/// decreases the control variant weight - as if the weight were moved from the control variant to
+/// `variant_id`. Conversely, a negative weight bumps up the control variant - as if `variant_id`
+/// were giving its weight back to the control variant.
 ///
-/// This function also takes care of number of already attached identities which, taken as percentage,
-/// may happen to exceed the new weight. In this case, exceeding identities are marked as "detatched"
-/// starting from the earliest attached ones and thus may be re-assigned by distributor to other variants.
+/// This function also handles identities already attached to affected variants: if the count of
+/// attached identities, expressed as a percentage, exceeds the new weight, the excess identities
+/// are marked as detached starting from the earliest ones, so the distributor can reassign them.
 ///
-/// Returns new control variant weight.
+/// Returns the new control variant weight.
 async fn upsert_control_weight(
     tx: &mut SqliteConnection,
     environment: &Environment,

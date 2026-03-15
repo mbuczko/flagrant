@@ -7,9 +7,10 @@ use flagrant_types::{FeatureValue, Variant, payload::VariantRequestPayload};
 use crate::{errors::ServiceError, extractors::DbConnection};
 
 /// Creates a new feature variant.
-/// To create a new feature variant, a few pre-conditions must be fulfiled:
-/// - there is still enough weight "free" to create a feature of given weight
-/// - variant should be created for all environments (by default with same value)
+///
+/// A few pre-conditions must be met:
+/// - there is enough free weight to create a variant with the given weight
+/// - the variant should be created for all environments (with the same value by default)
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,

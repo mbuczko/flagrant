@@ -57,15 +57,15 @@ async fn create_feature_with_missing_default_variant_in_other_env(
     .await
     .unwrap();
 
-    // no default variant in environment2, hence list of variants is empty even though
+    // No default variant in environment2, so the list of variants is empty even though
     // some have been created in environment1.
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
     assert!(feature.variants.is_empty());
 
-    // after adding default variant, a list consisting of default- and previously created
-    // variant should be returned.
+    // After adding a default variant, a list consisting of the default and previously created
+    // variants should be returned.
     feature::update_one(&mut conn, &environment2, &feature)
         .value(FeatureValue::build("bazz"))
         .update()
@@ -120,7 +120,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         assert!(feature.is_err())
     }
 
-    // name too long
+    // Name too long
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -346,11 +346,11 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
         .await
         .unwrap();
 
-    // variant values are common across all environments
+    // Variant values are common across all environments
     assert_eq!(variant_env1.value, "text::new-bar".parse().unwrap());
     assert_eq!(variant_env2.value, "text::new-bar".parse().unwrap());
 
-    // ...but weights are not
+    // ...but weights are not.
     assert_eq!(variant_env1.weight, 40);
     assert_eq!(variant_env2.weight, 99);
 }
@@ -499,7 +499,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .await
     .unwrap();
 
-    // update with exceeding weight should fail
+    // Update with exceeding weight should fail
     let variant = variant::create(
         &mut conn,
         &environment,
@@ -522,7 +522,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         .is_err()
     );
 
-    // default weight should retain old value
+    // Default weight should retain old value
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();

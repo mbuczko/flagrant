@@ -62,12 +62,12 @@ impl<'a> FeatureUpdate<'a> {
         let is_enabled = self.is_enabled.unwrap_or(self.feature.is_enabled);
         let mut tx = self.conn.begin().await?;
 
-        // in transaction, update feature properties first
+        // In transaction, update feature properties first
         SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
-        // ...and then the feature value which is stored as default variant
+        // Then update the feature value, which is stored as the default variant
         variant::create_control(&mut tx, self.environment, self.feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
@@ -102,7 +102,7 @@ pub async fn create(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
-    // default value gets turned into a control variant.
+    // Default value gets turned into a control variant.
     let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
     feature.variants.push(variant);
 
@@ -276,7 +276,12 @@ pub async fn apply_patch(
     for op in deletes {
         if let VariantPatchOp::Delete { id } = op {
             let var = variant::get_by_id(&mut tx, environment, id).await?;
-            variant::delete(&mut tx, environment, &var).await?;
+
+            // Control variant cannot be deleted via PATCH operation - the only way
+            // to delete it is a DELETE request to remove the entire feature.
+            if !var.is_control() {
+                variant::delete(&mut tx, environment, &var).await?;
+            }
         }
     }
 
@@ -300,7 +305,17 @@ pub async fn apply_patch(
             None => var.value.clone(),
         };
         let weight = new_weight.unwrap_or(var.weight);
-        variant::update_one(&mut tx, environment, &var, value, weight).await?;
+
+        // The control variant cannot be modified at the variant level.
+        // Its weight is auto-adjusted and its value must be updated via Feature::update_one.
+        if var.is_control() {
+            update_one(&mut tx, environment, feature)
+                .value(value)
+                .update()
+                .await?;
+        } else {
+            variant::update_one(&mut tx, environment, &var, value, weight).await?;
+        }
     }
 
     // Apply adds
@@ -325,21 +340,21 @@ pub async fn delete(
     let mut tx = conn.begin().await?;
     let mut vars = variant::get_all(&mut tx, environment, feature.id).await?;
 
-    // sort variants so, that control ones go last in a vector.
-    // this is required because of the strict deletion policy - control variants
-    // cannot be deleted when the other variants still exist.
+    // Sort variants so that control ones go last in the vector.
+    // This is required because of the strict deletion policy - control variants
+    // cannot be deleted while other variants still exist.
     vars.sort_by(|a, _| match a.is_control() {
         true => Ordering::Greater,
         false => Ordering::Less,
     });
 
-    // in transaction, remove all feature variants first.
-    // because of the sorting done before, control variant will be deleted last.
+    // In transaction, remove all feature variants first.
+    // Due to the sorting above, the control variant will be deleted last.
     for var in vars {
         variant::delete(&mut tx, environment, &var).await?;
     }
 
-    // ...and then remove feature value and entire feature definition
+    // Then remove the feature value and the entire feature definition.
     SQLFeatures::delete_tags_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;

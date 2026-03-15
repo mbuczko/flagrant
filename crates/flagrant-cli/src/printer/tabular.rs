@@ -139,7 +139,7 @@ impl Tabular for Feature {
             })
             .collect();
 
-        // compute adjusted control weight when there are pending ops that affect non-control
+        // Compute the adjusted control weight when there are pending ops that affect non-control
         // variants, mirroring the auto-adjustment done on the backend.
         let non_control_total: u32 = self
             .variants
@@ -210,8 +210,8 @@ impl Tabular for Feature {
 
         let variants = variant_lines.join("\n");
 
-        // resolve a pending override against a committed bool, color the result string yellow
-        // when the pending value is present, otherwise return it as-is.
+        // Resolve a pending override against a committed bool, coloring the result string yellow
+        // when the pending value is present, otherwise returning it as-is.
         let resolve = |pending: Option<bool>, committed: bool, on: &str, off: &str| -> String {
             let (effective, is_pending) = match pending {
                 Some(v) => (v, true),
@@ -251,7 +251,7 @@ impl Tabular for Feature {
 
 /// A single row for the variant listing table.
 /// All strings are pre-colored by the caller.
-/// When `state` is `None` the STATE column is omitted entirely.
+/// When `state` is `None`, the STATE column is omitted entirely.
 pub struct VariantRow {
     pub index: String,
     pub weight: String,

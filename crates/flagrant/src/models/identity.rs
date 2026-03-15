@@ -42,7 +42,7 @@ pub async fn get_variants(
         } else if var.identity_id.is_none() {
             Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
         } else {
-            // cache identity_id to avoid unnecessary query for same information later below
+            // Cache identity_id to avoid an unnecessary query for the same information later
             identity_id = var.identity_id;
             None
         };

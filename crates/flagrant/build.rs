@@ -3,7 +3,7 @@ use std::{path::Path, time::Duration};
 
 fn main() {
     // Select recommended watcher for debouncer.
-    // Using a callback here, could also be a channel.
+    // Using a callback here; could also be a channel.
     let mut debouncer = new_debouncer(
         Duration::from_secs(1),
         |res: DebounceEventResult| match res {

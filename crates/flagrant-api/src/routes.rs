@@ -9,18 +9,18 @@ use crate::{api, handlers::tags};
 
 pub fn init_router() -> Router<Pool<Sqlite>> {
     Router::new()
-        // projects
+        // Projects
         .route("/projects/:project_id", get(projects::fetch))
-        // environments
+        // Environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
         .route(
             "/projects/:project_id/envs/:env_id",
             get(environments::fetch_by_id_or_name),
         )
-        // tags
+        // Tags
         .route("/envs/:environment_id/tags", get(tags::list))
-        // features
+        // Features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))
         .route(
@@ -39,7 +39,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment_id/features/:feature_id",
             patch(features::patch),
         )
-        // variants
+        // Variants
         .route(
             "/envs/:environment_id/features/:feature_id/variants",
             get(variants::list),
@@ -60,7 +60,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment_id/variants/:variant_id",
             delete(variants::delete),
         )
-        // public API
+        // Public API
         .nest(
             "/api/v1",
             Router::new().route("/envs/:environment_id/features", get(api::get_features)),

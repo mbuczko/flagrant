@@ -13,10 +13,9 @@ pub struct ReplCommand<T> {
     pub has_context: Option<CommandInContext<T>>,
 }
 
+/// A struct extending a simple string slice with the position
+/// at which the string was found in the command line during argument parsing.
 #[derive(Debug, PartialEq)]
-/// A struct extending simple string slice with additional
-/// position at which string has been found in command-line
-/// during arguments parsing.
 pub struct Arg<'a>(pub &'a str, pub usize);
 
 impl Deref for Arg<'_> {
@@ -35,40 +34,40 @@ impl Display for Arg<'_> {
 
 impl<T> ReplCommand<T> {
     /// Returns true if Self matches an array of command line slices.
-    /// Array is expected to be composed of following elements:
+    /// The array is expected to be composed of the following elements:
     ///
     /// [COMMAND, operation, arg, arg, ...]
     ///
-    /// Matching succeeds only if in-array command and operation match
+    /// Matching succeeds only if the command and operation in the array match
     /// self's `cmd` and `op` respectively.
     pub fn matches_slices(&self, slices: &[&str]) -> bool {
         !slices.is_empty()
             && slices.first().unwrap().to_uppercase() == self.cmd
             && match (&self.op, slices.get(1)) {
-                // command has an op which matches first provided argument
+                // Command has an op which matches the first provided argument
                 (Some(op), Some(arg)) => op == arg,
-                // command has an op but none has been provided
+                // Command has an op but none has been provided
                 (Some(_), None) => false,
-                // command has no op - treat all elements as arguments
+                // Command has no op - treat all elements as arguments
                 (None, _) => true,
             }
     }
 
-    /// Returns remaining part of hint for already entered command-line slices.
-    /// Depending on how much slices have been already provided, only a part of
-    /// the hint may be returned, eg:
+    /// Returns the remaining part of the hint for already entered command-line slices.
+    /// Depending on how many slices have been provided, only a portion of
+    /// the hint may be returned, e.g.:
     ///
-    ///  - for "COMMAND op" - as no arguments to "op" operation have been provided,
+    ///  - for "COMMAND op" - since no arguments to the "op" operation have been provided,
     ///    a hint describing all missing arguments is returned.
-    ///  - for "COMMAND op arg" - as first argument ("arg") has been already provided,
-    ///    only a part of the hint describing second argument gets returned.
+    ///  - for "COMMAND op arg" - since the first argument ("arg") has already been provided,
+    ///    only the portion of the hint describing the second argument is returned.
     pub fn remaining_hint(&self, slices: &[&str]) -> &str {
-        // This is to deduce how many slices to ignore initially. Command is skipped
-        // in every case, operation is skipped only when it's available.
+        // Determines how many slices to skip initially. The command is always skipped;
+        // the operation is skipped only when one is available.
         let slices_to_skip = match self.op {
-            // skip command and op
+            // Skip command and op
             Some(_) => 2,
-            // no op, skip command only
+            // No op, skip command only
             None => 1,
         };
 

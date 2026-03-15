@@ -95,13 +95,13 @@ impl<'a> CommandLineCompleter<'a> {
                     && within_ctx.as_ref().is_none_or(|f| f())
                 {
                     return match op {
-                        // op starts with prefix - candidate for completion
+                        // Op starts with prefix - candidate for completion
                         Some(op) if op.starts_with(prefix) => Some(Pair {
                             display: op.to_owned(),
                             replacement: op.to_lowercase().to_owned(),
                         }),
 
-                        // there is no op or it doesn't start with op_prefix - reject
+                        // No op or it doesn't start with op_prefix - reject
                         _ => None,
                     };
                 }

@@ -50,8 +50,8 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .map(|c| c.name)
                         .collect::<Vec<_>>(),
 
-                    // Auto-complete feature attributes names like tags or status
-                    // along with attribute value (if completable)
+                    // Auto-complete feature attribute names like tags or status,
+                    // along with the attribute value (if completable)
                     "list" => match prefix.split_once(':') {
                         Some(("tag", val)) => {
                             let ctx = self.session.context.read().unwrap();

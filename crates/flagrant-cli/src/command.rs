@@ -22,7 +22,7 @@ impl Command {
     }
 
     /// Generic command builder.
-    /// Creates a new Command with or without operation and command handler function.
+    /// Creates a new command with or without an operation and command handler function.
     fn build(
         &self,
         op: Option<&str>,

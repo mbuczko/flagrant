@@ -27,7 +27,7 @@ async fn idents_count_for_feature_variant(
     feature: &Feature,
     variant: &Variant,
 ) -> usize {
-    // redistribute idents and attach to variants first
+    // Redistribute idents and attach to variants first
     for n in 1..=10 {
         identity::get_variants(conn, environment, format!("identity_{n}"))
             .await
@@ -43,20 +43,20 @@ async fn idents_count_for_feature_variant(
         .len()
 }
 
-/// Smoke tests for identities migrations.
+/// Smoke tests for identity migrations.
 ///
-/// There are couple of operations which impact variants weights, like:
-///  - adding / deleting variant (impacts control variant weight)
-///  - updating variant weight up or down
+/// There are a few operations that impact variant weights:
+///  - adding / deleting a variant (impacts the control variant weight)
+///  - updating a variant weight up or down
 ///
-/// Variant weight change always triggers a question:
+/// A variant weight change always raises the question:
 ///
-///   "what about identities already attached to altered variants
-///    which exceed a new weight?"
+///   "What about identities already attached to altered variants
+///    that exceed the new weight?"
 ///
-/// This is where migrations kick in. Following tests verify that each
-/// case is handled correctly and identities are marked as "read-to-migrate"
-/// whenever they should be distributed to other variant on the next hit.
+/// This is where migrations kick in. The following tests verify that each
+/// case is handled correctly and identities are marked as "ready-to-migrate"
+/// whenever they should be redistributed to another variant on the next hit.
 #[sqlx::test]
 async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
@@ -71,14 +71,14 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    // create identities by requesting a feature on their behalf
+    // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
         identity::get_variants(&mut conn, &environment, format!("identity_{n}"))
             .await
             .unwrap();
     }
 
-    // initially, there should be no migrated identities - all are assigned to the only (control) variant
+    // Initially, there should be no migrated identities - all are assigned to the only (control) variant
     assert_eq!(
         migrations_count_for_feature_variant_id(&mut conn, &environment, &feature, None).await,
         10
@@ -94,7 +94,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    // having new variant created with weight=50% half of identities should be migrated,
+    // Having a new variant created with weight=50%, half of identities should be migrated
     assert_eq!(
         migrations_count_for_feature_variant_id(
             &mut conn,
@@ -116,7 +116,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    // having new variant updated to weight=80% 8 out of 10 identities should be migrated
+    // Having the variant updated to weight=80%, 8 out of 10 identities should be migrated
     assert_eq!(
         migrations_count_for_feature_variant_id(
             &mut conn,
@@ -142,7 +142,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
     .await
     .unwrap();
 
-    // having new variant downgraded to weight=10% 1 out of 10 identities should be migrated
+    // Having the variant downgraded to weight=10%, 1 out of 10 identities should be migrated
     assert_eq!(
         migrations_count_for_feature_variant_id(
             &mut conn,
@@ -158,7 +158,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    // having variant deleted, all identities should be migrated back to contol variant
+    // Having the variant deleted, all identities should be migrated back to the control variant
     variant::delete(&mut conn, &environment, &variant)
         .await
         .unwrap();

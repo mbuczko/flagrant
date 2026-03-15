@@ -13,8 +13,8 @@ use smallvec::{SmallVec, smallvec};
 use crate::{errors::ServiceError, extractors::DbConnection};
 
 type TagsTuple<'a> = (
-    Option<SmallVec<[&'a str; 3]>>, // tags included
-    Option<SmallVec<[&'a str; 3]>>, // tags excluded
+    Option<SmallVec<[&'a str; 3]>>, // Tags included
+    Option<SmallVec<[&'a str; 3]>>, // Tags excluded
 );
 
 #[derive(Debug, Deserialize)]
@@ -195,7 +195,7 @@ pub async fn list(
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let features = match params.prefix {
-        // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
+        // TODO: get_by_prefix is unnecessary - reuse get_all with an additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
         None => {
             let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());

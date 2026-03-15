@@ -43,26 +43,26 @@ fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
-    // todo: will be taken from args
+    // TODO: will be taken from args
     let project_id = 1;
     let environment_id = 1;
 
     let connection = Connection::init(API_HOST.into(), Auth::None, project_id, environment_id)?;
     let session = Session::new(connection);
     let commands = vec![
-        // environments
+        // Environments
         Command::Environment.op("add", "environment description", handlers::env::add),
         Command::Environment.op("use", "environment", handlers::env::r#use),
         Command::Environment.op("list", "", handlers::env::list),
         Command::Environment.args("add · list · use"),
-        // features
+        // Features
         Command::Feature.op("list", "filter", handlers::feat::list),
         Command::Feature.op("add", "feature value", handlers::feat::add),
         Command::Feature.op("describe", "feature", handlers::feat::describe),
         Command::Feature.op("delete", "feature", handlers::feat::delete),
         Command::Feature.op("use", "feature", handlers::feat::r#use),
         Command::Feature.args("add · delete · describe · list · use"),
-        // variants
+        // Variants
         Command::Variant.op_in_context("list", "", handlers::var::list, has_feature_ctx),
         Command::Variant.op_in_context("add", "weight value", handlers::var::add, has_feature_ctx),
         Command::Variant.op_in_context("delete", "index", handlers::var::del, has_feature_ctx),
@@ -83,7 +83,7 @@ fn main() -> anyhow::Result<()> {
             "list · add · delete · discard · weight · value",
             has_feature_ctx,
         ),
-        // feature setters (only available in feature context)
+        // Feature setters (only available in feature context)
         Command::Set.op_in_context("state", "on|off", handlers::feat::state, has_feature_ctx),
         Command::Set.op_in_context(
             "status",
@@ -93,7 +93,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Set.op_in_context("value", "value", handlers::feat::set_value, has_feature_ctx),
         Command::Set.args_in_context("state · status · value", has_feature_ctx),
-        // commit / discard (only available in feature context)
+        // Commit / discard (only available in feature context)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
             handlers::feat::commit,

@@ -24,7 +24,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .map(|p| p.variants.as_slice())
         .unwrap_or_default();
 
-    // committed variants go first (sorted ascending by id).
+    // Committed variants go first (sorted ascending by id).
     let mut sorted_variants: Vec<&Variant> = variants.iter().collect();
     let committed_count = sorted_variants.len();
 
@@ -35,7 +35,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .map(|v| VariantRef::Committed(v.id))
         .collect();
 
-    // short circuit - if no modifications were added simply list current variants
+    // Short circuit - if no modifications were added, simply list current variants
     if ops.is_empty() {
         let rows: Vec<VariantRow> = sorted_variants
             .iter()
@@ -49,7 +49,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         return Ok(());
     }
 
-    // track which committed variant ids are deleted
+    // Track which committed variant ids are deleted
     let deleted_ids: std::collections::HashSet<i32> = ops
         .iter()
         .filter_map(|op| match op {
@@ -58,7 +58,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         })
         .collect();
 
-    // collect value/weight overrides by id
+    // Collect value/weight overrides by id
     let mut value_overrides: std::collections::HashMap<i32, Option<String>> =
         std::collections::HashMap::new();
     let mut weight_overrides: std::collections::HashMap<i32, Option<u8>> =
@@ -76,7 +76,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
     }
 
-    // staged Add ops - collect (ops-vec-index, value, weight) in staging order
+    // Staged Add ops - collect (ops-vec-index, value, weight) in staging order
     let staged_adds: Vec<(usize, &str, u8)> = ops
         .iter()
         .enumerate()
@@ -88,15 +88,15 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
     let mut rows: Vec<VariantRow> = Vec::new();
 
-    // committed variants (with pending modifications overlaid).
+    // Committed variants (with pending modifications overlaid).
     for (display_idx, var) in sorted_variants.iter().enumerate() {
         let is_deleted = deleted_ids.contains(&var.id);
         let new_value = value_overrides.get(&var.id).and_then(|v| v.as_deref());
         let new_weight = weight_overrides.get(&var.id).and_then(|w| *w);
         let is_modified = new_value.is_some() || new_weight.is_some();
 
-        // for the control variant, compute the auto-adjusted weight based on pending ops.
-        // note, control variant cannot have its own pending modification - it's always auto-adjusted.
+        // For the control variant, compute the auto-adjusted weight based on pending ops.
+        // The control variant cannot have its own pending modification - it is always auto-adjusted.
         let adjusted_control_weight: Option<u8> = if var.is_control() {
             let non_control_total = total_non_control_weight(
                 ctx.feature.as_ref().unwrap(),
@@ -173,7 +173,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
     variant_list(rows);
 
-    // Build the positional index: committed first (by id), then staged
+    // Build the positional index: committed first (by id), then staged.
     for staged_pos in 0..staged_adds.len() {
         var_index.push(VariantRef::Staged(staged_pos));
     }
