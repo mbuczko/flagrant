@@ -13,4 +13,7 @@ pub enum FlagrantError {
 
     #[error("Request containst no identity ({0})")]
     NoIdentity(&'static str),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(&'static str),
 }

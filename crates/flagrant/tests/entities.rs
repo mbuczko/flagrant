@@ -1,6 +1,9 @@
 use common::{create_context, create_environment, random_string};
 use flagrant::models::{feature, project, variant};
-use flagrant_types::FeatureValue;
+use flagrant_types::{
+    FeatureValue,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::common::create_feature;
@@ -579,4 +582,49 @@ async fn allow_removing_default_variant_when_no_other_variants_exist(
             .await
             .is_ok()
     );
+}
+
+#[sqlx::test]
+async fn patch_control_variant_weight_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+    let control_id = feature.get_default_variant().id;
+
+    let patch = FeaturePatch {
+        variants: vec![VariantPatchOp::SetWeight {
+            id: control_id,
+            weight: 50,
+        }],
+        ..Default::default()
+    };
+    assert!(
+        feature::apply_patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_err()
+    );
+}
+
+#[sqlx::test]
+async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+    let control_id = feature.get_default_variant().id;
+
+    let patch = FeaturePatch {
+        variants: vec![VariantPatchOp::SetValue {
+            id: control_id,
+            value: "bar".to_owned(),
+        }],
+        ..Default::default()
+    };
+    assert!(
+        feature::apply_patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_ok()
+    );
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
 }

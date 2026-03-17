@@ -9,6 +9,7 @@ SELECT f.feature_id, project_id, name, is_active, is_enabled, GROUP_CONCAT(ft.ta
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.feature_id = $1
+GROUP BY f.feature_id
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name

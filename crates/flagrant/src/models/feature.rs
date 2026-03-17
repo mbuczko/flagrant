@@ -309,6 +309,12 @@ pub async fn apply_patch(
         // The control variant cannot be modified at the variant level.
         // Its weight is auto-adjusted and its value must be updated via Feature::update_one.
         if var.is_control() {
+            if new_weight.is_some() {
+                return Err(FlagrantError::InvalidOperation(
+                    "Setting weight on control variant is not allowed. Weight is auto-adjusted.",
+                )
+                .into());
+            }
             update_one(&mut tx, environment, feature)
                 .value(value)
                 .update()
