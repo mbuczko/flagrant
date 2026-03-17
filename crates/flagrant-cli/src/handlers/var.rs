@@ -2,11 +2,9 @@ use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{
-    FeatureValue, Variant,
-    payload::{FeaturePatch, VariantPatchOp},
-};
+use flagrant_types::{FeatureValue, Variant, payload::VariantPatchOp};
 
+use crate::handlers::{edit_in_editor, index};
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -98,7 +96,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         // For the control variant, compute the auto-adjusted weight based on pending ops.
         // The control variant cannot have its own pending modification - it is always auto-adjusted.
         let adjusted_control_weight: Option<u8> = if var.is_control() {
-            let non_control_total = total_non_control_weight(
+            let non_control_total = index::total_non_control_weight(
                 ctx.feature.as_ref().unwrap(),
                 ctx.pending.as_ref(),
                 &VariantRef::Staged(usize::MAX), // no substitution – use all pending weights as-is
@@ -191,14 +189,17 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         Some(w) => w.parse::<u8>()?,
         None => bail!("No weight provided."),
     };
-    let value = args.get(2).map(|a| a.to_string()).unwrap_or_default();
+    let value = match args.get(2) {
+        Some(v) => v.to_string(),
+        None => edit_in_editor("")?,
+    };
 
     if !(0..=100).contains(&weight) {
         bail!("Variant weight should be positive number in range of <0, 100>.")
     }
 
     let total = weight as u32
-        + total_non_control_weight(
+        + index::total_non_control_weight(
             ctx.feature.as_ref().unwrap(),
             ctx.pending.as_ref(),
             &VariantRef::Staged(usize::MAX),
@@ -216,7 +217,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         });
 
     println!("Staged: variant add weight={weight} value={value}");
-    rebuild_index(&mut ctx);
+    index::rebuild(&mut ctx);
     Ok(())
 }
 
@@ -227,49 +228,16 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(idx, &ctx)?,
+        Some(idx) => index::resolve(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let raw = match args.get(2) {
         Some(v) => v.to_string(),
-        None => bail!("No value provided."),
+        None => edit_in_editor(&index::current_variant_value(&variant_ref, &ctx))?,
     };
 
-    let ops = &mut ctx.get_or_init_pending().variants;
-    match variant_ref {
-        VariantRef::Committed(id) => {
-            if let Some(op) = ops
-                .iter_mut()
-                .find(|op| matches!(op, VariantPatchOp::SetValue { id: oid, .. } if *oid == id))
-            {
-                *op = VariantPatchOp::SetValue {
-                    id,
-                    value: raw.clone(),
-                };
-            } else {
-                ops.push(VariantPatchOp::SetValue {
-                    id,
-                    value: raw.clone(),
-                });
-            }
-            println!("Staged: variant value id={id} value={raw}");
-        }
-        VariantRef::Staged(staged_pos) => {
-            let add_op = ops
-                .iter_mut()
-                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                .nth(staged_pos);
-            match add_op {
-                Some(VariantPatchOp::Add { value, .. }) => {
-                    *value = raw.clone();
-                    println!("Updated staged variant value to {raw}");
-                }
-                _ => bail!("Staged variant not found."),
-            }
-        }
-    }
-
-    rebuild_index(&mut ctx);
+    index::stage_value(ctx.get_or_init_pending(), &variant_ref, raw)?;
+    index::rebuild(&mut ctx);
     Ok(())
 }
 
@@ -280,7 +248,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(idx, &ctx)?,
+        Some(idx) => index::resolve(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let new_weight = match args.get(2) {
@@ -303,7 +271,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         }
     }
 
-    let total = total_non_control_weight(
+    let total = index::total_non_control_weight(
         ctx.feature.as_ref().unwrap(),
         ctx.pending.as_ref(),
         &variant_ref,
@@ -313,41 +281,8 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
-    let ops = &mut ctx.get_or_init_pending().variants;
-    match variant_ref {
-        VariantRef::Committed(id) => {
-            if let Some(op) = ops
-                .iter_mut()
-                .find(|op| matches!(op, VariantPatchOp::SetWeight { id: oid, .. } if *oid == id))
-            {
-                *op = VariantPatchOp::SetWeight {
-                    id,
-                    weight: new_weight,
-                };
-            } else {
-                ops.push(VariantPatchOp::SetWeight {
-                    id,
-                    weight: new_weight,
-                });
-            }
-            println!("Staged: variant weight id={id} weight={new_weight}");
-        }
-        VariantRef::Staged(staged_pos) => {
-            let add_op = ops
-                .iter_mut()
-                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                .nth(staged_pos);
-            match add_op {
-                Some(VariantPatchOp::Add { weight, .. }) => {
-                    *weight = new_weight;
-                    println!("Updated staged variant weight to {new_weight}");
-                }
-                _ => bail!("Staged variant not found."),
-            }
-        }
-    }
-
-    rebuild_index(&mut ctx);
+    index::stage_weight(ctx.get_or_init_pending(), &variant_ref, new_weight)?;
+    index::rebuild(&mut ctx);
     Ok(())
 }
 
@@ -358,7 +293,7 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(idx, &ctx)?,
+        Some(idx) => index::resolve(idx, &ctx)?,
         None => bail!("No variant index provided."),
     };
     if let VariantRef::Committed(id) = &variant_ref {
@@ -388,10 +323,11 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             if *id == variant_id
         )
     });
+
     println!("Staged: variant delete id={variant_id}");
     ops.push(VariantPatchOp::Delete { id: variant_id });
 
-    rebuild_index(&mut ctx);
+    index::rebuild(&mut ctx);
     Ok(())
 }
 
@@ -404,12 +340,10 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
-
     let variant_ref = match args.get(1) {
-        Some(idx) => resolve_index(idx, &ctx)?,
+        Some(idx) => index::resolve(idx, &ctx)?,
         None => bail!("No variant index provided. Use an index or 'all'."),
     };
-
     let pending = match ctx.pending.as_mut() {
         Some(p) => p,
         None => {
@@ -418,152 +352,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     };
 
-    match variant_ref {
-        VariantRef::Committed(id) => {
-            let before = pending.variants.len();
-            pending.variants.retain(|op| {
-                !matches!(op,
-                    VariantPatchOp::SetValue { id: oid, .. }
-                    | VariantPatchOp::SetWeight { id: oid, .. }
-                    | VariantPatchOp::Delete { id: oid }
-                    if *oid == id
-                )
-            });
-            if pending.variants.len() == before {
-                println!("No pending changes for variant id={id}.");
-            } else {
-                println!("Discarded pending changes for variant id={id}.");
-            }
-        }
-        VariantRef::Staged(staged_pos) => {
-            let mut add_count = 0;
-            let mut remove_at = None;
-            for (i, op) in pending.variants.iter().enumerate() {
-                if matches!(op, VariantPatchOp::Add { .. }) {
-                    if add_count == staged_pos {
-                        remove_at = Some(i);
-                        break;
-                    }
-                    add_count += 1;
-                }
-            }
-            match remove_at {
-                Some(i) => {
-                    pending.variants.remove(i);
-                    println!("Discarded staged variant addition.");
-                }
-                None => println!("Staged variant not found."),
-            }
-        }
-    }
-
-    rebuild_index(&mut ctx);
+    index::discard_pending(pending, &variant_ref);
+    index::rebuild(&mut ctx);
     Ok(())
-}
-
-/// Computes the total weight of all non-control variants, applying pending overrides and
-/// substituting `new_weight` for the variant identified by `variant_ref`.
-fn total_non_control_weight(
-    feature: &flagrant_types::Feature,
-    pending: Option<&FeaturePatch>,
-    variant_ref: &VariantRef,
-    new_weight: u8,
-) -> u32 {
-    let deleted_ids: std::collections::HashSet<i32> = pending
-        .map(|p| {
-            p.variants
-                .iter()
-                .filter_map(|op| match op {
-                    VariantPatchOp::Delete { id } => Some(*id),
-                    _ => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let committed: u32 = feature
-        .variants
-        .iter()
-        .filter(|v| !v.is_control() && !deleted_ids.contains(&v.id))
-        .map(|v| {
-            (match variant_ref {
-                VariantRef::Committed(id) if *id == v.id => new_weight,
-                _ => pending
-                    .and_then(|p| {
-                        p.variants.iter().find_map(|op| match op {
-                            VariantPatchOp::SetWeight { id, weight } if *id == v.id => {
-                                Some(*weight)
-                            }
-                            _ => None,
-                        })
-                    })
-                    .unwrap_or(v.weight),
-            }) as u32
-        })
-        .sum();
-
-    let staged: u32 = pending
-        .map(|p| {
-            p.variants
-                .iter()
-                .enumerate()
-                .filter(|(_, op)| matches!(op, VariantPatchOp::Add { .. }))
-                .map(|(i, op)| match op {
-                    VariantPatchOp::Add { weight, .. } => match variant_ref {
-                        VariantRef::Staged(pos) if *pos == i => new_weight as u32,
-                        _ => *weight as u32,
-                    },
-                    _ => 0,
-                })
-                .sum()
-        })
-        .unwrap_or(0);
-
-    committed + staged
-}
-
-/// Resolve a 1-based display index from the last `VARIANT list` output to a VariantRef.
-fn resolve_index(raw: &Arg, ctx: &Connection) -> anyhow::Result<VariantRef> {
-    let idx: usize = raw.parse::<usize>()?;
-
-    if ctx.variant_index.is_empty() {
-        bail!("Run `VARIANT list` to refresh indices.")
-    }
-    if idx == 0 || idx > ctx.variant_index.len() {
-        bail!(
-            "Index {} out of range (1–{}).",
-            idx,
-            ctx.variant_index.len()
-        );
-    }
-    Ok(ctx.variant_index[idx - 1].clone())
-}
-
-/// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
-/// Committed variants come first (sorted by id), followed by staged additions in order.
-fn rebuild_index(ctx: &mut Connection) {
-    let variants = ctx
-        .feature
-        .as_ref()
-        .map(|f| f.variants.as_slice())
-        .unwrap_or_default();
-    let staged_count = ctx
-        .pending
-        .as_ref()
-        .map(|p| {
-            p.variants
-                .iter()
-                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                .count()
-        })
-        .unwrap_or(0);
-
-    let mut sorted_ids: Vec<i32> = variants.iter().map(|v| v.id).collect();
-    sorted_ids.sort_unstable();
-
-    let mut index: Vec<VariantRef> = sorted_ids.into_iter().map(VariantRef::Committed).collect();
-    for staged_pos in 0..staged_count {
-        index.push(VariantRef::Staged(staged_pos));
-    }
-    ctx.variant_index = index;
 }

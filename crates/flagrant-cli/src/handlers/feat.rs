@@ -5,7 +5,7 @@ use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::edit_in_editor, printer::tabular::Tabular};
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
@@ -111,20 +111,43 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     bail!("Not enough arguments provided")
 }
 
-/// Stages a new value for the current feature (buffered - use `commit` to apply).
+/// Stages a new value for the current feature.
+///
+/// When called without a value argument, opens `$EDITOR` (falling back to `vi`) pre-filled
+/// with the current value so the user can edit it interactively.
 pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if let Some(feature) = &ctx.feature {
-        if let Some(raw) = args.get(1) {
-            let parsed = raw
-                .parse()
-                .unwrap_or_else(|_| feature.get_default_value().clone_with(raw));
+        let raw: String = if let Some(raw) = args.get(1) {
+            raw.to_string()
+        } else {
+            // No value provided — open editor with current bare value (without type prefix).
+            let current_fv = ctx
+                .pending
+                .as_ref()
+                .and_then(|p| p.value.as_ref())
+                .unwrap_or_else(|| feature.get_default_value());
+            let (_, bare) = current_fv.decompose();
+
+            let edited = edit_in_editor(bare)?;
+
+            // Type is inferred from the edited content, not the original.
+            let parsed = FeatureValue::build(&edited);
             let display = parsed.to_string();
+
             ctx.get_or_init_pending().value = Some(parsed);
             println!("Staged: value = {display}");
             return Ok(());
-        }
-        bail!("No value provided.")
+        };
+
+        let parsed = raw
+            .parse()
+            .unwrap_or_else(|_| feature.get_default_value().clone_with(&raw));
+        let display = parsed.to_string();
+        ctx.get_or_init_pending().value = Some(parsed);
+
+        println!("Staged: value = {display}");
+        return Ok(());
     }
     bail!("Not within a feature context.")
 }
