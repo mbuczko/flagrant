@@ -1,3 +1,26 @@
+//! Variant index management and staging helpers.
+//!
+//! This module maintains the positional index that maps 1-based display numbers
+//! (as shown by `VARIANT list`) to [`VariantRef`] values, and provides the
+//! staging primitives used by the handlers to build up a [`FeaturePatch`]
+//! before it is committed to the API.
+//!
+//! # Index lifecycle
+//!
+//! The index is rebuilt after every mutation via [`rebuild`]. Committed variants
+//! always appear first (sorted by id), followed by any staged additions in
+//! insertion order. [`resolve`] translates a user-supplied 1-based number back
+//! to a [`VariantRef`] so the caller can identify which variant to act on.
+//!
+//! # Staging
+//!
+//! [`stage_value`] and [`stage_weight`] upsert the appropriate [`VariantPatchOp`]
+//! into the pending patch. [`discard_pending`] removes all pending ops for a
+//! given variant. [`current_variant_value`] retrieves the current bare value of
+//! a variant (without the `type::` prefix), preferring any already-staged op
+//! over the committed state — used to pre-fill the editor when no value argument
+//! is provided on the command line.
+
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::command::Arg;
@@ -7,7 +30,7 @@ use flagrant_types::{
 };
 
 /// Resolve a 1-based display index from the last `VARIANT list` output to a VariantRef.
-pub(super) fn resolve(raw: &Arg, ctx: &Connection) -> anyhow::Result<VariantRef> {
+pub(crate) fn resolve(raw: &Arg, ctx: &Connection) -> anyhow::Result<VariantRef> {
     let idx: usize = raw.parse::<usize>()?;
 
     if ctx.variant_index.is_empty() {
@@ -25,7 +48,7 @@ pub(super) fn resolve(raw: &Arg, ctx: &Connection) -> anyhow::Result<VariantRef>
 
 /// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
 /// Committed variants come first (sorted by id), followed by staged additions in order.
-pub(super) fn rebuild(ctx: &mut Connection) {
+pub(crate) fn rebuild(ctx: &mut Connection) {
     let variants = ctx
         .feature
         .as_ref()
@@ -55,7 +78,7 @@ pub(super) fn rebuild(ctx: &mut Connection) {
 /// Returns the current bare value (without type prefix) for a variant, used to pre-fill the
 /// editor. For committed variants, prefers any already-staged `SetValue` op; for staged
 /// (Add) variants, returns the value from the pending `Add` op.
-pub(super) fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
+pub(crate) fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
     match variant_ref {
         VariantRef::Committed(id) => {
             let staged = ctx.pending.as_ref().and_then(|p| {
@@ -90,7 +113,7 @@ pub(super) fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) 
 }
 
 /// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
-pub(super) fn stage_value(
+pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
     value: String,
@@ -132,7 +155,7 @@ pub(super) fn stage_value(
 }
 
 /// Upserts a `SetWeight` op for a committed variant, or updates the weight of a staged `Add` op.
-pub(super) fn stage_weight(
+pub(crate) fn stage_weight(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
     weight: u8,
@@ -170,7 +193,7 @@ pub(super) fn stage_weight(
 /// Discards all pending ops for the given variant ref from the patch.
 /// For committed variants, removes any SetValue / SetWeight / Delete ops by id.
 /// For staged variants, removes the corresponding Add op by its position.
-pub(super) fn discard_pending(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
+pub(crate) fn discard_pending(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
     match variant_ref {
         VariantRef::Committed(id) => {
             let before = pending.variants.len();
@@ -213,7 +236,7 @@ pub(super) fn discard_pending(pending: &mut FeaturePatch, variant_ref: &VariantR
 
 /// Computes the total weight of all non-control variants, applying pending overrides and
 /// substituting `new_weight` for the variant identified by `variant_ref`.
-pub(super) fn total_non_control_weight(
+pub(crate) fn total_non_control_weight(
     feature: &Feature,
     pending: Option<&FeaturePatch>,
     variant_ref: &VariantRef,

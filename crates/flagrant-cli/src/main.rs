@@ -13,6 +13,7 @@ use rustyline::overlay::GenericOverlayer;
 mod command;
 mod completer;
 mod handlers;
+mod index;
 mod printer;
 
 const API_HOST: &str = "http://localhost:3030";
@@ -51,32 +52,46 @@ fn main() -> anyhow::Result<()> {
     let session = Session::new(connection);
     let commands = vec![
         // Environments
-        Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("use", "environment", handlers::env::r#use),
-        Command::Environment.op("list", "", handlers::env::list),
+        Command::Environment.op(
+            "add",
+            "environment description",
+            handlers::environments::add,
+        ),
+        Command::Environment.op("use", "environment", handlers::environments::r#use),
+        Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.args("add · list · use"),
         // Features
-        Command::Feature.op("list", "filter", handlers::feat::list),
-        Command::Feature.op("add", "feature value", handlers::feat::add),
-        Command::Feature.op("describe", "feature", handlers::feat::describe),
-        Command::Feature.op("delete", "feature", handlers::feat::delete),
-        Command::Feature.op("use", "feature", handlers::feat::r#use),
+        Command::Feature.op("list", "filter", handlers::features::list),
+        Command::Feature.op("add", "feature value", handlers::features::add),
+        Command::Feature.op("describe", "feature", handlers::features::describe),
+        Command::Feature.op("delete", "feature", handlers::features::delete),
+        Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.args("add · delete · describe · list · use"),
         // Variants
-        Command::Variant.op_in_context("list", "", handlers::var::list, has_feature_ctx),
-        Command::Variant.op_in_context("add", "weight value", handlers::var::add, has_feature_ctx),
-        Command::Variant.op_in_context("delete", "index", handlers::var::del, has_feature_ctx),
-        Command::Variant.op_in_context("discard", "index", handlers::var::discard, has_feature_ctx),
+        Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "add",
+            "weight value",
+            handlers::variants::add,
+            has_feature_ctx,
+        ),
+        Command::Variant.op_in_context("delete", "index", handlers::variants::del, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "discard",
+            "index",
+            handlers::variants::discard,
+            has_feature_ctx,
+        ),
         Command::Variant.op_in_context(
             "value",
             "index value",
-            handlers::var::value,
+            handlers::variants::value,
             has_feature_ctx,
         ),
         Command::Variant.op_in_context(
             "weight",
             "index weight",
-            handlers::var::weight,
+            handlers::variants::weight,
             has_feature_ctx,
         ),
         Command::Variant.args_in_context(
@@ -84,24 +99,34 @@ fn main() -> anyhow::Result<()> {
             has_feature_ctx,
         ),
         // Feature setters (only available in feature context)
-        Command::Set.op_in_context("state", "on|off", handlers::feat::state, has_feature_ctx),
+        Command::Set.op_in_context(
+            "state",
+            "on|off",
+            handlers::features::state,
+            has_feature_ctx,
+        ),
         Command::Set.op_in_context(
             "status",
             "active|inactive",
-            handlers::feat::status,
+            handlers::features::status,
             has_feature_ctx,
         ),
-        Command::Set.op_in_context("value", "value", handlers::feat::set_value, has_feature_ctx),
+        Command::Set.op_in_context(
+            "value",
+            "value",
+            handlers::features::set_value,
+            has_feature_ctx,
+        ),
         Command::Set.args_in_context("state · status · value", has_feature_ctx),
         // Commit / discard (only available in feature context)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
-            handlers::feat::commit,
+            handlers::features::commit,
             has_feature_with_pending_ctx,
         ),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
-            handlers::feat::discard,
+            handlers::features::discard,
             has_feature_with_pending_ctx,
         ),
     ];

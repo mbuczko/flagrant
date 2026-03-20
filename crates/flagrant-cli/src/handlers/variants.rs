@@ -4,7 +4,8 @@ use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{FeatureValue, Variant, payload::VariantPatchOp};
 
-use crate::handlers::{edit_in_editor, index};
+use crate::handlers::edit_in_editor;
+use crate::index;
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -286,6 +287,32 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Discard a single pending change for the variant at the given display index:
+///  - for committed variants: removes any SetValue/SetWeight/Delete ops for that id
+///  - for staged additions: removes the Add op entirely
+pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not within a feature context.");
+    }
+    let variant_ref = match args.get(1) {
+        Some(idx) => index::resolve(idx, &ctx)?,
+        None => bail!("No variant index provided. Use an index or 'all'."),
+    };
+    let pending = match ctx.pending.as_mut() {
+        Some(p) => p,
+        None => {
+            println!("No pending variant changes.");
+            return Ok(());
+        }
+    };
+
+    index::discard_pending(pending, &variant_ref);
+    index::rebuild(&mut ctx);
+    Ok(())
+}
+
 pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -327,32 +354,6 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     println!("Staged: variant delete id={variant_id}");
     ops.push(VariantPatchOp::Delete { id: variant_id });
 
-    index::rebuild(&mut ctx);
-    Ok(())
-}
-
-/// Discard a single pending change for the variant at the given display index:
-///  - for committed variants: removes any SetValue/SetWeight/Delete ops for that id
-///  - for staged additions: removes the Add op entirely
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-
-    if ctx.feature.is_none() {
-        bail!("Not within a feature context.");
-    }
-    let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx, &ctx)?,
-        None => bail!("No variant index provided. Use an index or 'all'."),
-    };
-    let pending = match ctx.pending.as_mut() {
-        Some(p) => p,
-        None => {
-            println!("No pending variant changes.");
-            return Ok(());
-        }
-    };
-
-    index::discard_pending(pending, &variant_ref);
     index::rebuild(&mut ctx);
     Ok(())
 }
