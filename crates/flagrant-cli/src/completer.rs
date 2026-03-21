@@ -6,17 +6,6 @@ pub struct ArgCompleter<'a> {
     pub session: &'a Session<Connection>,
 }
 
-fn strip_tag(input: &str) -> (&str, Option<char>, &str) {
-    let (lhs, rhs) = match input.rsplit_once(',') {
-        Some((l, r)) => (l, r),
-        _ => ("", input),
-    };
-    match rhs.char_indices().next() {
-        Some((_, m)) if m == '-' => (lhs, Some(m), &rhs[1..]),
-        _ => (lhs, None, rhs),
-    }
-}
-
 impl AutoCompleter for ArgCompleter<'_> {
     fn complete_by_prefix(
         &self,
@@ -30,6 +19,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.project.as_base_resource();
 
+                // Auto-complete environment name
                 Ok(ctx
                     .client
                     .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={prefix}")))?
@@ -37,23 +27,31 @@ impl AutoCompleter for ArgCompleter<'_> {
                     .map(|c| c.name)
                     .collect::<Vec<_>>())
             }
+            "SET" if arg_n >= 2 => {
+                let op: &str = &args[1];
 
-            "FEATURE" | "VARIANT" if arg_n >= 2 => {
+                Ok(match op {
+                    "state" => filter_by_prefix(&["on", "off"], prefix),
+                    "status" => filter_by_prefix(&["active", "inactive"], prefix),
+                    _ => vec![],
+                })
+            }
+            "FEATURE" if arg_n >= 2 => {
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.environment.as_base_resource();
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    // auto-complete feature name
-                    "on" | "off" | "delete" | "set" if arg_n == 2 => ctx
+                    // Auto-complete feature name
+                    "delete" | "describe" | "use" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
                         .into_iter()
                         .map(|c| c.name)
                         .collect::<Vec<_>>(),
 
-                    // auto-complete feature attributes names like tags or status
-                    // along with attribute value (if completable)
+                    // Auto-complete feature attribute names like tags or status,
+                    // along with the attribute value (if completable)
                     "list" => match prefix.split_once(':') {
                         Some(("tag", val)) => {
                             let ctx = self.session.context.read().unwrap();
@@ -76,16 +74,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 })
                                 .collect::<Vec<_>>()
                         }
-                        None => ["tag", "state", "status"]
-                            .into_iter()
-                            .filter_map(|s| {
-                                if s.starts_with(prefix) {
-                                    Some(s.to_owned())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect::<Vec<_>>(),
+                        None => filter_by_prefix(&["tag", "state", "status"], prefix),
                         _ => vec![],
                     },
                     _ => vec![],
@@ -94,4 +83,28 @@ impl AutoCompleter for ArgCompleter<'_> {
             _ => Ok(vec![]),
         }
     }
+}
+
+fn strip_tag(input: &str) -> (&str, Option<char>, &str) {
+    let (lhs, rhs) = match input.rsplit_once(',') {
+        Some((l, r)) => (l, r),
+        _ => ("", input),
+    };
+    match rhs.char_indices().next() {
+        Some((_, m)) if m == '-' => (lhs, Some(m), &rhs[1..]),
+        _ => (lhs, None, rhs),
+    }
+}
+
+fn filter_by_prefix<'a>(candidates: &[&'a str], prefix: &'a str) -> Vec<String> {
+    candidates
+        .iter()
+        .filter_map(|s| {
+            if s.starts_with(prefix) {
+                Some(s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
 }

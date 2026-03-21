@@ -3,12 +3,13 @@
 INSERT INTO features(project_id, name, is_active, is_enabled) VALUES($1, $2, $3, $4)
 RETURNING feature_id, project_id, name, is_active, is_enabled
 
--- :name fetch_feature :|| :1
+-- :name fetch_feature_by_id :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
 SELECT f.feature_id, project_id, name, is_active, is_enabled, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.feature_id = $1
+GROUP BY f.feature_id
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
@@ -58,6 +59,10 @@ UPDATE features
 SET name = $2, is_enabled = $3
 WHERE feature_id = $1
 
+-- :name update_feature_is_active :<> :!
+-- :doc Updates is_active flag of a feature
+UPDATE features SET is_active = $2 WHERE feature_id = $1
+
 -- :name update_feature_variants_accumulators :<> :!
 -- :doc Updates feature variants accumulators by given value
 UPDATE variant_weights
@@ -71,3 +76,7 @@ DELETE FROM features WHERE feature_id = $1
 -- :name delete_variants_for_feature :<> :!
 -- :doc Removes a feature value.
 DELETE FROM variants WHERE feature_id = $1
+
+-- :name delete_tags_for_feature :<> :!
+-- :doc Removes a feature tags.
+DELETE FROM feature_tags WHERE feature_id = $1

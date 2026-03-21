@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use sqlx::{Pool, Sqlite};
 
@@ -9,31 +9,23 @@ use crate::{api, handlers::tags};
 
 pub fn init_router() -> Router<Pool<Sqlite>> {
     Router::new()
-        // projects
+        // Projects
         .route("/projects/:project_id", get(projects::fetch))
-        // environments
+        // Environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))
         .route(
-            "/projects/:project_id/envs/name/:env_name",
-            get(environments::fetch_by_name),
-        )
-        .route(
             "/projects/:project_id/envs/:env_id",
-            get(environments::fetch_by_id),
+            get(environments::fetch_by_id_or_name),
         )
-        // tags
+        // Tags
         .route("/envs/:environment_id/tags", get(tags::list))
-        // features
+        // Features
         .route("/envs/:environment_id/features", get(features::list))
         .route("/envs/:environment_id/features", post(features::create))
         .route(
-            "/envs/:environment_id/features/name/:feature_name",
-            get(features::fetch_by_name),
-        )
-        .route(
             "/envs/:environment_id/features/:feature_id",
-            get(features::fetch_by_id),
+            get(features::fetch_by_id_or_name),
         )
         .route(
             "/envs/:environment_id/features/:feature_id",
@@ -43,7 +35,11 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment_id/features/:feature_id",
             delete(features::delete),
         )
-        // variants
+        .route(
+            "/envs/:environment_id/features/:feature_id",
+            patch(features::patch),
+        )
+        // Variants
         .route(
             "/envs/:environment_id/features/:feature_id/variants",
             get(variants::list),
@@ -64,7 +60,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment_id/variants/:variant_id",
             delete(variants::delete),
         )
-        // public API
+        // Public API
         .nest(
             "/api/v1",
             Router::new().route("/envs/:environment_id/features", get(api::get_features)),

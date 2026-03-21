@@ -3,15 +3,18 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, feature};
-use flagrant_types::{Feature, payload::FeatureRequestPayload};
+use flagrant_types::{
+    Feature,
+    payload::{FeaturePatch, FeatureRequestPayload},
+};
 use serde::Deserialize;
 use smallvec::{SmallVec, smallvec};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
 type TagsTuple<'a> = (
-    Option<SmallVec<[&'a str; 3]>>, // tags included
-    Option<SmallVec<[&'a str; 3]>>, // tags excluded
+    Option<SmallVec<[&'a str; 3]>>, // Tags included
+    Option<SmallVec<[&'a str; 3]>>, // Tags excluded
 );
 
 #[derive(Debug, Deserialize)]
@@ -21,6 +24,25 @@ pub(crate) struct FeatureQueryParams {
     state: Option<String>,
     tags: Option<String>,
     pattern: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) enum FeatureId {
+    Id(i32),
+    Name(String),
+}
+
+impl<'de> Deserialize<'de> for FeatureId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.parse::<i32>() {
+            Ok(id) => Ok(FeatureId::Id(id)),
+            Err(_) => Ok(FeatureId::Name(s)),
+        }
+    }
 }
 
 /// Parses status parameter: converts non-empty string to bool (true if "active").
@@ -109,33 +131,15 @@ pub async fn create(
 ///
 /// # Returns
 /// The feature with all its associated variants.
-pub async fn fetch_by_id(
+pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((environment_id, feature_id)): Path<(i32, FeatureId)>,
 ) -> Result<Json<Feature>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-
-    Ok(Json(feature))
-}
-
-/// Fetches a feature by its name within a specific environment.
-///
-/// Feature names are unique within a project, so this returns at most one feature.
-/// Returns the feature with all its variants (control and non-control).
-///
-/// # Endpoint
-/// `GET /environments/{environment_id}/features/name/{feature_name}`
-///
-/// # Returns
-/// The feature matching the given name with all its associated variants.
-pub async fn fetch_by_name(
-    DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_name)): Path<(i32, String)>,
-) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let feature = feature::get_by_name(&mut conn, &env, feature_name).await?;
-
+    let feature = match feature_id {
+        FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
+        FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, name).await?,
+    };
     Ok(Json(feature))
 }
 
@@ -169,13 +173,11 @@ pub async fn update(
     Ok(Json(()))
 }
 
-/// Lists features in an environment with optional filtering.
-///
-/// Features are returned with their control variants only for performance.
-/// Supports filtering by prefix, status, state, pattern, and tags.
+/// Lists features with optional filtering.
+/// Listed features are returned with their control variants only for performance reasons.
 ///
 /// # Endpoint
-/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]`
+/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]` - list with filters
 ///
 /// # Query Parameters
 /// - `prefix` - Filter by name prefix (e.g., "show_" matches "show_banner", "show_notification")
@@ -185,7 +187,7 @@ pub async fn update(
 /// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 ///
 /// # Returns
-/// List of features matching the filters, each with only its control variant.
+/// Array with single feature or list of features matching the filters, each with only its control variant.
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
@@ -193,7 +195,7 @@ pub async fn list(
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let features = match params.prefix {
-        // TODO: get_by_prefix is unnecessary - reuse get_all with additional (prefix) parameter
+        // TODO: get_by_prefix is unnecessary - reuse get_all with an additional (prefix) parameter
         Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
         None => {
             let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());
@@ -235,4 +237,30 @@ pub async fn delete(
 
     feature::delete(&mut conn, &env, &feature).await?;
     Ok(Json(()))
+}
+
+/// Applies a batch of staged changes to a feature atomically.
+///
+/// All changes (feature properties and variant operations) are applied within
+/// a single transaction. Validation errors are returned as 4xx responses.
+///
+/// # Endpoint
+/// `POST /environments/{environment_id}/features/{feature_id}/patch`
+///
+/// # Parameters
+/// - `environment_id` - The environment containing the feature
+/// - `feature_id` - The ID of the feature to patch
+/// - `patch` - The set of changes to apply
+pub async fn patch(
+    DbConnection(mut conn): DbConnection,
+    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Json(patch): Json<FeaturePatch>,
+) -> Result<Json<Feature>, ServiceError> {
+    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
+
+    feature::apply_patch(&mut conn, &env, &feature, patch).await?;
+
+    let updated = feature::get_by_id(&mut conn, &env, feature_id).await?;
+    Ok(Json(updated))
 }

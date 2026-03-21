@@ -29,7 +29,7 @@ pub fn split_command_line(input: &str) -> anyhow::Result<Vec<Arg<'_>>> {
                         break;
                     }
                 } else {
-                    // quotation not ended
+                    // Quotation not ended
                     output.push(Arg(&input[pos + 1..], pos + 1));
                     break;
                 }

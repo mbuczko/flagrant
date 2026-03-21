@@ -10,6 +10,9 @@ pub enum Command {
     Environment,
     Feature,
     Variant,
+    Set,
+    Commit,
+    Discard,
 }
 
 impl Command {
@@ -19,29 +22,41 @@ impl Command {
     }
 
     /// Generic command builder.
-    /// Creates a new Command with or without operation and command handler function.
+    /// Creates a new command with or without an operation and command handler function.
     fn build(
         &self,
         op: Option<&str>,
         hint: &str,
         handler: Option<CommandHandler<Connection>>,
+        has_context: Option<fn(&Session<Connection>) -> bool>,
     ) -> ReplCommand<Connection> {
         ReplCommand {
             cmd: self.to_string().to_uppercase(),
             op: op.map(String::from),
             hint: hint.to_owned(),
             handler: handler.unwrap_or(Self::no_op_handler),
+            has_context,
         }
     }
 
-    /// Builds a command handling provided operation with `handler` function.
+    /// Builds a command handler for provided operation
     pub fn op(
         &self,
         op: &str,
         hint: &str,
         handler: CommandHandler<Connection>,
     ) -> ReplCommand<Connection> {
-        self.build(Some(op), hint, Some(handler))
+        self.build(Some(op), hint, Some(handler), None)
+    }
+
+    pub fn op_in_context(
+        &self,
+        op: &str,
+        hint: &str,
+        handler: CommandHandler<Connection>,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(Some(op), hint, Some(handler), Some(has_context))
     }
 
     /// Builds a no-op (no-operation) version of command.
@@ -51,11 +66,29 @@ impl Command {
         hint: &str,
         handler: CommandHandler<Connection>,
     ) -> ReplCommand<Connection> {
-        self.build(None, hint, Some(handler))
+        self.build(None, hint, Some(handler), None)
+    }
+
+    #[allow(dead_code)]
+    pub fn no_op_in_context(
+        &self,
+        hint: &str,
+        handler: CommandHandler<Connection>,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(None, hint, Some(handler), Some(has_context))
     }
 
     /// When invoked, command will be handled by `no_op_handler` which does nothing.
     pub fn args(&self, hint: &str) -> ReplCommand<Connection> {
-        self.build(None, hint, None)
+        self.build(None, hint, None, None)
+    }
+
+    pub fn args_in_context(
+        &self,
+        hint: &str,
+        has_context: fn(&Session<Connection>) -> bool,
+    ) -> ReplCommand<Connection> {
+        self.build(None, hint, None, Some(has_context))
     }
 }

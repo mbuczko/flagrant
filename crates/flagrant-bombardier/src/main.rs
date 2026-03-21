@@ -50,7 +50,7 @@ pub fn main() -> anyhow::Result<()> {
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
                 loop {
-                    // TODO: fetch IDENTS_COUNT number of idents from the pool and generate new ones if needed
+                    // TODO: fetch IDENTS_COUNT idents from the pool and generate new ones if needed
                     if let Some(ident) = get_or_generate_ident(&idents, &mut rng)
                         && let Some(response) = conn.get_features(&ident)
                         && let Some(fv) = feature_value(response, FEATURE_ID)
@@ -61,10 +61,10 @@ pub fn main() -> anyhow::Result<()> {
                             FeatureValue::Toml(v) => v,
                             FeatureValue::Text(v) => v,
                         };
-                        // evict ident from all buckets
+                        // Evict ident from all buckets
                         evict_from_buckets(&mut guard, &ident);
 
-                        // add value to corresponding bucket
+                        // Add value to corresponding bucket
                         guard.entry(val).or_insert_with(HashSet::new).insert(ident);
 
                         std::mem::drop(guard);

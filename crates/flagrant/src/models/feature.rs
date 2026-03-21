@@ -1,7 +1,12 @@
 use std::cmp::Ordering;
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, FeatureValue, Variant};
+use std::collections::HashMap;
+
+use flagrant_types::{
+    Environment, Feature, FeatureValue, TagList, Variant,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
@@ -57,12 +62,12 @@ impl<'a> FeatureUpdate<'a> {
         let is_enabled = self.is_enabled.unwrap_or(self.feature.is_enabled);
         let mut tx = self.conn.begin().await?;
 
-        // in transaction, update feature properties first
+        // In transaction, update feature properties first
         SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
-        // ...and then the feature value which is stored as default variant
+        // Then update the feature value, which is stored as the default variant
         variant::create_control(&mut tx, self.environment, self.feature, value)
             .await
             .map_err(|e| match e.downcast::<sqlx::Error>() {
@@ -97,7 +102,7 @@ pub async fn create(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
-    // default value gets turned into a control variant.
+    // Default value gets turned into a control variant.
     let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
     feature.variants.push(variant);
 
@@ -113,16 +118,18 @@ pub async fn get_by_id(
     environment: &Environment,
     feature_id: i32,
 ) -> anyhow::Result<Feature> {
-    let feature = SQLFeatures::fetch_feature(&mut *conn, params![feature_id], |row| {
+    let mut tx = conn.begin().await?;
+    let feature = SQLFeatures::fetch_feature_by_id(&mut *tx, params![feature_id], |row| {
         row_to_feature(row, environment)
     })
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(conn, environment, feature.id)
+    let variants = variant::get_all(&mut tx, environment, feature.id)
         .await
         .unwrap_or_default();
 
+    tx.commit().await?;
     Ok(feature.with_variants(variants))
 }
 
@@ -225,6 +232,112 @@ pub async fn bump_up_accumulators(
     Ok(())
 }
 
+/// Applies a `FeaturePatch` to the given feature atomically within a single transaction.
+///
+/// Operations are applied in the following order to ensure weight constraints remain
+/// satisfiable throughout the transaction:
+/// 1. Feature-level property changes (is_enabled, is_active, value)
+/// 2. Variant deletes (free up weight)
+/// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
+/// 4. Variant adds (consume weight)
+pub async fn apply_patch(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &Feature,
+    patch: FeaturePatch,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    // Feature-level properties
+    if let Some(enabled) = patch.is_enabled {
+        SQLFeatures::update_feature(&mut *tx, params![feature.id, &feature.name, enabled])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
+    }
+    if let Some(active) = patch.is_active {
+        SQLFeatures::update_feature_is_active(&mut *tx, params![feature.id, active])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
+    }
+    if let Some(value) = patch.value {
+        variant::create_control(&mut tx, environment, feature, value).await?;
+    }
+
+    // Partition variant ops: deletes first, then updates, then adds
+    let (deletes, rest): (Vec<_>, Vec<_>) = patch
+        .variants
+        .into_iter()
+        .partition(|op| matches!(op, VariantPatchOp::Delete { .. }));
+    let (updates, adds): (Vec<_>, Vec<_>) = rest
+        .into_iter()
+        .partition(|op| !matches!(op, VariantPatchOp::Add { .. }));
+
+    // Apply deletes
+    for op in deletes {
+        if let VariantPatchOp::Delete { id } = op {
+            let var = variant::get_by_id(&mut tx, environment, id).await?;
+
+            // Control variant cannot be deleted via PATCH operation - the only way
+            // to delete it is a DELETE request to remove the entire feature.
+            if !var.is_control() {
+                variant::delete(&mut tx, environment, &var).await?;
+            }
+        }
+    }
+
+    // Group SetValue/SetWeight ops by variant id, fetch current state once, then update
+    let mut update_map: HashMap<i32, (Option<String>, Option<u8>)> = HashMap::new();
+    for op in updates {
+        match op {
+            VariantPatchOp::SetValue { id, value } => {
+                update_map.entry(id).or_default().0 = Some(value);
+            }
+            VariantPatchOp::SetWeight { id, weight } => {
+                update_map.entry(id).or_default().1 = Some(weight);
+            }
+            _ => {}
+        }
+    }
+    for (id, (new_value, new_weight)) in update_map {
+        let var = variant::get_by_id(&mut tx, environment, id).await?;
+        let value = match new_value {
+            Some(v) => v.parse().unwrap_or_else(|_| var.value.clone_with(&v)),
+            None => var.value.clone(),
+        };
+        let weight = new_weight.unwrap_or(var.weight);
+
+        // The control variant cannot be modified at the variant level.
+        // Its weight is auto-adjusted and its value must be updated via Feature::update_one.
+        if var.is_control() {
+            if new_weight.is_some() {
+                return Err(FlagrantError::InvalidOperation(
+                    "Setting weight on control variant is not allowed. Weight is auto-adjusted.",
+                )
+                .into());
+            }
+            update_one(&mut tx, environment, feature)
+                .value(value)
+                .update()
+                .await?;
+        } else {
+            variant::update_one(&mut tx, environment, &var, value, weight).await?;
+        }
+    }
+
+    // Apply adds
+    for op in adds {
+        if let VariantPatchOp::Add { value, weight } = op {
+            let fv = value
+                .parse()
+                .unwrap_or_else(|_| feature.get_default_value().clone_with(&value));
+            variant::create(&mut tx, environment, feature, fv, weight).await?;
+        }
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -233,21 +346,22 @@ pub async fn delete(
     let mut tx = conn.begin().await?;
     let mut vars = variant::get_all(&mut tx, environment, feature.id).await?;
 
-    // sort variants so, that control ones go last in a vector.
-    // this is required because of the strict deletion policy - control variants
-    // cannot be deleted when the other variants still exist.
+    // Sort variants so that control ones go last in the vector.
+    // This is required because of the strict deletion policy - control variants
+    // cannot be deleted while other variants still exist.
     vars.sort_by(|a, _| match a.is_control() {
         true => Ordering::Greater,
         false => Ordering::Less,
     });
 
-    // in transaction, remove all feature variants first.
-    // because of the sorting done before, control variant will be deleted last.
+    // In transaction, remove all feature variants first.
+    // Due to the sorting above, the control variant will be deleted last.
     for var in vars {
         variant::delete(&mut tx, environment, &var).await?;
     }
 
-    // ...and then remove feature value and entire feature definition
+    // Then remove the feature value and the entire feature definition.
+    SQLFeatures::delete_tags_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;
 
@@ -279,7 +393,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
-        tags: row.get("tags"),
+        tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }
 }

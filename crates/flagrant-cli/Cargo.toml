@@ -19,6 +19,7 @@ clap = "4.5.1"
 strum = "0.26.2"
 strum_macros = "0.26.2"
 colored = "3.0.0"
+tempfile = "3"
 
 [[bin]]
 name = "flagrant-cli"

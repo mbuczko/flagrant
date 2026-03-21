@@ -1,4 +1,3 @@
-use clap::builder::styling::Color;
 use colored::Colorize;
 use command::Command;
 use completer::ArgCompleter;
@@ -20,7 +19,9 @@ const API_HOST: &str = "http://localhost:3030";
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
+    let dirty = ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
     let feat = match &ctx.feature {
+        Some(feat) if dirty => format!(" → {}*", feat.name),
         Some(feat) => format!(" → {}", feat.name),
         _ => String::default(),
     };
@@ -32,36 +33,101 @@ fn prompter(session: &Session<Connection>) -> String {
     )
 }
 
+fn has_feature_ctx(session: &Session<Connection>) -> bool {
+    let ctx = &session.context.read().unwrap();
+    ctx.feature.is_some()
+}
+fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
+    let ctx = &session.context.read().unwrap();
+    ctx.feature.is_some() && ctx.pending.is_some()
+}
+
 fn main() -> anyhow::Result<()> {
-    // todo: will be taken from args
+    // TODO: will be taken from args
     let project_id = 1;
     let environment_id = 1;
 
     let connection = Connection::init(API_HOST.into(), Auth::None, project_id, environment_id)?;
     let session = Session::new(connection);
-
     let commands = vec![
-        // environments
-        Command::Environment.op("add", "environment description", handlers::env::add),
-        Command::Environment.op("set", "environment", handlers::env::set),
-        Command::Environment.op("list", "", handlers::env::list),
-        Command::Environment.args("add | list | set"),
-        // features
-        Command::Feature.op("list", "", handlers::feat::list),
-        Command::Feature.op("add", "feature value", handlers::feat::add),
-        Command::Feature.op("set", "feature", handlers::feat::set),
-        Command::Feature.op("delete", "feature", handlers::feat::delete),
-        Command::Feature.op("value", "feature value", handlers::feat::value),
-        Command::Feature.op("on", "feature", handlers::feat::on),
-        Command::Feature.op("off", "feature", handlers::feat::off),
-        Command::Feature.args("add | delete | list | set"),
-        // variants
-        Command::Variant.op("list", "feature", handlers::var::list),
-        Command::Variant.op("add", "feature weight value", handlers::var::add),
-        Command::Variant.op("delete", "variant-id", handlers::var::del),
-        Command::Variant.op("value", "variant-id value", handlers::var::value),
-        Command::Variant.op("weight", "variant-id weight", handlers::var::weight),
-        Command::Variant.args("add | delete | list | value | weight"),
+        // Environments
+        Command::Environment.op(
+            "add",
+            "environment description",
+            handlers::environments::add,
+        ),
+        Command::Environment.op("use", "environment", handlers::environments::r#use),
+        Command::Environment.op("list", "", handlers::environments::list),
+        Command::Environment.args("add · list · use"),
+        // Features
+        Command::Feature.op("list", "filter", handlers::features::list),
+        Command::Feature.op("add", "feature value", handlers::features::add),
+        Command::Feature.op("describe", "feature", handlers::features::describe),
+        Command::Feature.op("delete", "feature", handlers::features::delete),
+        Command::Feature.op("use", "feature", handlers::features::r#use),
+        Command::Feature.args("add · delete · describe · list · use"),
+        // Variants
+        Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "add",
+            "weight value",
+            handlers::variants::add,
+            has_feature_ctx,
+        ),
+        Command::Variant.op_in_context("delete", "index", handlers::variants::delete, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "discard",
+            "index",
+            handlers::variants::discard,
+            has_feature_ctx,
+        ),
+        Command::Variant.op_in_context(
+            "value",
+            "index value",
+            handlers::variants::value,
+            has_feature_ctx,
+        ),
+        Command::Variant.op_in_context(
+            "weight",
+            "index weight",
+            handlers::variants::weight,
+            has_feature_ctx,
+        ),
+        Command::Variant.args_in_context(
+            "list · add · delete · discard · weight · value",
+            has_feature_ctx,
+        ),
+        // Feature setters (only available in feature context)
+        Command::Set.op_in_context(
+            "state",
+            "on|off",
+            handlers::features::state,
+            has_feature_ctx,
+        ),
+        Command::Set.op_in_context(
+            "status",
+            "active|inactive",
+            handlers::features::status,
+            has_feature_ctx,
+        ),
+        Command::Set.op_in_context(
+            "value",
+            "value",
+            handlers::features::set_value,
+            has_feature_ctx,
+        ),
+        Command::Set.args_in_context("state · status · value", has_feature_ctx),
+        // Commit / discard (only available in feature context)
+        Command::Commit.no_op_in_context(
+            "→ commit staged changes",
+            handlers::features::commit,
+            has_feature_with_pending_ctx,
+        ),
+        Command::Discard.no_op_in_context(
+            "→ discard staged changes",
+            handlers::features::discard,
+            has_feature_with_pending_ctx,
+        ),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
@@ -73,12 +139,21 @@ fn main() -> anyhow::Result<()> {
         prompter,
         hinter: ReplHinter::new(&commands),
         overlayer: GenericOverlayer { pairs: overlays },
-        completer: CommandLineCompleter::new(
+        completer: CommandLineCompleter::new({
+            let session_ref = &session;
             commands
                 .iter()
-                .map(|c| (c.cmd.to_uppercase(), &c.op))
-                .collect::<Vec<_>>(),
-        )
+                .map(|c| {
+                    // Convert function pointer fn(&Session) -> bool to closure Fn() -> bool
+                    // by capturing session_ref. This allows the completer to check context
+                    // without needing direct access to the session.
+                    let context_checker = c.has_context.map(|checker| {
+                        Box::new(move || checker(session_ref)) as Box<dyn Fn() -> bool>
+                    });
+                    (c.cmd.to_uppercase(), &c.op, context_checker)
+                })
+                .collect()
+        })
         .with_arg_completer(&arg_completer),
     };
 

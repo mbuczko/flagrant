@@ -8,8 +8,16 @@ use crate::command::Arg;
 
 use super::parser::{find_arg_by_position, split_command_line};
 
+/// A list of commands with their optional operations.
+/// Each entry is a tuple of (command_name, optional_operation, context_checker).
+pub type CommandList<'a> = Vec<(
+    String,
+    &'a Option<String>,
+    Option<Box<dyn Fn() -> bool + 'a>>,
+)>;
+
 pub struct CommandLineCompleter<'a> {
-    commands: Vec<(String, &'a Option<String>)>,
+    commands: CommandList<'a>,
     arg_completer: Option<&'a dyn AutoCompleter>,
 }
 
@@ -46,13 +54,15 @@ impl<'a> CommandLineCompleter<'a> {
     /// with the input, or returns all commands if the line is empty.
     fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
         let mut prev_command_str = "";
-
         let empty = line.trim().is_empty();
         let pairs = self
             .commands
             .iter()
-            .filter_map(|(command_str, _)| {
-                if command_str != prev_command_str && (empty || command_str.starts_with(line)) {
+            .filter_map(|(command_str, _, within_ctx)| {
+                if command_str != prev_command_str
+                    && (empty || command_str.starts_with(line))
+                    && within_ctx.as_ref().is_none_or(|f| f())
+                {
                     prev_command_str = command_str;
                     return Some(Pair {
                         display: String::default(),
@@ -80,16 +90,18 @@ impl<'a> CommandLineCompleter<'a> {
         let pairs = self
             .commands
             .iter()
-            .filter_map(|(command_str, op)| {
-                if command == command_str {
+            .filter_map(|(command_str, op, within_ctx)| {
+                if command_str.eq_ignore_ascii_case(command)
+                    && within_ctx.as_ref().is_none_or(|f| f())
+                {
                     return match op {
-                        // op starts with prefix - candidate for completion
+                        // Op starts with prefix - candidate for completion
                         Some(op) if op.starts_with(prefix) => Some(Pair {
                             display: op.to_owned(),
                             replacement: op.to_lowercase().to_owned(),
                         }),
 
-                        // there is no op or it doesn't start with op_prefix - reject
+                        // No op or it doesn't start with op_prefix - reject
                         _ => None,
                     };
                 }
@@ -134,7 +146,7 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
-    pub fn new(commands: Vec<(String, &'a Option<String>)>) -> CommandLineCompleter<'a> {
+    pub fn new(commands: CommandList<'a>) -> CommandLineCompleter<'a> {
         Self {
             commands,
             arg_completer: None,

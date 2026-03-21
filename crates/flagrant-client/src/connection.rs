@@ -1,10 +1,19 @@
 use anyhow::bail;
-use flagrant_types::{Environment, Feature, FeatureResponse, Project};
+use flagrant_types::{Environment, Feature, FeatureResponse, Project, payload::FeaturePatch};
 
 use crate::{
     http::{Auth, HttpClient},
     resource::BaseResource,
 };
+
+/// A reference to a variant that is stable within a single listing session.
+/// Committed variants are addressed by their DB id; staged additions are
+/// addressed by their position (0-based) in the pending `Add` ops list.
+#[derive(Debug, Clone)]
+pub enum VariantRef {
+    Committed(i32),
+    Staged(usize),
+}
 
 #[derive(Debug)]
 pub struct Connection {
@@ -12,6 +21,10 @@ pub struct Connection {
     pub project: Project,
     pub feature: Option<Feature>,
     pub environment: Environment,
+    pub pending: Option<FeaturePatch>,
+    /// Positional index that maps 1-based display index → VariantRef.
+    /// Invalidated whenever pending ops change.
+    pub variant_index: Vec<VariantRef>,
 }
 
 impl Connection {
@@ -64,11 +77,21 @@ impl Connection {
                 project,
                 environment,
                 feature: None,
+                pending: None,
+                variant_index: Vec::new(),
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
             _ => bail!("Neither project nor environment was found."),
         }
+    }
+
+    pub fn get_or_init_pending(&mut self) -> &mut FeaturePatch {
+        self.pending.get_or_insert_with(FeaturePatch::default)
+    }
+
+    pub fn discard_pending(&mut self) {
+        self.pending = None;
     }
 
     #[cfg(feature = "blocking")]

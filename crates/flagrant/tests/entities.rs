@@ -1,6 +1,9 @@
 use common::{create_context, create_environment, random_string};
 use flagrant::models::{feature, project, variant};
-use flagrant_types::FeatureValue;
+use flagrant_types::{
+    FeatureValue,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::common::create_feature;
@@ -57,15 +60,15 @@ async fn create_feature_with_missing_default_variant_in_other_env(
     .await
     .unwrap();
 
-    // no default variant in environment2, hence list of variants is empty even though
+    // No default variant in environment2, so the list of variants is empty even though
     // some have been created in environment1.
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
     assert!(feature.variants.is_empty());
 
-    // after adding default variant, a list consisting of default- and previously created
-    // variant should be returned.
+    // After adding a default variant, a list consisting of the default and previously created
+    // variants should be returned.
     feature::update_one(&mut conn, &environment2, &feature)
         .value(FeatureValue::build("bazz"))
         .update()
@@ -120,7 +123,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         assert!(feature.is_err())
     }
 
-    // name too long
+    // Name too long
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -346,11 +349,11 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
         .await
         .unwrap();
 
-    // variant values are common across all environments
+    // Variant values are common across all environments
     assert_eq!(variant_env1.value, "text::new-bar".parse().unwrap());
     assert_eq!(variant_env2.value, "text::new-bar".parse().unwrap());
 
-    // ...but weights are not
+    // ...but weights are not.
     assert_eq!(variant_env1.weight, 40);
     assert_eq!(variant_env2.weight, 99);
 }
@@ -499,7 +502,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .await
     .unwrap();
 
-    // update with exceeding weight should fail
+    // Update with exceeding weight should fail
     let variant = variant::create(
         &mut conn,
         &environment,
@@ -522,7 +525,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         .is_err()
     );
 
-    // default weight should retain old value
+    // Default weight should retain old value
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
@@ -579,4 +582,49 @@ async fn allow_removing_default_variant_when_no_other_variants_exist(
             .await
             .is_ok()
     );
+}
+
+#[sqlx::test]
+async fn patch_control_variant_weight_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+    let control_id = feature.get_default_variant().id;
+
+    let patch = FeaturePatch {
+        variants: vec![VariantPatchOp::SetWeight {
+            id: control_id,
+            weight: 50,
+        }],
+        ..Default::default()
+    };
+    assert!(
+        feature::apply_patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_err()
+    );
+}
+
+#[sqlx::test]
+async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+    let control_id = feature.get_default_variant().id;
+
+    let patch = FeaturePatch {
+        variants: vec![VariantPatchOp::SetValue {
+            id: control_id,
+            value: "bar".to_owned(),
+        }],
+        ..Default::default()
+    };
+    assert!(
+        feature::apply_patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_ok()
+    );
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
 }

@@ -185,15 +185,14 @@ impl<'r> Decode<'r, Sqlite> for TagList {
 
 impl fmt::Display for TagList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
+        f.write_fmt(core::format_args!(
             "{}",
             self.0
                 .iter()
                 .map(|tag| tag.name.as_str())
                 .collect::<Vec<_>>()
                 .join(",")
-        )
+        ))
     }
 }
 
