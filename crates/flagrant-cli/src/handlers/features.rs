@@ -69,8 +69,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<feature>`
 ///
-/// Fetches the feature and stores it in the session so that subsequent `VARIANT`
-/// and `SET` commands operate on it. Fails if there are uncommitted staged changes.
+/// Fetches the feature and stores it in the session so that subsequent session-aware
+/// commands, like `VARIANT` or `SET` operate on it. Fails if there are uncommitted
+/// staged changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         {
@@ -90,7 +91,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
 /// Print details of a feature.
 ///
-/// Optional args: `<feature>`
+/// Expected args: `[feature]`
 ///
 /// If a feature argument is provided, fetches and describes that feature. Otherwise
 /// describes the feature in the current context, overlaying any pending staged changes.
@@ -109,7 +110,9 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Stage a feature state change. Accepts `on` or `off`.
+/// Stage a feature state change.
+///
+/// Expected args: `on` or `off`
 pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let enabled = args
@@ -126,7 +129,9 @@ pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     bail!("Not enough arguments provided")
 }
 
-/// Stage a feature status change. Accepts `active` or `inactive`.
+/// Stage a feature status change.
+///
+/// Expected args: `active` or `inactive`
 pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let active = args
@@ -146,7 +151,9 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     bail!("Not enough arguments provided")
 }
 
-/// Stages a new value for the current feature.
+/// Stages a new value for the current feature (i.e. its control variant).
+///
+/// Expected args: `[value]`
 ///
 /// When called without a value argument, opens `$EDITOR` (falling back to `vi`) pre-filled
 /// with the current value so the user can edit it interactively.
