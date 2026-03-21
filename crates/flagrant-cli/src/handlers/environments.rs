@@ -59,6 +59,9 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
+        if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+            bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+        }
         let res = ctx.project.as_base_resource();
         let response = ctx
             .client

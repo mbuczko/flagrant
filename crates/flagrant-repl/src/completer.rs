@@ -169,8 +169,12 @@ impl Completer for CommandLineCompleter<'_> {
                 let command = args.first().unwrap().as_ref();
                 let argument = &args[arg_n];
 
-                if let Ok(candidates) =
-                    self.complete_operation(command, &argument[..offset].to_lowercase(), argument.1)
+                if n == 2
+                    && let Ok(candidates) = self.complete_operation(
+                        command,
+                        &argument[..offset].to_lowercase(),
+                        argument.1,
+                    )
                     && !candidates.1.is_empty()
                 {
                     return Ok(candidates);
