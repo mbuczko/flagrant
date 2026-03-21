@@ -1,3 +1,19 @@
+//! REPL command handlers for variant management.
+//!
+//! Each public function corresponds to a `VARIANT <op>` command:
+//!
+//! | Command            | Handler    | Description                                      |
+//! |--------------------|------------|--------------------------------------------------|
+//! | `VARIANT list`     | [`list`]   | Print variants and rebuild the positional index. |
+//! | `VARIANT add`      | [`add`]    | Stage a new variant addition.                    |
+//! | `VARIANT value`    | [`value`]  | Stage a value change for an existing variant.    |
+//! | `VARIANT weight`   | [`weight`] | Stage a weight change for an existing variant.   |
+//! | `VARIANT discard`  | [`discard`]| Drop staged ops for a single variant.            |
+//! | `VARIANT delete`   | [`delete`] | Stage a variant deletion.                        |
+//!
+//! All mutations are accumulated in [`Connection::pending`] as a [`FeaturePatch`] and
+//! only sent to the API when the user runs `COMMIT`.
+
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, VariantRef};
@@ -13,6 +29,11 @@ use crate::handlers::{
 };
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
+/// List variants for the current feature, overlaying any pending staged changes.
+///
+/// Committed variants are shown first (sorted ascending by id), followed by staged
+/// additions. Modified, deleted, and auto-adjusted rows are colour-coded. Also
+/// rebuilds the positional variant index used by other commands.
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -185,6 +206,12 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Stage a new variant addition with a given weight and value.
+///
+/// Expects args: `<weight> [value]`
+///
+/// If value is omitted, opens `$EDITOR` for interactive input. Fails if the
+/// new weight would push total non-control weight over 100%.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -227,6 +254,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Stage a value change for an existing variant identified by its display index.
+///
+/// Expected args: `[value]`
+///
+/// If the value argument is omitted, opens `$EDITOR` pre-filled with the current
+/// value so the user can edit it interactively.
 pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -247,6 +280,12 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Stage a weight change for an existing variant identified by its display index.
+///
+/// Expected args: `<weight>`
+///
+/// Refuses to change the control variant's weight (it is auto-adjusted) and rejects
+/// values that would push total non-control weight over 100%.
 pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -292,9 +331,12 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Discard a single pending change for the variant at the given display index:
-///  - for committed variants: removes any SetValue/SetWeight/Delete ops for that id
-///  - for staged additions: removes the Add op entirely
+/// Discard a single pending change for the variant at the given display index.
+///
+/// Expected args: `<index>`
+///
+/// For committed variants removes any SetValue/SetWeight/Delete ops for that id.
+/// For staged additions removes the Add op entirely.
 pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -318,7 +360,14 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     Ok(())
 }
 
-pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// Stage a deletion for the variant at the given display index.
+///
+/// Expected args: `<index>`
+///
+/// For committed variants, clears any pending SetValue/SetWeight ops for that id and
+/// appends a Delete op. For staged additions, delegates to [`discard`] to remove the
+/// Add op entirely. Refuses to delete the control variant.
+pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {

@@ -1,3 +1,21 @@
+//! REPL command handlers for feature management.
+//!
+//! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
+//! plus the top-level `COMMIT` and `DISCARD` commands:
+//!
+//! | Command              | Handler       | Description                                          |
+//! |----------------------|---------------|------------------------------------------------------|
+//! | `FEATURE list`       | [`list`]      | List features in the current environment.            |
+//! | `FEATURE add`        | [`add`]       | Create a new feature with a default value.           |
+//! | `FEATURE use`        | [`r#use`]     | Switch into a feature context.                       |
+//! | `FEATURE describe`   | [`describe`]  | Print details of a feature.                          |
+//! | `FEATURE delete`     | [`delete`]    | Delete a feature.                                    |
+//! | `SET state`          | [`state`]     | Stage a feature state change (`on` / `off`).         |
+//! | `SET status`         | [`status`]    | Stage a feature status change (`active`/`inactive`). |
+//! | `SET value`          | [`set_value`] | Stage a default value change.                        |
+//! | `COMMIT`             | [`commit`]    | Send all staged changes to the API.                  |
+//! | `DISCARD`            | [`discard`]   | Drop all staged changes for the current feature.     |
+
 use std::{borrow::Cow, collections::BTreeSet, ops::Deref};
 
 use anyhow::bail;
@@ -14,7 +32,13 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
 
-/// Adds a new feature - inactive and OFF by default
+/// Create a new feature in the current environment.
+///
+/// Expected args: `<feature> [value] [description]`
+///
+/// `value` is parsed as a typed [`FeatureValue`] (e.g. `bool::true`, `string::hello`);
+/// if omitted or unparseable it defaults to an empty string value. The feature is
+/// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();
@@ -41,7 +65,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     bail!("No feature name provided.")
 }
 
-/// Switches to the other feature.
+/// Switch into a feature context by name.
+///
+/// Expected args: `<feature>`
+///
+/// Fetches the feature and stores it in the session so that subsequent `VARIANT`
+/// and `SET` commands operate on it. Fails if there are uncommitted staged changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         {
@@ -59,6 +88,12 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     bail!("No feature name provided.")
 }
 
+/// Print details of a feature.
+///
+/// Optional args: `<feature>`
+///
+/// If a feature argument is provided, fetches and describes that feature. Otherwise
+/// describes the feature in the current context, overlaying any pending staged changes.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         fetch_feature(name, session)?.describe(None);
@@ -74,7 +109,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Switches the feature on/off
+/// Stage a feature state change. Accepts `on` or `off`.
 pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let enabled = args
@@ -91,7 +126,7 @@ pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     bail!("Not enough arguments provided")
 }
 
-/// Toggles the feature status - active/inactive
+/// Stage a feature status change. Accepts `active` or `inactive`.
 pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let active = args
@@ -186,7 +221,10 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     Ok(())
 }
 
-/// Discards all staged changes for the current feature.
+/// Drop all staged changes for the current feature.
+///
+/// Must be called without arguments; passing any argument is an error that hints
+/// at the more targeted `VARIANT discard <index>` command.
 pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if !args.is_empty() {
         bail!(
@@ -202,7 +240,10 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     Ok(())
 }
 
-/// Lists all features in a project.
+/// List features in the current environment.
+///
+/// Accepts optional filter arguments of the form `tag:a,b`, `status:active`,
+/// and `state:on`, plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.environment.as_base_resource();
@@ -226,7 +267,9 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Deletes existing feature.
+/// Delete a feature by name.
+///
+/// Looks up the feature by name to obtain its id, then issues a DELETE request.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();

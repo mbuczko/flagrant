@@ -1,3 +1,13 @@
+//! REPL command handlers for environment management.
+//!
+//! Each public function corresponds to an `ENV <op>` command:
+//!
+//! | Command       | Handler    | Description                              |
+//! |---------------|------------|------------------------------------------|
+//! | `ENV add`     | [`add`]    | Create a new environment in the project. |
+//! | `ENV list`    | [`list`]   | Print all environments in the project.   |
+//! | `ENV use`     | [`r#use`]  | Switch the active environment.           |
+
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
@@ -6,7 +16,9 @@ use flagrant_types::{Environment, payload::EnvRequestPayload};
 
 use crate::printer::tabular::Tabular;
 
-/// Adds a new Environment
+/// Create a new environment in the current project.
+///
+/// Expects args: `<name> [description]`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();
@@ -25,7 +37,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     bail!("No environment name provided.")
 }
 
-/// Lists all environments
+/// List all environments in the current project.
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
@@ -38,7 +50,12 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Changes current environment in a session
+/// Switch the active environment by name.
+///
+/// Expects args: `<environment>`
+///
+/// Fetches the environment from the API and stores it in the session so that
+/// subsequent `FEATURE` commands operate within it.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();

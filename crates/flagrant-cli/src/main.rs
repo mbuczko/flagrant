@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::add,
             has_feature_ctx,
         ),
-        Command::Variant.op_in_context("delete", "index", handlers::variants::del, has_feature_ctx),
+        Command::Variant.op_in_context("delete", "index", handlers::variants::delete, has_feature_ctx),
         Command::Variant.op_in_context(
             "discard",
             "index",
