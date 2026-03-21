@@ -13,7 +13,6 @@ use rustyline::overlay::GenericOverlayer;
 mod command;
 mod completer;
 mod handlers;
-mod index;
 mod printer;
 
 const API_HOST: &str = "http://localhost:3030";

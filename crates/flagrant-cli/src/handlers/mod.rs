@@ -1,6 +1,7 @@
 pub mod environments;
 pub mod features;
 pub mod variants;
+pub(crate) mod internal;
 
 /// Opens `$EDITOR` (falling back to `vi`) pre-filled with `content` and returns the
 /// trimmed result after the editor exits. The temp file is removed automatically.

@@ -2,10 +2,15 @@ use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{FeatureValue, Variant, payload::VariantPatchOp};
+use flagrant_types::{
+    Feature, FeatureValue, Variant,
+    payload::{FeaturePatch, VariantPatchOp},
+};
 
-use crate::handlers::edit_in_editor;
-use crate::index;
+use crate::handlers::{
+    edit_in_editor,
+    internal::{index, stage},
+};
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -97,7 +102,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         // For the control variant, compute the auto-adjusted weight based on pending ops.
         // The control variant cannot have its own pending modification - it is always auto-adjusted.
         let adjusted_control_weight: Option<u8> = if var.is_control() {
-            let non_control_total = index::total_non_control_weight(
+            let non_control_total = total_non_control_weight(
                 ctx.feature.as_ref().unwrap(),
                 ctx.pending.as_ref(),
                 &VariantRef::Staged(usize::MAX), // no substitution – use all pending weights as-is
@@ -200,7 +205,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     }
 
     let total = weight as u32
-        + index::total_non_control_weight(
+        + total_non_control_weight(
             ctx.feature.as_ref().unwrap(),
             ctx.pending.as_ref(),
             &VariantRef::Staged(usize::MAX),
@@ -229,15 +234,15 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx, &ctx)?,
+        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let raw = match args.get(2) {
         Some(v) => v.to_string(),
-        None => edit_in_editor(&index::current_variant_value(&variant_ref, &ctx))?,
+        None => edit_in_editor(&variant_value(&variant_ref, &ctx))?,
     };
 
-    index::stage_value(ctx.get_or_init_pending(), &variant_ref, raw)?;
+    stage::stage_value(ctx.get_or_init_pending(), &variant_ref, raw)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -249,7 +254,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx, &ctx)?,
+        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided."),
     };
     let new_weight = match args.get(2) {
@@ -272,7 +277,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         }
     }
 
-    let total = index::total_non_control_weight(
+    let total = total_non_control_weight(
         ctx.feature.as_ref().unwrap(),
         ctx.pending.as_ref(),
         &variant_ref,
@@ -282,7 +287,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
-    index::stage_weight(ctx.get_or_init_pending(), &variant_ref, new_weight)?;
+    stage::stage_weight(ctx.get_or_init_pending(), &variant_ref, new_weight)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -297,7 +302,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx, &ctx)?,
+        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided. Use an index or 'all'."),
     };
     let pending = match ctx.pending.as_mut() {
@@ -308,7 +313,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     };
 
-    index::discard_pending(pending, &variant_ref);
+    stage::discard(pending, &variant_ref);
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -320,7 +325,7 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Not within a feature context.");
     }
     let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx, &ctx)?,
+        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided."),
     };
     if let VariantRef::Committed(id) = &variant_ref {
@@ -356,4 +361,102 @@ pub fn del(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     index::rebuild(&mut ctx);
     Ok(())
+}
+
+/// Computes the total weight of all non-control variants, applying pending overrides and
+/// substituting `new_weight` for the variant identified by `variant_ref`.
+fn total_non_control_weight(
+    feature: &Feature,
+    pending: Option<&FeaturePatch>,
+    variant_ref: &VariantRef,
+    new_weight: u8,
+) -> u32 {
+    let deleted_ids: std::collections::HashSet<i32> = pending
+        .map(|p| {
+            p.variants
+                .iter()
+                .filter_map(|op| match op {
+                    VariantPatchOp::Delete { id } => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let committed: u32 = feature
+        .variants
+        .iter()
+        .filter(|v| !v.is_control() && !deleted_ids.contains(&v.id))
+        .map(|v| {
+            (match variant_ref {
+                VariantRef::Committed(id) if *id == v.id => new_weight,
+                _ => pending
+                    .and_then(|p| {
+                        p.variants.iter().find_map(|op| match op {
+                            VariantPatchOp::SetWeight { id, weight } if *id == v.id => {
+                                Some(*weight)
+                            }
+                            _ => None,
+                        })
+                    })
+                    .unwrap_or(v.weight),
+            }) as u32
+        })
+        .sum();
+
+    let staged: u32 = pending
+        .map(|p| {
+            p.variants
+                .iter()
+                .enumerate()
+                .filter(|(_, op)| matches!(op, VariantPatchOp::Add { .. }))
+                .map(|(i, op)| match op {
+                    VariantPatchOp::Add { weight, .. } => match variant_ref {
+                        VariantRef::Staged(pos) if *pos == i => new_weight as u32,
+                        _ => *weight as u32,
+                    },
+                    _ => 0,
+                })
+                .sum()
+        })
+        .unwrap_or(0);
+
+    committed + staged
+}
+
+/// Returns the current bare value (without type prefix) for a variant, used to pre-fill the
+/// editor. For committed variants, prefers any already-staged `SetValue` op; for staged
+/// (Add) variants, returns the value from the pending `Add` op.
+fn variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
+    match variant_ref {
+        VariantRef::Committed(id) => {
+            let staged = ctx.pending.as_ref().and_then(|p| {
+                p.variants.iter().find_map(|op| match op {
+                    VariantPatchOp::SetValue { id: oid, value } if oid == id => Some(value.clone()),
+                    _ => None,
+                })
+            });
+            staged.unwrap_or_else(|| {
+                ctx.feature
+                    .as_ref()
+                    .and_then(|f| f.variants.iter().find(|v| v.id == *id))
+                    .map(|v| v.value.decompose().1.to_owned())
+                    .unwrap_or_default()
+            })
+        }
+        VariantRef::Staged(staged_pos) => ctx
+            .pending
+            .as_ref()
+            .and_then(|p| {
+                p.variants
+                    .iter()
+                    .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
+                    .nth(*staged_pos)
+                    .and_then(|op| match op {
+                        VariantPatchOp::Add { value, .. } => Some(value.clone()),
+                        _ => None,
+                    })
+            })
+            .unwrap_or_default(),
+    }
 }
