@@ -28,6 +28,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             EnvRequestPayload {
                 name: name.to_string(),
                 description: args.get(2).map(|d| d.to_string()),
+                base_env_id: None,
             },
         )?;
 

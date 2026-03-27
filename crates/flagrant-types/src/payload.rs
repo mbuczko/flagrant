@@ -31,6 +31,7 @@ impl FeaturePatch {
 pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
+    pub base_env_id: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

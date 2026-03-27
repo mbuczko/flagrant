@@ -26,6 +26,7 @@ pub async fn create_environment(
         project,
         format!("ENV_{}", random_string(32)),
         Some("Lorem ipsum".to_owned()),
+        None,
     )
     .await
     .unwrap()
