@@ -41,7 +41,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("No feature name provided.");
     }
 
-    let default = ctx.feature.as_ref().unwrap().get_default_value();
     let variants: &[Variant] = &ctx.feature.as_ref().unwrap().variants;
     let ops: &[VariantPatchOp] = ctx
         .pending
@@ -84,7 +83,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .collect();
 
     // Collect value/weight overrides by id
-    let mut value_overrides: std::collections::HashMap<i32, Option<String>> =
+    let mut value_overrides: std::collections::HashMap<i32, Option<FeatureValue>> =
         std::collections::HashMap::new();
     let mut weight_overrides: std::collections::HashMap<i32, Option<u8>> =
         std::collections::HashMap::new();
@@ -101,12 +100,11 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
     }
 
-    // Staged Add ops - collect (ops-vec-index, value, weight) in staging order
-    let staged_adds: Vec<(usize, &str, u8)> = ops
+    // Staged Add ops - collect (value, weight) in staging order
+    let staged_adds: Vec<(&FeatureValue, u8)> = ops
         .iter()
-        .enumerate()
-        .filter_map(|(i, op)| match op {
-            VariantPatchOp::Add { value, weight } => Some((i, value.as_str(), *weight)),
+        .filter_map(|op| match op {
+            VariantPatchOp::Add { value, weight } => Some((value, *weight)),
             _ => None,
         })
         .collect();
@@ -116,7 +114,8 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     // Committed variants (with pending modifications overlaid).
     for (display_idx, var) in sorted_variants.iter().enumerate() {
         let is_deleted = deleted_ids.contains(&var.id);
-        let new_value = value_overrides.get(&var.id).and_then(|v| v.as_deref());
+        let new_value: Option<&FeatureValue> =
+            value_overrides.get(&var.id).and_then(|v| v.as_ref());
         let new_weight = weight_overrides.get(&var.id).and_then(|w| *w);
         let is_modified = new_value.is_some() || new_weight.is_some();
 
@@ -142,7 +141,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         let weight = new_weight.or(adjusted_control_weight).unwrap_or(var.weight);
         let weight_str = bar(weight, 10);
         let value_str = match new_value {
-            Some(v) => var.value.clone_with(v).to_string(),
+            Some(v) => v.to_string(),
             None => var.value.to_string(),
         };
         let idx_str = if var.is_control() {
@@ -182,16 +181,13 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         });
     }
 
-    for (staged_pos, (_, value, weight)) in staged_adds.iter().enumerate() {
+    for (staged_pos, (value, weight)) in staged_adds.iter().enumerate() {
         let display_idx = committed_count + staged_pos + 1;
-        let fv = value
-            .parse::<FeatureValue>()
-            .unwrap_or_else(|_| default.clone_with(value));
 
         rows.push(VariantRow {
             index: display_idx.to_string().green().to_string(),
             weight: bar(*weight, 10).green().to_string(),
-            value: fv.to_string().green().to_string(),
+            value: value.to_string().green().to_string(),
             state: Some("added".green().to_string()),
         });
     }
@@ -242,14 +238,16 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
+    println!("Staged: variant add weight={weight} value={value}");
+
+    let fv: FeatureValue = value
+        .parse()
+        .unwrap_or_else(|_| FeatureValue::build(&value));
+
     ctx.get_or_init_pending()
         .variants
-        .push(VariantPatchOp::Add {
-            value: value.clone(),
-            weight,
-        });
+        .push(VariantPatchOp::Add { value: fv, weight });
 
-    println!("Staged: variant add weight={weight} value={value}");
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -272,10 +270,14 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     };
     let raw = match args.get(2) {
         Some(v) => v.to_string(),
-        None => edit_in_editor(&variant_value(&variant_ref, &ctx))?,
+        None => edit_in_editor(current_variant_value(&variant_ref, &ctx).decompose().1)?,
     };
+    let current = current_variant_value(&variant_ref, &ctx);
+    let fv = raw
+        .parse::<FeatureValue>()
+        .unwrap_or_else(|_| current.clone_with(raw.trim()));
 
-    stage::stage_value(ctx.get_or_init_pending(), &variant_ref, raw)?;
+    stage::stage_value(ctx.get_or_init_pending(), &variant_ref, fv)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -473,10 +475,10 @@ fn total_non_control_weight(
     committed + staged
 }
 
-/// Returns the current bare value (without type prefix) for a variant, used to pre-fill the
-/// editor. For committed variants, prefers any already-staged `SetValue` op; for staged
-/// (Add) variants, returns the value from the pending `Add` op.
-fn variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
+/// Returns the current `FeatureValue` for a variant, used as a type fallback when staging
+/// a value change. For committed variants, prefers any already-staged `SetValue` op; for
+/// staged (Add) variants, returns the value from the pending `Add` op.
+fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> FeatureValue {
     match variant_ref {
         VariantRef::Committed(id) => {
             let staged = ctx.pending.as_ref().and_then(|p| {
@@ -489,7 +491,7 @@ fn variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
                 ctx.feature
                     .as_ref()
                     .and_then(|f| f.variants.iter().find(|v| v.id == *id))
-                    .map(|v| v.value.decompose().1.to_owned())
+                    .map(|v| v.value.clone())
                     .unwrap_or_default()
             })
         }
@@ -509,3 +511,4 @@ fn variant_value(variant_ref: &VariantRef, ctx: &Connection) -> String {
             .unwrap_or_default(),
     }
 }
+

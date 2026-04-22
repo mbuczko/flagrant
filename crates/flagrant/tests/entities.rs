@@ -613,7 +613,7 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
     let patch = FeaturePatch {
         variants: vec![VariantPatchOp::SetValue {
             id: control_id,
-            value: "bar".to_owned(),
+            value: flagrant_types::FeatureValue::build("bar"),
         }],
         ..Default::default()
     };

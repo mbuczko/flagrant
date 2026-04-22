@@ -244,11 +244,11 @@ impl FeatureValue {
     }
     pub fn build(value: &str) -> Self {
         let val = value.trim();
-        match val.chars().next() {
+        Self::from_str(val).unwrap_or_else(|_| match val.chars().next() {
             Some('{') => Self::Json(val.to_owned()),
             Some('[') => Self::Toml(val.to_owned()),
             _ => Self::Text(val.to_owned()),
-        }
+        })
     }
     pub fn clone_with(&self, value: &str) -> Self {
         let (typ, _) = self.decompose();

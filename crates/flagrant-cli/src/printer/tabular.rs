@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Environment, Feature, Variant,
+    Environment, Feature, FeatureValue, Variant,
     payload::{FeaturePatch, VariantPatchOp},
 };
 
@@ -115,10 +115,10 @@ impl Tabular for Feature {
             })
             .collect();
 
-        let value_overrides: std::collections::HashMap<i32, &str> = ops
+        let value_overrides: std::collections::HashMap<i32, &FeatureValue> = ops
             .iter()
             .filter_map(|op| match op {
-                VariantPatchOp::SetValue { id, value } => Some((*id, value.as_str())),
+                VariantPatchOp::SetValue { id, value } => Some((*id, value)),
                 _ => None,
             })
             .collect();
@@ -131,10 +131,10 @@ impl Tabular for Feature {
             })
             .collect();
 
-        let staged_adds: Vec<(&str, u8)> = ops
+        let staged_adds: Vec<(&FeatureValue, u8)> = ops
             .iter()
             .filter_map(|op| match op {
-                VariantPatchOp::Add { value, weight } => Some((value.as_str(), *weight)),
+                VariantPatchOp::Add { value, weight } => Some((value, *weight)),
                 _ => None,
             })
             .collect();
@@ -174,7 +174,7 @@ impl Tabular for Feature {
             };
 
             let value_str = match new_value {
-                Some(nv) => v.value.clone_with(nv).to_string(),
+                Some(nv) => nv.to_string(),
                 None => v.value.to_string(),
             };
 
@@ -198,11 +198,8 @@ impl Tabular for Feature {
             } else {
                 "├╴"
             };
-            let fv = value
-                .parse::<flagrant_types::FeatureValue>()
-                .unwrap_or_else(|_| self.get_default_value().clone_with(value));
             variant_lines.push(
-                format!("{}{} {}", connector, bar(*weight, 10), fv)
+                format!("{}{} {}", connector, bar(*weight, 10), value)
                     .green()
                     .to_string(),
             );

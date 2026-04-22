@@ -6,13 +6,13 @@
 
 use anyhow::bail;
 use flagrant_client::connection::VariantRef;
-use flagrant_types::payload::{FeaturePatch, VariantPatchOp};
+use flagrant_types::{FeatureValue, payload::{FeaturePatch, VariantPatchOp}};
 
 /// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
-    value: String,
+    value: FeatureValue,
 ) -> anyhow::Result<()> {
     let ops = &mut pending.variants;
     match variant_ref {

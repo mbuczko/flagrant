@@ -286,7 +286,7 @@ pub async fn apply_patch(
     }
 
     // Group SetValue/SetWeight ops by variant id, fetch current state once, then update
-    let mut update_map: HashMap<i32, (Option<String>, Option<u8>)> = HashMap::new();
+    let mut update_map: HashMap<i32, (Option<FeatureValue>, Option<u8>)> = HashMap::new();
     for op in updates {
         match op {
             VariantPatchOp::SetValue { id, value } => {
@@ -300,10 +300,7 @@ pub async fn apply_patch(
     }
     for (id, (new_value, new_weight)) in update_map {
         let var = variant::get_by_id(&mut tx, environment, id).await?;
-        let value = match new_value {
-            Some(v) => v.parse().unwrap_or_else(|_| var.value.clone_with(&v)),
-            None => var.value.clone(),
-        };
+        let value = new_value.unwrap_or_else(|| var.value.clone());
         let weight = new_weight.unwrap_or(var.weight);
 
         // The control variant cannot be modified at the variant level.
@@ -327,10 +324,7 @@ pub async fn apply_patch(
     // Apply adds
     for op in adds {
         if let VariantPatchOp::Add { value, weight } = op {
-            let fv = value
-                .parse()
-                .unwrap_or_else(|_| feature.get_default_value().clone_with(&value));
-            variant::create(&mut tx, environment, feature, fv, weight).await?;
+            variant::create(&mut tx, environment, feature, value, weight).await?;
         }
     }
 

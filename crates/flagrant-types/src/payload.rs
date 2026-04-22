@@ -4,8 +4,8 @@ use crate::{Feature, FeatureValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VariantPatchOp {
-    Add { value: String, weight: u8 },
-    SetValue { id: i32, value: String },
+    Add { value: FeatureValue, weight: u8 },
+    SetValue { id: i32, value: FeatureValue },
     SetWeight { id: i32, weight: u8 },
     Delete { id: i32 },
 }
