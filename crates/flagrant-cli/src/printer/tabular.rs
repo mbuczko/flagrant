@@ -256,21 +256,6 @@ pub struct VariantRow {
     pub state: Option<String>,
 }
 
-impl VariantRow {
-    pub fn committed(index: usize, var: &Variant) -> Self {
-        VariantRow {
-            index: if var.is_control() {
-                format!("{}★", index)
-            } else {
-                index.to_string()
-            },
-            weight: bar(var.weight, 10),
-            value: var.value.to_string(),
-            state: None,
-        }
-    }
-}
-
 /// Render a variant listing table, consuming the rows.
 ///
 /// If any row carries a `state`, a STATE column is added for all rows.
