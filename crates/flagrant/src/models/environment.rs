@@ -44,6 +44,15 @@ pub async fn create(
 
 /// Copies all feature variants from `base_env` into `new_env`.
 ///
+/// A newly created environment has no variant data of its own, so without cloning every
+/// feature would appear value-less and all traffic would fall back to undefined behaviour.
+/// By inheriting from `base_env` the new environment starts in a known, valid state -
+/// identical distribution weights and control values that can tuned lated independently
+/// without affecting other environments.
+///
+/// The entire operation runs inside a single transaction so that a feature added concurrently
+/// between the snapshot read and the writes does not produce a partially-cloned environment.
+///
 /// For each feature in the project the function:
 /// 1. Creates a control variant in `new_env` with the same value as in `base_env`.
 /// 2. Inserts weight entries for every non-control variant using the weights from `base_env`.
