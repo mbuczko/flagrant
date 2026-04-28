@@ -81,8 +81,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             }
         }
         let feature = fetch_feature(name, session)?;
-
         feature.describe(None);
+
         session.context.write().unwrap().feature = Some(feature);
         return Ok(());
     }
