@@ -14,7 +14,6 @@ pub enum VariantPatchOp {
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_active: Option<bool>,
-    pub value: Option<FeatureValue>,
     pub variants: Vec<VariantPatchOp>,
 }
 
@@ -22,7 +21,6 @@ impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
         self.is_enabled.is_none()
             && self.is_active.is_none()
-            && self.value.is_none()
             && self.variants.is_empty()
     }
 }

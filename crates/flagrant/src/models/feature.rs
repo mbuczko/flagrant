@@ -144,6 +144,7 @@ pub async fn get_by_id(
 }
 
 /// Returns feature with exact `name` or Error if no feature was found.
+///
 /// Features names are unique therefore at most one feature is returned.
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
@@ -166,6 +167,7 @@ pub async fn get_by_name(
 }
 
 /// Returns features with name starting by given `prefix`.
+///
 /// For performance reasons each feature is returned with its control variant only.
 pub async fn get_by_prefix(
     conn: &mut SqliteConnection,
@@ -184,6 +186,7 @@ pub async fn get_by_prefix(
 }
 
 /// Returns all features for given `environment`.
+///
 /// For performance reasons each feature is returned with its control variant only.
 pub async fn get_all(
     conn: &mut SqliteConnection,
@@ -246,7 +249,7 @@ pub async fn bump_up_accumulators(
 ///
 /// Operations are applied in the following order to ensure weight constraints remain
 /// satisfiable throughout the transaction:
-/// 1. Feature-level property changes (is_enabled, is_active, value)
+/// 1. Feature-level property changes (is_enabled, is_active)
 /// 2. Variant deletes (free up weight)
 /// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
 /// 4. Variant adds (consume weight)
@@ -269,10 +272,6 @@ pub async fn apply_patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
     }
-    if let Some(value) = patch.value {
-        variant::create_control(&mut tx, environment, feature, value).await?;
-    }
-
     // Partition variant ops: deletes first, then updates, then adds
     let (deletes, rest): (Vec<_>, Vec<_>) = patch
         .variants
@@ -342,6 +341,11 @@ pub async fn apply_patch(
     Ok(())
 }
 
+/// Permanently deletes a feature and all of its variants within a single transaction.
+///
+/// Variants must be removed before the feature row itself due to foreign-key constraints.
+/// Non-control variants are deleted first; the control variant is deleted last because
+/// the backend rejects control-variant deletion while other variants still exist.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
