@@ -70,7 +70,14 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         if let Ok(env) = response {
             println!("Switching environment → {}", env.name.bold());
+            let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
             ctx.environment = env;
+            drop(ctx);
+
+            if let Some(name) = feature_name {
+                let args = [Arg("", 0), Arg(name.as_str(), 1)];
+                super::features::r#use(&args, session)?;
+            }
             return Ok(());
         }
         bail!("No such an environment.")
