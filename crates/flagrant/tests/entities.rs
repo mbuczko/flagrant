@@ -43,6 +43,33 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
+async fn create_feature_propagates_default_variant_to_existing_envs(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let value = FeatureValue::build("foo");
+
+    let feature = feature::create(
+        &mut conn,
+        &environment1,
+        "propagation_test".to_owned(),
+        value.clone(),
+        true,
+        true,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(feature.get_default_value(), &value);
+
+    let feature_env2 = feature::get_by_id(&mut conn, &environment2, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature_env2.get_default_value(), &value);
+}
+
+#[sqlx::test]
 async fn create_feature_with_missing_default_variant_in_other_env(
     mut conn: PoolConnection<Sqlite>,
 ) {
@@ -60,15 +87,14 @@ async fn create_feature_with_missing_default_variant_in_other_env(
     .await
     .unwrap();
 
-    // No default variant in environment2, so the list of variants is empty even though
-    // some have been created in environment1.
+    // Default variant is now propagated to environment2 at feature creation time.
+    // The non-control "bar" variant (NULL env_id) is also visible with weight 0.
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
-    assert!(feature.variants.is_empty());
+    assert_eq!(feature.variants.len(), 2);
 
-    // After adding a default variant, a list consisting of the default and previously created
-    // variants should be returned.
+    // Updating the default value in environment2 does not affect environment1.
     feature::update_one(&mut conn, &environment2, &feature)
         .value(FeatureValue::build("bazz"))
         .update()

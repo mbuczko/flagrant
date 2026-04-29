@@ -28,10 +28,15 @@ impl FeaturePatch {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectRequestPayload {
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
-    pub base_env_id: Option<i32>,
+    pub base_env: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

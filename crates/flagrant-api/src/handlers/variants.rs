@@ -54,7 +54,7 @@ pub async fn list(
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-    let variants = variant::get_all(&mut conn, &env, feature.id).await?;
+    let variants = variant::get_for_feature(&mut conn, &env, feature.id).await?;
 
     Ok(Json(variants))
 }

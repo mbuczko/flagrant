@@ -11,34 +11,48 @@ use super::{feature, variant};
 #[queries = "resources/db/queries/environments.sql"]
 struct SQLEnvironments {}
 
-/// Creates a new environment and optionally clones variants from a base environment.
+/// Creates a new environment, inheriting feature variants from a base environment.
 ///
-/// `base_env_id` is optional for the first two environments in a project (there is nothing
-/// meaningful to inherit from), but required for every subsequent one. When provided, all
-/// features in the project will have their control variant value and non-control variant
-/// weights copied from `base_env_id` into the new environment.
+/// The base environment is resolved as follows:
+/// - If `base_env` name is provided, it is used explicitly.
+/// - If there is exactly one existing environment, it is used automatically.
+/// - If there are two or more existing environments and no `base_env` is given, an error
+///   is returned — the caller must be explicit about which environment to inherit from.
+/// - On the very first environment in a project there is nothing to inherit, so no
+///   cloning takes place.
+///
+/// When a base is resolved, all features will have their control variant value and
+/// non-control variant weights copied from the base into the new environment.
 pub async fn create(
     conn: &mut SqliteConnection,
     project: &Project,
     name: String,
     description: Option<String>,
-    base_env_id: Option<i32>,
+    base_env: Option<String>,
 ) -> anyhow::Result<Environment> {
-    let existing = get_by_project(conn, project).await?;
-    if existing.len() >= 2 && base_env_id.is_none() {
-        bail!("base_env_id is required when creating a third or later environment");
-    }
+    let mut tx = conn.begin().await?;
+
+    let existing = get_by_project(&mut tx, project).await?;
+
+    let base = match (base_env, existing.len()) {
+        (Some(name), _) => Some(get_by_name(&mut tx, project, name).await?),
+        (None, 1) => existing.into_iter().next(),
+        (None, n) if n >= 2 => {
+            bail!("base_env is required when creating a third or later environment")
+        }
+        _ => None,
+    };
 
     let env =
-        SQLEnvironments::create_environment(&mut *conn, params![project.id, name, description])
+        SQLEnvironments::create_environment(&mut *tx, params![project.id, name, description])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e))?;
 
-    if let Some(base_env_id) = base_env_id {
-        let base_env = get_by_id(conn, base_env_id).await?;
-        clone_variants_from_env(conn, &base_env, &env).await?;
+    if let Some(base) = base {
+        clone_variants_from_env(&mut tx, &base, &env).await?;
     }
 
+    tx.commit().await?;
     Ok(env)
 }
 
@@ -70,7 +84,7 @@ async fn clone_variants_from_env(
         variant::create_control(&mut tx, new_env, feat, control_value).await?;
 
         // Fetch all variants (including non-control) from base_env for this feature.
-        let all_variants = variant::get_all(&mut tx, base_env, feat.id)
+        let all_variants = variant::get_for_feature(&mut tx, base_env, feat.id)
             .await
             .unwrap_or_default();
 

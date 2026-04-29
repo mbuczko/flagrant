@@ -160,7 +160,7 @@ pub async fn get_by_identity<T: AsRef<str>>(
 
 /// Returns all variants of given feature. Variants are returned along with their values and weights.
 /// Returns Error when no feature value has been set.
-pub async fn get_all(
+pub async fn get_for_feature(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,

@@ -1,6 +1,6 @@
 use axum::{Json, extract::Path};
 use flagrant::models::project;
-use flagrant_types::Project;
+use flagrant_types::{Environment, Project, payload::ProjectRequestPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -11,4 +11,13 @@ pub async fn fetch(
     let project = project::get_by_id(&mut conn, project_id).await?;
 
     Ok(Json(project))
+}
+
+pub async fn create(
+    DbConnection(mut conn): DbConnection,
+    Json(payload): Json<ProjectRequestPayload>,
+) -> Result<Json<(Project, Environment)>, ServiceError> {
+    let (project, env) = project::create_with_environment(&mut conn, payload.name, None).await?;
+
+    Ok(Json((project, env)))
 }

@@ -11,6 +11,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
     Router::new()
         // Projects
         .route("/projects/:project_id", get(projects::fetch))
+        .route("/projects/", post(projects::create))
         // Environments
         .route("/projects/:project_id/envs", get(environments::list))
         .route("/projects/:project_id/envs", post(environments::create))

@@ -21,12 +21,20 @@ pub async fn create_environment(
     conn: &mut PoolConnection<Sqlite>,
     project: &Project,
 ) -> Environment {
+    create_environment_from(conn, project, None).await
+}
+
+pub async fn create_environment_from<'a>(
+    conn: &mut PoolConnection<Sqlite>,
+    project: &Project,
+    base_env: impl Into<Option<&'a Environment>>,
+) -> Environment {
     environment::create(
         conn,
         project,
         format!("ENV_{}", random_string(32)),
         Some("Lorem ipsum".to_owned()),
-        None,
+        base_env.into().map(|base: &Environment| base.name.clone()),
     )
     .await
     .unwrap()

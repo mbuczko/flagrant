@@ -4,7 +4,7 @@ use crate::errors::FlagrantError;
 use std::collections::HashMap;
 
 use flagrant_types::{
-    Environment, Feature, FeatureValue, TagList, Variant,
+    Environment, Feature, FeatureValue, Project, TagList, Variant,
     payload::{FeaturePatch, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
@@ -82,9 +82,10 @@ impl<'a> FeatureUpdate<'a> {
 
 /// Creates a new feature with given `name` and `value`.
 ///
-/// Feature value is stored as environment-specific control variant which means
-/// it may be different in every other environment and any change on value impacts
-/// given environment only.
+/// The default value is seeded as a control variant in every environment that already
+/// exists in the project, so the feature is immediately usable everywhere. Each
+/// environment owns its control variant independently — subsequent value changes
+/// affect only the environment they are applied to.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -102,9 +103,18 @@ pub async fn create(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
-    // Default value gets turned into a control variant.
-    let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
-    feature.variants.push(variant);
+    let project = Project {
+        id: environment.project_id,
+        ..Default::default()
+    };
+
+    // Default value gets turned into a control variant for all existing environments.
+    for env in &super::environment::get_by_project(&mut tx, &project).await? {
+        let variant = variant::create_control(&mut tx, env, &feature, value.clone()).await?;
+        if env.id == environment.id {
+            feature.variants.push(variant);
+        }
+    }
 
     feature.validate()?;
     tx.commit().await?;
@@ -125,7 +135,7 @@ pub async fn get_by_id(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(&mut tx, environment, feature.id)
+    let variants = variant::get_for_feature(&mut tx, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -148,7 +158,7 @@ pub async fn get_by_name(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(conn, environment, feature.id)
+    let variants = variant::get_for_feature(conn, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -338,7 +348,7 @@ pub async fn delete(
     feature: &Feature,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let mut vars = variant::get_all(&mut tx, environment, feature.id).await?;
+    let mut vars = variant::get_for_feature(&mut tx, environment, feature.id).await?;
 
     // Sort variants so that control ones go last in the vector.
     // This is required because of the strict deletion policy - control variants

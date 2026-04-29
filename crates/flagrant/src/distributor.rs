@@ -14,7 +14,7 @@ pub async fn distribute(
     feature_id: i32,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
-    let variants = variant::get_all(&mut tx, environment, feature_id).await?;
+    let variants = variant::get_for_feature(&mut tx, environment, feature_id).await?;
 
     // There should always be at least one variant with a control value
     let variant = variants
