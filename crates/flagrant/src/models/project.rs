@@ -1,4 +1,5 @@
 use hugsqlx::{HugSqlx, params};
+use serde_valid::Validate;
 use sqlx::SqliteConnection;
 
 use crate::errors::FlagrantError;
@@ -11,10 +12,11 @@ use super::environment;
 struct Projects {}
 
 pub async fn create(conn: &mut SqliteConnection, name: String) -> anyhow::Result<Project> {
-    let project = Projects::create_project(conn, params!(name))
+    let project: Project = Projects::create_project(conn, params!(name))
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could create a project", e))?;
 
+    project.validate()?;
     Ok(project)
 }
 

@@ -41,7 +41,7 @@ pub async fn create_environment_from<'a>(
 }
 
 pub async fn create_context(conn: &mut PoolConnection<Sqlite>) -> (Project, Environment) {
-    let project = project::create(conn, "fancy project".to_owned())
+    let project = project::create(conn, "fancy_project".to_owned())
         .await
         .unwrap();
     let environment = create_environment(conn, &project).await;
@@ -59,6 +59,7 @@ pub async fn create_feature(
         conn,
         environment,
         format!("F_{}", random_string(10)),
+        Some("sample feature".to_owned()),
         FeatureValue::Text(value.to_owned()),
         true,
         true,

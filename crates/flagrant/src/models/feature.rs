@@ -90,6 +90,7 @@ pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
     name: String,
+    description: Option<String>,
     value: FeatureValue,
     is_enabled: bool,
     is_active: bool,
@@ -97,7 +98,13 @@ pub async fn create(
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![environment.project_id, name, is_active, is_enabled],
+        params![
+            environment.project_id,
+            name,
+            description,
+            is_active,
+            is_enabled
+        ],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -401,6 +408,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
+        description: row.get("description"),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }

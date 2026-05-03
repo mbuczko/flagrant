@@ -1,5 +1,6 @@
 use anyhow::bail;
 use hugsqlx::{HugSqlx, params};
+use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
 use crate::errors::FlagrantError;
@@ -31,7 +32,6 @@ pub async fn create(
     base_env: Option<String>,
 ) -> anyhow::Result<Environment> {
     let mut tx = conn.begin().await?;
-
     let existing = get_by_project(&mut tx, project).await?;
 
     let base = match (base_env, existing.len()) {
@@ -43,10 +43,12 @@ pub async fn create(
         _ => None,
     };
 
-    let env =
+    let env: Environment =
         SQLEnvironments::create_environment(&mut *tx, params![project.id, name, description])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not create an environment", e))?;
+
+    env.validate()?;
 
     if let Some(base) = base {
         clone_variants_from_env(&mut tx, &base, &env).await?;
