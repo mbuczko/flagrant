@@ -457,6 +457,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         .await
         .unwrap();
     let default_variant = feature.get_default_variant();
+
     assert_eq!(default_variant.weight, 10);
 }
 
@@ -562,6 +563,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         .await
         .unwrap();
     let default_variant = feature.get_default_variant();
+
     assert_eq!(default_variant.weight, 20);
 }
 
@@ -662,6 +664,79 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
 }
 
 #[sqlx::test]
+async fn control_variant_weight_is_zero_when_others_sum_to_hundred(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v1"),
+        60,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v2"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+
+    assert_eq!(feature.get_default_variant().weight, 0);
+}
+
+#[sqlx::test]
+async fn control_variant_weight_cannot_go_negative(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v1"),
+        60,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v2"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    // Control is now 0; any further variant would push it below zero
+    assert!(
+        variant::create(
+            &mut conn,
+            &environment,
+            &feature,
+            FeatureValue::build("v3"),
+            1,
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[sqlx::test]
 async fn create_project_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
     for name in [" ble", "123abc", "💕project", "foo-bar", "has space"] {
         assert!(project::create(&mut conn, name.to_owned()).await.is_err());
@@ -678,6 +753,7 @@ async fn create_project_with_too_long_name(mut conn: PoolConnection<Sqlite>) {
 #[should_panic]
 async fn create_project_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
     let name = "unique_project";
+
     project::create(&mut conn, name.to_owned()).await.unwrap();
     project::create(&mut conn, name.to_owned()).await.unwrap();
 }
