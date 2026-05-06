@@ -43,8 +43,8 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
 ///
 /// Expected args: `<feature> [value] [description]`
 ///
-/// `value` is parsed as a typed [`FeatureValue`] (e.g. `bool::true`, `string::hello`);
-/// if omitted or unparseable it defaults to an empty string value. The feature is
+/// `value` is parsed as a typed [`FeatureValue`] (e.g. `json::{banner: true}`, `text::hi`);
+/// if omitted, an editor is opened to enter the value interactively. The feature is
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {

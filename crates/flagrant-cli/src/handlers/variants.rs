@@ -255,10 +255,12 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
 /// Stage a weight change for an existing variant identified by its display index.
 ///
-/// Expected args: `<weight>`
+/// Expected args: `[+/-]<weight>`
 ///
-/// Refuses to change the control variant's weight (it is auto-adjusted) and rejects
-/// values that would push total non-control weight over 100%.
+/// Weight may be an absolute value (e.g. `30`) or a relative change prefixed with `+` or `-`
+/// (e.g. `+5` adds 5 to the current weight, `-3` subtracts 3). Refuses to change the control
+/// variant's weight (it is auto-adjusted) and rejects values that would push total non-control
+/// weight over 100%.
 pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -472,9 +474,10 @@ where
 {
     match variant_ref {
         VariantRef::Committed(id) => {
-            let staged = ctx.pending.as_ref().and_then(|p| {
-                p.variants.iter().rev().find_map(|op| extract_set(op, *id))
-            });
+            let staged = ctx
+                .pending
+                .as_ref()
+                .and_then(|p| p.variants.iter().rev().find_map(|op| extract_set(op, *id)));
             staged.unwrap_or_else(|| {
                 ctx.feature
                     .as_ref()
