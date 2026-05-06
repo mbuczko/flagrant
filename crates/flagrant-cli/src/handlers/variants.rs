@@ -269,7 +269,14 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided."),
     };
-    let new_weight = match args.get(2) {
+    let new_weight: u8 = match args.get(2) {
+        Some(w) if w.starts_with('+') || w.starts_with('-') => {
+            let delta = w.parse::<i16>()?;
+            let current = current_variant_weight(&variant_ref, &ctx);
+            (current + delta)
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Resulting weight out of range <0, 100>."))?
+        }
         Some(w) => w.parse::<u8>()?,
         None => bail!("No weight provided."),
     };
@@ -446,39 +453,78 @@ fn total_non_control_weight(
     committed + staged
 }
 
-/// Returns the current `FeatureValue` for a variant, used as a type fallback when staging
-/// a value change. For committed variants, prefers any already-staged `SetValue` op; for
-/// staged (Add) variants, returns the value from the pending `Add` op.
-fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> FeatureValue {
+/// Generic helper that resolves the current value of a variant field, preferring any staged
+/// override over the committed state. `extract_set` matches a specific Set* op for committed
+/// variants; `extract_committed` reads the field from the committed variant; `extract_add`
+/// reads the field from a staged Add op.
+fn current_variant_field<T, F, G, H>(
+    variant_ref: &VariantRef,
+    ctx: &Connection,
+    extract_set: F,
+    extract_committed: G,
+    extract_add: H,
+) -> T
+where
+    T: Default,
+    F: Fn(&VariantPatchOp, i32) -> Option<T>,
+    G: Fn(&Variant) -> T,
+    H: Fn(&VariantPatchOp) -> Option<T>,
+{
     match variant_ref {
         VariantRef::Committed(id) => {
             let staged = ctx.pending.as_ref().and_then(|p| {
-                p.variants.iter().find_map(|op| match op {
-                    VariantPatchOp::SetValue { id: oid, value } if oid == id => Some(value.clone()),
-                    _ => None,
-                })
+                p.variants.iter().rev().find_map(|op| extract_set(op, *id))
             });
             staged.unwrap_or_else(|| {
                 ctx.feature
                     .as_ref()
                     .and_then(|f| f.variants.iter().find(|v| v.id == *id))
-                    .map(|v| v.value.clone())
+                    .map(|v| extract_committed(v))
                     .unwrap_or_default()
             })
         }
-        VariantRef::Staged(staged_pos) => ctx
+        VariantRef::Staged(pos) => ctx
             .pending
             .as_ref()
-            .and_then(|p| {
-                p.variants
-                    .iter()
-                    .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                    .nth(*staged_pos)
-                    .and_then(|op| match op {
-                        VariantPatchOp::Add { value, .. } => Some(value.clone()),
-                        _ => None,
-                    })
-            })
+            .and_then(|p| p.variants.iter().filter_map(|op| extract_add(op)).nth(*pos))
             .unwrap_or_default(),
     }
+}
+
+/// Returns the current weight for a variant, used as a base when applying relative weight
+/// changes. For committed variants, prefers any already-staged `SetWeight` op; for staged
+/// (Add) variants, returns the weight from the pending `Add` op.
+fn current_variant_weight(variant_ref: &VariantRef, ctx: &Connection) -> i16 {
+    current_variant_field(
+        variant_ref,
+        ctx,
+        |op, id| match op {
+            VariantPatchOp::SetWeight { id: sid, weight } if *sid == id => Some(*weight as i16),
+            _ => None,
+        },
+        |v| v.weight as i16,
+        |op| match op {
+            VariantPatchOp::Add { weight, .. } => Some(*weight as i16),
+            _ => None,
+        },
+    )
+}
+
+/// Returns the current [`FeatureValue`] for a variant, used as a type fallback when staging
+/// a value change. For committed variants, prefers any already-staged `SetValue` op; for
+/// staged (Add) variants, returns the value from the pending `Add` op.
+fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> FeatureValue {
+    current_variant_field(
+        variant_ref,
+        ctx,
+        |op, id| match op {
+            VariantPatchOp::SetValue { id: oid, value } if *oid == id => Some(value.clone()),
+            _ => None,
+        },
+        |v| v.value.clone(),
+        |op| match op {
+            VariantPatchOp::Add { value, .. } => Some(value.clone()),
+            _ => None,
+        },
+    )
 }
