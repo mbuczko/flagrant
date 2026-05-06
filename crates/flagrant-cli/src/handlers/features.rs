@@ -16,7 +16,7 @@
 //! | `COMMIT`             | [`commit`]    | Send all staged changes to the API.                  |
 //! | `DISCARD`            | [`discard`]   | Drop all staged changes for the current feature.     |
 
-use std::{borrow::Cow, collections::BTreeSet, ops::Deref};
+use std::{collections::BTreeSet, ops::Deref};
 
 use anyhow::bail;
 use flagrant_client::connection::{Connection, Resource};
@@ -48,13 +48,18 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
+        {
+            let ctx = session.context.read().unwrap();
+            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
+            }
+        }
         let ctx = session.context.read().unwrap();
         let res = ctx.environment.as_base_resource();
-        let val = args
-            .get(2)
-            .map(|a| Cow::from(a.to_string()))
-            .unwrap_or(Cow::Owned(String::default()));
-
+        let val = match args.get(2) {
+            Some(a) => a.to_string(),
+            None => edit_in_editor("")?,
+        };
         let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
         let feature = ctx.client.post::<_, Feature>(
             res.subpath("/features"),
