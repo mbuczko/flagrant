@@ -43,6 +43,14 @@ pub async fn create_with_environment(
     }
 }
 
+pub async fn list(conn: &mut SqliteConnection) -> anyhow::Result<Vec<Project>> {
+    let projects = Projects::list_projects(conn, params!())
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not list projects", e))?;
+
+    Ok(projects)
+}
+
 pub async fn get_by_id(conn: &mut SqliteConnection, project_id: i32) -> anyhow::Result<Project> {
     let project = Projects::fetch_project(conn, params!(project_id))
         .await

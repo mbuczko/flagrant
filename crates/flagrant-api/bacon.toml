@@ -1,8 +1,0 @@
-[jobs.run]
-command = ["cargo", "run"]
-watch = ["src"]
-need_stdout = true
-
-[jobs.check]
-command = ["cargo", "check", "--all-targets"]
-need_stdout = false

@@ -41,6 +41,10 @@ struct Args {
     /// create a new project with this name and use it for the session (mutually exclusive with --project)
     #[argh(option)]
     create_project: Option<String>,
+
+    /// list all projects
+    #[argh(switch)]
+    list_projects: bool,
 }
 
 fn prompter(session: &Session<Connection>) -> String {
@@ -70,6 +74,17 @@ fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
 
 fn main() -> anyhow::Result<()> {
     let args: Args = argh::from_env();
+
+    if args.list_projects {
+        let client = HttpClient::new(args.host.clone(), Auth::None);
+        let projects = handlers::projects::list_projects(&client)?;
+        for project in projects {
+            println!("Known projects:\n---------------");
+            println!("{:>4} : {}", project.id, project.name);
+        }
+        return Ok(());
+    }
+
     let connection = match (args.project, args.create_project) {
         (Some(project_id), None) => {
             Connection::init(args.host, Auth::None, project_id, args.environment)?

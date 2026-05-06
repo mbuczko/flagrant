@@ -4,6 +4,14 @@ use flagrant_types::{Environment, Project, payload::ProjectRequestPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
+pub async fn list(
+    DbConnection(mut conn): DbConnection,
+) -> Result<Json<Vec<Project>>, ServiceError> {
+    let projects = project::list(&mut conn).await?;
+
+    Ok(Json(projects))
+}
+
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
     Path(project_id): Path<i32>,

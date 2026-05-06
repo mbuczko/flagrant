@@ -1,0 +1,19 @@
+[jobs.run-api]
+command = ["$HOME/.cargo-targets/debug/flagrant-api"]
+watch = ["/Users/michal/.cargo-targets/debug/flagrant-api"]
+default_watch = false
+on_change_strategy = "kill_then_restart"
+need_stdout = true
+
+[jobs.test]
+command = ["cargo", "nextest", "run", "-Zpanic-abort-tests"]
+env = { RUSTFLAGS = "-Awarnings" }
+allow-warnings = false
+need_stdout = true
+
+[jobs.check]
+command = ["cargo", "check", "--all-targets"]
+need_stdout = false
+
+[keybindings]
+r = "job:run-api"
