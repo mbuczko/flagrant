@@ -14,7 +14,6 @@ pub enum VariantPatchOp {
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_active: Option<bool>,
-    pub value: Option<FeatureValue>,
     pub variants: Vec<VariantPatchOp>,
 }
 
@@ -22,16 +21,20 @@ impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
         self.is_enabled.is_none()
             && self.is_active.is_none()
-            && self.value.is_none()
             && self.variants.is_empty()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectRequestPayload {
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
-    pub base_env_id: Option<i32>,
+    pub base_env: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

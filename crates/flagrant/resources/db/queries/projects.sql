@@ -8,3 +8,9 @@ RETURNING project_id, name
 SELECT project_id, name
 FROM projects
 WHERE project_id = $1
+
+-- :name list_projects :<> :*
+-- :doc Lists all projects
+SELECT project_id, name
+FROM projects
+ORDER BY project_id

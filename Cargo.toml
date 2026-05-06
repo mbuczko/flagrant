@@ -34,9 +34,11 @@ rustyline = { version = "15.0.0", features = ["derive"], git = "https:/github.co
 
 [profile.dev]
 opt-level = 1
+codegen-backend = "cranelift"
+split-debuginfo = "unpacked"
 
-[profile.dev.package."*"]
-opt-level = 2
+[profile.test]
+panic = "abort"
 
 [profile.release]
 panic = "abort"

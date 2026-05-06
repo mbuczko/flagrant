@@ -1,5 +1,5 @@
 use common::{create_context, create_environment, random_string};
-use flagrant::models::{feature, project, variant};
+use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{
     FeatureValue,
     payload::{FeaturePatch, VariantPatchOp},
@@ -12,7 +12,7 @@ mod common;
 
 #[sqlx::test]
 async fn create_project(mut conn: PoolConnection<Sqlite>) {
-    let name = "Sample project";
+    let name = "Sample_project";
     let project = project::create(&mut conn, name.to_owned()).await.unwrap();
 
     assert_eq!(project.name, name);
@@ -26,6 +26,7 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         "featuriozzo".to_owned(),
+        Some("descriptozzo".to_owned()),
         value.clone(),
         true,
         true,
@@ -40,6 +41,34 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
 
     assert_eq!(default_variant.weight, 100);
     assert!(default_variant.is_control());
+}
+
+#[sqlx::test]
+async fn create_feature_propagates_default_variant_to_existing_envs(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let value = FeatureValue::build("foo");
+
+    let feature = feature::create(
+        &mut conn,
+        &environment1,
+        "propagation_test".to_owned(),
+        Some("samle description".to_owned()),
+        value.clone(),
+        true,
+        true,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(feature.get_default_value(), &value);
+
+    let feature_env2 = feature::get_by_id(&mut conn, &environment2, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature_env2.get_default_value(), &value);
 }
 
 #[sqlx::test]
@@ -60,15 +89,14 @@ async fn create_feature_with_missing_default_variant_in_other_env(
     .await
     .unwrap();
 
-    // No default variant in environment2, so the list of variants is empty even though
-    // some have been created in environment1.
+    // Default variant is now propagated to environment2 at feature creation time.
+    // The non-control "bar" variant (NULL env_id) is also visible with weight 0.
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
-    assert!(feature.variants.is_empty());
+    assert_eq!(feature.variants.len(), 2);
 
-    // After adding a default variant, a list consisting of the default and previously created
-    // variants should be returned.
+    // Updating the default value in environment2 does not affect environment1.
     feature::update_one(&mut conn, &environment2, &feature)
         .value(FeatureValue::build("bazz"))
         .update()
@@ -115,6 +143,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             &mut conn,
             &environment,
             name.to_owned(),
+            None,
             FeatureValue::Text("foo".to_owned()),
             false,
             true,
@@ -128,6 +157,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         format!("F_{}", random_string(1024)),
+        None,
         FeatureValue::Text("foo".to_owned()),
         false,
         true,
@@ -146,6 +176,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         name.to_owned(),
+        None,
         FeatureValue::Text("foo".to_owned()),
         false,
         true,
@@ -157,6 +188,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         name.to_owned(),
+        None,
         FeatureValue::Text("foo".to_owned()),
         false,
         true,
@@ -425,6 +457,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         .await
         .unwrap();
     let default_variant = feature.get_default_variant();
+
     assert_eq!(default_variant.weight, 10);
 }
 
@@ -530,6 +563,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         .await
         .unwrap();
     let default_variant = feature.get_default_variant();
+
     assert_eq!(default_variant.weight, 20);
 }
 
@@ -627,4 +661,138 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
         .await
         .unwrap();
     assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
+}
+
+#[sqlx::test]
+async fn control_variant_weight_is_zero_when_others_sum_to_hundred(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v1"),
+        60,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v2"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+
+    assert_eq!(feature.get_default_variant().weight, 0);
+}
+
+#[sqlx::test]
+async fn control_variant_weight_cannot_go_negative(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "bar").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v1"),
+        60,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("v2"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    // Control is now 0; any further variant would push it below zero
+    assert!(
+        variant::create(
+            &mut conn,
+            &environment,
+            &feature,
+            FeatureValue::build("v3"),
+            1,
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[sqlx::test]
+async fn create_project_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
+    for name in [" ble", "123abc", "💕project", "foo-bar", "has space"] {
+        assert!(project::create(&mut conn, name.to_owned()).await.is_err());
+    }
+}
+
+#[sqlx::test]
+async fn create_project_with_too_long_name(mut conn: PoolConnection<Sqlite>) {
+    let result = project::create(&mut conn, format!("P_{}", random_string(1024))).await;
+    assert!(result.is_err());
+}
+
+#[sqlx::test]
+#[should_panic]
+async fn create_project_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
+    let name = "unique_project";
+
+    project::create(&mut conn, name.to_owned()).await.unwrap();
+    project::create(&mut conn, name.to_owned()).await.unwrap();
+}
+
+#[sqlx::test]
+async fn create_environment_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
+    let (project, _) = create_context(&mut conn).await;
+    for name in [" ble", "123env", "💕env", "foo-bar", "has space"] {
+        assert!(
+            environment::create(&mut conn, &project, name.to_owned(), None, None)
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[sqlx::test]
+async fn create_environment_with_too_long_name(mut conn: PoolConnection<Sqlite>) {
+    let (project, _) = create_context(&mut conn).await;
+    let result = environment::create(
+        &mut conn,
+        &project,
+        format!("E_{}", random_string(1024)),
+        None,
+        None,
+    )
+    .await;
+    assert!(result.is_err());
+}
+
+#[sqlx::test]
+#[should_panic]
+async fn create_environment_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
+    let (project, _) = create_context(&mut conn).await;
+    let name = "unique_env";
+    environment::create(&mut conn, &project, name.to_owned(), None, None)
+        .await
+        .unwrap();
+    environment::create(&mut conn, &project, name.to_owned(), None, None)
+        .await
+        .unwrap();
 }

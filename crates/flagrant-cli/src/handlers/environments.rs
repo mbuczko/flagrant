@@ -27,8 +27,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             res.subpath("/envs"),
             EnvRequestPayload {
                 name: name.to_string(),
-                description: args.get(2).map(|d| d.to_string()),
-                base_env_id: None,
+                description: None,
+                base_env: args.get(2).map(|d| d.to_string()),
             },
         )?;
 
@@ -70,7 +70,14 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         if let Ok(env) = response {
             println!("Switching environment → {}", env.name.bold());
+            let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
             ctx.environment = env;
+            drop(ctx);
+
+            if let Some(name) = feature_name {
+                let args = [Arg("", 0), Arg(name.as_str(), 1)];
+                super::features::r#use(&args, session)?;
+            }
             return Ok(());
         }
         bail!("No such an environment.")

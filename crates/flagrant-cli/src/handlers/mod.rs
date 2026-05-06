@@ -1,6 +1,8 @@
 pub mod environments;
 pub mod features;
+pub mod projects;
 pub mod variants;
+
 pub(crate) mod internal;
 
 /// Opens `$EDITOR` (falling back to `vi`) pre-filled with `content` and returns the

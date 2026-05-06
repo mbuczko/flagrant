@@ -38,7 +38,14 @@ pub async fn create(
     Json(payload): Json<EnvRequestPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::get_by_id(&mut conn, project_id).await?;
-    let env = environment::create(&mut conn, &project, payload.name, payload.description, payload.base_env_id).await?;
+    let env = environment::create(
+        &mut conn,
+        &project,
+        payload.name,
+        payload.description,
+        payload.base_env,
+    )
+    .await?;
 
     Ok(Json(env))
 }

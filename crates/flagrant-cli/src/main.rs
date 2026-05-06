@@ -1,7 +1,11 @@
+use argh::FromArgs;
 use colored::Colorize;
 use command::Command;
 use completer::ArgCompleter;
-use flagrant_client::{connection::Connection, http::Auth};
+use flagrant_client::{
+    connection::Connection,
+    http::{Auth, HttpClient},
+};
 use flagrant_repl::{
     completer::CommandLineCompleter,
     hinter::ReplHinter,
@@ -15,7 +19,33 @@ mod completer;
 mod handlers;
 mod printer;
 
-const API_HOST: &str = "http://localhost:3030";
+#[derive(FromArgs)]
+/// Flagrant feature flag CLI
+struct Args {
+    /// API host (default: http://localhost:3030)
+    #[argh(
+        option,
+        short = 'h',
+        default = "String::from(\"http://localhost:3030\")"
+    )]
+    host: String,
+
+    /// project ID (mutually exclusive with --create-project)
+    #[argh(option, short = 'p')]
+    project: Option<i32>,
+
+    /// environment ID
+    #[argh(option, short = 'e', default = "1")]
+    environment: i32,
+
+    /// create a new project with this name and use it for the session (mutually exclusive with --project)
+    #[argh(option)]
+    create_project: Option<String>,
+
+    /// list all projects
+    #[argh(switch)]
+    list_projects: bool,
+}
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
@@ -43,19 +73,37 @@ fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
-    // TODO: will be taken from args
-    let project_id = 1;
-    let environment_id = 1;
+    let args: Args = argh::from_env();
 
-    let connection = Connection::init(API_HOST.into(), Auth::None, project_id, environment_id)?;
+    if args.list_projects {
+        let client = HttpClient::new(args.host.clone(), Auth::None);
+        let projects = handlers::projects::list_projects(&client)?;
+        for project in projects {
+            println!("Known projects:\n---------------");
+            println!("{:>4} : {}", project.id, project.name);
+        }
+        return Ok(());
+    }
+
+    let connection = match (args.project, args.create_project) {
+        (Some(project_id), None) => {
+            Connection::init(args.host, Auth::None, project_id, args.environment)?
+        }
+        (None, Some(name)) => {
+            let client = HttpClient::new(args.host.clone(), Auth::None);
+            let (project, env) = handlers::projects::create_with_env(&name, &client)?;
+            Connection::init(args.host, Auth::None, project.id, env.id)?
+        }
+        (Some(_), Some(_)) => {
+            anyhow::bail!("--project and --create-project are mutually exclusive")
+        }
+        (None, None) => anyhow::bail!("one of --project or --create-project must be provided"),
+    };
+
     let session = Session::new(connection);
     let commands = vec![
         // Environments
-        Command::Environment.op(
-            "add",
-            "environment description",
-            handlers::environments::add,
-        ),
+        Command::Environment.op("add", "environment base", handlers::environments::add),
         Command::Environment.op("use", "environment", handlers::environments::r#use),
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.args("add · list · use"),
@@ -74,7 +122,12 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::add,
             has_feature_ctx,
         ),
-        Command::Variant.op_in_context("delete", "index", handlers::variants::delete, has_feature_ctx),
+        Command::Variant.op_in_context(
+            "delete",
+            "index",
+            handlers::variants::delete,
+            has_feature_ctx,
+        ),
         Command::Variant.op_in_context(
             "discard",
             "index",

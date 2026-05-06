@@ -21,9 +21,16 @@ use std::{borrow::Cow, collections::BTreeSet, ops::Deref};
 use anyhow::bail;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{Feature, FeatureValue, payload::FeatureRequestPayload};
+use flagrant_types::{
+    Feature, FeatureValue,
+    payload::{FeatureRequestPayload, VariantPatchOp},
+};
 
-use crate::{handlers::edit_in_editor, printer::tabular::Tabular};
+use crate::{
+    handlers::{edit_in_editor, internal::stage},
+    printer::tabular::Tabular,
+};
+use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
@@ -160,25 +167,31 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if let Some(feature) = &ctx.feature {
+        let control_id = feature.get_default_variant().id;
+        let control_ref = VariantRef::Committed(control_id);
+
         let raw: String = if let Some(raw) = args.get(1) {
             raw.to_string()
         } else {
             // No value provided — open editor with current bare value (without type prefix).
+            // Prefer any already-staged value over the committed one.
             let current_fv = ctx
                 .pending
                 .as_ref()
-                .and_then(|p| p.value.as_ref())
+                .and_then(|p| {
+                    p.variants.iter().find_map(|op| match op {
+                        VariantPatchOp::SetValue { id, value } if *id == control_id => Some(value),
+                        _ => None,
+                    })
+                })
                 .unwrap_or_else(|| feature.get_default_value());
             let (_, bare) = current_fv.decompose();
-
             let edited = edit_in_editor(bare)?;
 
             // Type is inferred from the edited content, not the original.
             let parsed = FeatureValue::build(&edited);
-            let display = parsed.to_string();
 
-            ctx.get_or_init_pending().value = Some(parsed);
-            println!("Staged: value = {display}");
+            stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
             return Ok(());
         };
 
@@ -186,7 +199,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
             .parse()
             .unwrap_or_else(|_| feature.get_default_value().clone_with(&raw));
         let display = parsed.to_string();
-        ctx.get_or_init_pending().value = Some(parsed);
+        stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
 
         println!("Staged: value = {display}");
         return Ok(());

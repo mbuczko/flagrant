@@ -87,6 +87,7 @@ pub async fn migrate_identities(
     by_percent: u8,
 ) -> anyhow::Result<()> {
     if from_variant_id != to_variant_id {
+        tracing::info!(from_variant_id, to_variant_id, "Migrating identities");
         SQLIdentities::migrate_identities(
             conn,
             params![environment.id, from_variant_id, to_variant_id, by_percent],

@@ -113,6 +113,7 @@ pub async fn create(
         &mut conn,
         &env,
         payload.name,
+        payload.description,
         payload.value,
         payload.is_enabled,
         false,

@@ -8,6 +8,9 @@ extern crate regex;
 
 pub mod payload;
 
+// max variant size is 1kb (1024 bytes)
+const MAX_VARIANT_SIZE: usize = 1024;
+
 #[derive(Debug, Error)]
 pub enum ParseTypeError {
     #[error("'{0}' is an unknown value type")]
@@ -15,20 +18,27 @@ pub enum ParseTypeError {
 
     #[error("Value incorrectly encoded")]
     Encoding,
+
+    #[error("Value exceeds max size of 1024 bytes")]
+    SizeExceeded,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate)]
 pub struct Project {
     #[sqlx(rename = "project_id")]
     pub id: i32,
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate)]
 pub struct Environment {
     #[sqlx(rename = "environment_id")]
     pub id: i32,
     pub project_id: i32,
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
     pub description: Option<String>,
 }
@@ -41,6 +51,8 @@ pub struct Feature {
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
     #[validate(max_length = 255)]
     pub name: String,
+    #[validate(max_length = 2048)]
+    pub description: String,
     pub variants: Vec<Variant>,
     pub tags: TagList,
     pub is_enabled: bool,
@@ -261,7 +273,11 @@ impl FromStr for FeatureValue {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         if let Some((typ, val)) = value.split_once("::") {
-            return Self::new(typ, val);
+            return if val.len() > MAX_VARIANT_SIZE {
+                Err(ParseTypeError::SizeExceeded)
+            } else {
+                Self::new(typ, val)
+            };
         }
         Err(ParseTypeError::Encoding)
     }

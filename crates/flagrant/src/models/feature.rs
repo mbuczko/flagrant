@@ -4,7 +4,7 @@ use crate::errors::FlagrantError;
 use std::collections::HashMap;
 
 use flagrant_types::{
-    Environment, Feature, FeatureValue, TagList, Variant,
+    Environment, Feature, FeatureValue, Project, TagList, Variant,
     payload::{FeaturePatch, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
@@ -82,13 +82,15 @@ impl<'a> FeatureUpdate<'a> {
 
 /// Creates a new feature with given `name` and `value`.
 ///
-/// Feature value is stored as environment-specific control variant which means
-/// it may be different in every other environment and any change on value impacts
-/// given environment only.
+/// The default value is seeded as a control variant in every environment that already
+/// exists in the project, so the feature is immediately usable everywhere. Each
+/// environment owns its control variant independently — subsequent value changes
+/// affect only the environment they are applied to.
 pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
     name: String,
+    description: Option<String>,
     value: FeatureValue,
     is_enabled: bool,
     is_active: bool,
@@ -96,15 +98,30 @@ pub async fn create(
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![environment.project_id, name, is_active, is_enabled],
+        params![
+            environment.project_id,
+            name,
+            description,
+            is_active,
+            is_enabled
+        ],
         |row| row_to_feature(row, environment),
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create a feature", e))?;
 
-    // Default value gets turned into a control variant.
-    let variant = variant::create_control(&mut tx, environment, &feature, value).await?;
-    feature.variants.push(variant);
+    let project = Project {
+        id: environment.project_id,
+        ..Default::default()
+    };
+
+    // Default value gets turned into a control variant for all existing environments.
+    for env in &super::environment::get_by_project(&mut tx, &project).await? {
+        let variant = variant::create_control(&mut tx, env, &feature, value.clone()).await?;
+        if env.id == environment.id {
+            feature.variants.push(variant);
+        }
+    }
 
     feature.validate()?;
     tx.commit().await?;
@@ -125,7 +142,7 @@ pub async fn get_by_id(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(&mut tx, environment, feature.id)
+    let variants = variant::get_for_feature(&mut tx, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -134,6 +151,7 @@ pub async fn get_by_id(
 }
 
 /// Returns feature with exact `name` or Error if no feature was found.
+///
 /// Features names are unique therefore at most one feature is returned.
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
@@ -148,7 +166,7 @@ pub async fn get_by_name(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_all(conn, environment, feature.id)
+    let variants = variant::get_for_feature(conn, environment, feature.id)
         .await
         .unwrap_or_default();
 
@@ -156,6 +174,7 @@ pub async fn get_by_name(
 }
 
 /// Returns features with name starting by given `prefix`.
+///
 /// For performance reasons each feature is returned with its control variant only.
 pub async fn get_by_prefix(
     conn: &mut SqliteConnection,
@@ -174,6 +193,7 @@ pub async fn get_by_prefix(
 }
 
 /// Returns all features for given `environment`.
+///
 /// For performance reasons each feature is returned with its control variant only.
 pub async fn get_all(
     conn: &mut SqliteConnection,
@@ -236,7 +256,7 @@ pub async fn bump_up_accumulators(
 ///
 /// Operations are applied in the following order to ensure weight constraints remain
 /// satisfiable throughout the transaction:
-/// 1. Feature-level property changes (is_enabled, is_active, value)
+/// 1. Feature-level property changes (is_enabled, is_active)
 /// 2. Variant deletes (free up weight)
 /// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
 /// 4. Variant adds (consume weight)
@@ -259,10 +279,6 @@ pub async fn apply_patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
     }
-    if let Some(value) = patch.value {
-        variant::create_control(&mut tx, environment, feature, value).await?;
-    }
-
     // Partition variant ops: deletes first, then updates, then adds
     let (deletes, rest): (Vec<_>, Vec<_>) = patch
         .variants
@@ -332,13 +348,18 @@ pub async fn apply_patch(
     Ok(())
 }
 
+/// Permanently deletes a feature and all of its variants within a single transaction.
+///
+/// Variants must be removed before the feature row itself due to foreign-key constraints.
+/// Non-control variants are deleted first; the control variant is deleted last because
+/// the backend rejects control-variant deletion while other variants still exist.
 pub async fn delete(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let mut vars = variant::get_all(&mut tx, environment, feature.id).await?;
+    let mut vars = variant::get_for_feature(&mut tx, environment, feature.id).await?;
 
     // Sort variants so that control ones go last in the vector.
     // This is required because of the strict deletion policy - control variants
@@ -387,6 +408,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_active: row.get("is_active"),
         name: row.get("name"),
+        description: row.get("description"),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }
