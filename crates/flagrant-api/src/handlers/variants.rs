@@ -11,6 +11,19 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 /// A few pre-conditions must be met:
 /// - there is enough free weight to create a variant with the given weight
 /// - the variant should be created for all environments (with the same value by default)
+#[utoipa::path(
+    post,
+    path = "/envs/{environment_id}/features/{feature_id}/variants",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    request_body = VariantRequestPayload,
+    responses(
+        (status = 200, description = "Created variant", body = Variant)
+    ),
+    tag = "variants"
+)]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -25,6 +38,19 @@ pub async fn create(
 }
 
 /// Updates existing variant with provided value/weight.
+#[utoipa::path(
+    put,
+    path = "/envs/{environment_id}/variants/{variant_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("variant_id" = i32, Path, description = "Variant ID")
+    ),
+    request_body = VariantRequestPayload,
+    responses(
+        (status = 200, description = "Variant updated successfully")
+    ),
+    tag = "variants"
+)]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(i32, i32)>,
@@ -38,6 +64,19 @@ pub async fn update(
     Ok(Json(()))
 }
 
+/// Fetches a variant by ID.
+#[utoipa::path(
+    get,
+    path = "/envs/{environment_id}/variants/{variant_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("variant_id" = i32, Path, description = "Variant ID")
+    ),
+    responses(
+        (status = 200, description = "Variant details", body = Variant)
+    ),
+    tag = "variants"
+)]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(i32, i32)>,
@@ -48,6 +87,19 @@ pub async fn fetch(
     Ok(Json(variant))
 }
 
+/// Lists all variants for a feature.
+#[utoipa::path(
+    get,
+    path = "/envs/{environment_id}/features/{feature_id}/variants",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    responses(
+        (status = 200, description = "List of feature variants", body = Vec<Variant>)
+    ),
+    tag = "variants"
+)]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -59,6 +111,19 @@ pub async fn list(
     Ok(Json(variants))
 }
 
+/// Deletes a variant.
+#[utoipa::path(
+    delete,
+    path = "/envs/{environment_id}/variants/{variant_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("variant_id" = i32, Path, description = "Variant ID")
+    ),
+    responses(
+        (status = 200, description = "Variant deleted successfully")
+    ),
+    tag = "variants"
+)]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, variant_id)): Path<(i32, i32)>,

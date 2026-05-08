@@ -3,12 +3,16 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use sqlx::{Pool, Sqlite};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::handlers::{environments, features, projects, variants};
+use crate::openapi::ApiDoc;
 use crate::{api, handlers::tags};
 
 pub fn init_router() -> Router<Pool<Sqlite>> {
     Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Projects
         .route("/projects/", get(projects::list))
         .route("/projects/:project_id", get(projects::fetch))

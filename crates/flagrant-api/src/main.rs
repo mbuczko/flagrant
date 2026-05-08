@@ -6,6 +6,7 @@ mod api;
 mod errors;
 mod extractors;
 mod handlers;
+mod openapi;
 mod routes;
 mod tracing;
 

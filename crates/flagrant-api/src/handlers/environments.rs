@@ -5,11 +5,13 @@ use axum::{
 use flagrant::models::{environment, project};
 use flagrant_types::{Environment, payload::EnvRequestPayload};
 use serde::Deserialize;
+use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct EnvQueryParams {
+    /// Filter environments by name prefix
     prefix: Option<String>,
 }
 
@@ -32,6 +34,19 @@ impl<'de> Deserialize<'de> for EnvironmentId {
     }
 }
 
+/// Creates a new environment within a project.
+#[utoipa::path(
+    post,
+    path = "/projects/{project_id}/envs",
+    params(
+        ("project_id" = i32, Path, description = "Project ID")
+    ),
+    request_body = EnvRequestPayload,
+    responses(
+        (status = 200, description = "Created environment", body = Environment)
+    ),
+    tag = "environments"
+)]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(project_id): Path<i32>,
@@ -50,6 +65,19 @@ pub async fn create(
     Ok(Json(env))
 }
 
+/// Fetches an environment by its ID or name within a project.
+#[utoipa::path(
+    get,
+    path = "/projects/{project_id}/envs/{env_id}",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("env_id" = String, Path, description = "Environment ID or name")
+    ),
+    responses(
+        (status = 200, description = "Environment details", body = Environment)
+    ),
+    tag = "environments"
+)]
 pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
     Path((project_id, env_id)): Path<(i32, EnvironmentId)>,
@@ -74,6 +102,18 @@ pub async fn fetch_by_id_or_name(
 ///
 /// # Returns
 /// Array with single environment or list of environments matching the filters.
+#[utoipa::path(
+    get,
+    path = "/projects/{project_id}/envs",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        EnvQueryParams
+    ),
+    responses(
+        (status = 200, description = "List of environments", body = Vec<Environment>)
+    ),
+    tag = "environments"
+)]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<EnvQueryParams>,

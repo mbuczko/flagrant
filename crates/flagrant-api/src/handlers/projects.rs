@@ -4,6 +4,15 @@ use flagrant_types::{Environment, Project, payload::ProjectRequestPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
+/// Lists all projects.
+#[utoipa::path(
+    get,
+    path = "/projects/",
+    responses(
+        (status = 200, description = "List of all projects", body = Vec<Project>)
+    ),
+    tag = "projects"
+)]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
 ) -> Result<Json<Vec<Project>>, ServiceError> {
@@ -12,6 +21,18 @@ pub async fn list(
     Ok(Json(projects))
 }
 
+/// Fetches a project by ID.
+#[utoipa::path(
+    get,
+    path = "/projects/{project_id}",
+    params(
+        ("project_id" = i32, Path, description = "Project ID")
+    ),
+    responses(
+        (status = 200, description = "Project details", body = Project)
+    ),
+    tag = "projects"
+)]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
     Path(project_id): Path<i32>,
@@ -21,6 +42,16 @@ pub async fn fetch(
     Ok(Json(project))
 }
 
+/// Creates a new project with a default environment.
+#[utoipa::path(
+    post,
+    path = "/projects/",
+    request_body = ProjectRequestPayload,
+    responses(
+        (status = 200, description = "Created project and its default environment", body = Vec<serde_json::Value>)
+    ),
+    tag = "projects"
+)]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Json(payload): Json<ProjectRequestPayload>,

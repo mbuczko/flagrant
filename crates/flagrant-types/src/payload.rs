@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{Feature, FeatureValue};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
     Add { value: FeatureValue, weight: u8 },
     SetValue { id: i32, value: FeatureValue },
@@ -10,7 +11,7 @@ pub enum VariantPatchOp {
     Delete { id: i32 },
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_active: Option<bool>,
@@ -25,19 +26,19 @@ impl FeaturePatch {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ProjectRequestPayload {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct EnvRequestPayload {
     pub name: String,
     pub description: Option<String>,
     pub base_env: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FeatureRequestPayload {
     pub name: String,
     pub value: FeatureValue,
@@ -45,7 +46,7 @@ pub struct FeatureRequestPayload {
     pub is_enabled: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct VariantRequestPayload {
     pub value: String,
     pub weight: u8,

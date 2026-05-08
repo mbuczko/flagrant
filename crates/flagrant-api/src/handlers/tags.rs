@@ -5,14 +5,29 @@ use axum::{
 use flagrant::models::{environment, tag};
 use flagrant_types::Tag;
 use serde::Deserialize;
+use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct TagQueryParams {
+    /// Filter tags by name prefix
     prefix: Option<String>,
 }
 
+/// Lists tags for an environment with optional prefix filtering.
+#[utoipa::path(
+    get,
+    path = "/envs/{environment_id}/tags",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        TagQueryParams
+    ),
+    responses(
+        (status = 200, description = "List of tags", body = Vec<Tag>)
+    ),
+    tag = "tags"
+)]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<TagQueryParams>,

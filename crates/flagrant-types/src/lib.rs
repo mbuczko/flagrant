@@ -3,6 +3,7 @@ use serde_valid::Validate;
 use sqlx::{Decode, Encode, Sqlite, Type, encode::IsNull, sqlite::SqliteValueRef};
 use std::{fmt, str::FromStr};
 use thiserror::Error;
+use utoipa::ToSchema;
 
 extern crate regex;
 
@@ -23,7 +24,7 @@ pub enum ParseTypeError {
     SizeExceeded,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
 pub struct Project {
     #[sqlx(rename = "project_id")]
     pub id: i32,
@@ -32,7 +33,7 @@ pub struct Project {
     pub name: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate)]
+#[derive(Debug, Default, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
 pub struct Environment {
     #[sqlx(rename = "environment_id")]
     pub id: i32,
@@ -43,7 +44,7 @@ pub struct Environment {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
 pub struct Feature {
     #[sqlx(rename = "feature_id")]
     pub id: i32,
@@ -59,7 +60,7 @@ pub struct Feature {
     pub is_active: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: i32,
@@ -79,22 +80,23 @@ pub struct IdentityVariant {
     pub value: FeatureValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum FeatureValue {
     Text(String),
     Json(String),
     Toml(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[schema(value_type = Vec<Tag>)]
 pub struct TagList(pub Vec<Tag>);
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Tag {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FeatureResponse {
     pub feature_id: i32,
     pub feature_name: String,

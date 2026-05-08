@@ -9,6 +9,7 @@ use flagrant_types::{
 };
 use serde::Deserialize;
 use smallvec::{SmallVec, smallvec};
+use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -17,12 +18,17 @@ type TagsTuple<'a> = (
     Option<SmallVec<[&'a str; 3]>>, // Tags excluded
 );
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeatureQueryParams {
+    /// Filter by name prefix
     prefix: Option<String>,
+    /// Filter by active status: "active" or "inactive"
     status: Option<String>,
+    /// Filter by enabled state: "on" or "off"
     state: Option<String>,
+    /// Comma-separated tags; prefix with `-` to exclude (e.g. "prod,-beta")
     tags: Option<String>,
+    /// SQL LIKE pattern applied to feature names
     pattern: Option<String>,
 }
 
@@ -103,6 +109,18 @@ fn parse_tags<'a>(tags: Option<&'a String>) -> TagsTuple<'a> {
 ///
 /// # Returns
 /// The newly created feature with its control variant.
+#[utoipa::path(
+    post,
+    path = "/envs/{environment_id}/features",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID")
+    ),
+    request_body = FeatureRequestPayload,
+    responses(
+        (status = 200, description = "Created feature", body = Feature)
+    ),
+    tag = "features"
+)]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(environment_id): Path<i32>,
@@ -123,7 +141,7 @@ pub async fn create(
     Ok(Json(feature))
 }
 
-/// Fetches a feature by its ID within a specific environment.
+/// Fetches a feature by its ID or name within a specific environment.
 ///
 /// Returns the feature with all its variants (control and non-control).
 ///
@@ -132,6 +150,18 @@ pub async fn create(
 ///
 /// # Returns
 /// The feature with all its associated variants.
+#[utoipa::path(
+    get,
+    path = "/envs/{environment_id}/features/{feature_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = String, Path, description = "Feature ID or name")
+    ),
+    responses(
+        (status = 200, description = "Feature details with all variants", body = Feature)
+    ),
+    tag = "features"
+)]
 pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, FeatureId)>,
@@ -156,6 +186,19 @@ pub async fn fetch_by_id_or_name(
 /// - `environment_id` - The environment containing the feature
 /// - `feature_id` - The ID of the feature to update
 /// - `payload` - The new feature properties (name, value, is_enabled)
+#[utoipa::path(
+    put,
+    path = "/envs/{environment_id}/features/{feature_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    request_body = FeatureRequestPayload,
+    responses(
+        (status = 200, description = "Feature updated successfully")
+    ),
+    tag = "features"
+)]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -189,6 +232,18 @@ pub async fn update(
 ///
 /// # Returns
 /// Array with single feature or list of features matching the filters, each with only its control variant.
+#[utoipa::path(
+    get,
+    path = "/envs/{environment_id}/features",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        FeatureQueryParams
+    ),
+    responses(
+        (status = 200, description = "List of features with control variants", body = Vec<Feature>)
+    ),
+    tag = "features"
+)]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
@@ -229,6 +284,18 @@ pub async fn list(
 /// # Parameters
 /// - `environment_id` - The environment containing the feature
 /// - `feature_id` - The ID of the feature to delete
+#[utoipa::path(
+    delete,
+    path = "/envs/{environment_id}/features/{feature_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    responses(
+        (status = 200, description = "Feature deleted successfully")
+    ),
+    tag = "features"
+)]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
@@ -246,12 +313,25 @@ pub async fn delete(
 /// a single transaction. Validation errors are returned as 4xx responses.
 ///
 /// # Endpoint
-/// `POST /environments/{environment_id}/features/{feature_id}/patch`
+/// `PATCH /environments/{environment_id}/features/{feature_id}`
 ///
 /// # Parameters
 /// - `environment_id` - The environment containing the feature
 /// - `feature_id` - The ID of the feature to patch
 /// - `patch` - The set of changes to apply
+#[utoipa::path(
+    patch,
+    path = "/envs/{environment_id}/features/{feature_id}",
+    params(
+        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    request_body = FeaturePatch,
+    responses(
+        (status = 200, description = "Patched feature with updated state", body = Feature)
+    ),
+    tag = "features"
+)]
 pub async fn patch(
     DbConnection(mut conn): DbConnection,
     Path((environment_id, feature_id)): Path<(i32, i32)>,
