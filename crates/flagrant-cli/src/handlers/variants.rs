@@ -48,7 +48,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .unwrap_or_default();
 
     let mut sorted_variants: Vec<&Variant> = feature.variants.iter().collect();
-    sorted_variants.sort_by_key(|v| v.id);
+    sorted_variants.sort_by_key(|v| std::cmp::Reverse(v.weight));
 
     let deleted_ids: std::collections::HashSet<i32> = ops
         .iter()

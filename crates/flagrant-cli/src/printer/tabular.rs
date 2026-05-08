@@ -150,7 +150,7 @@ impl Tabular for Feature {
             + staged_adds.iter().map(|(_, w)| *w as u32).sum::<u32>();
 
         let mut sorted_variants: Vec<&Variant> = self.variants.iter().collect();
-        sorted_variants.sort_by_key(|v| v.id);
+        sorted_variants.sort_by_key(|v| std::cmp::Reverse(v.weight));
 
         let total_lines = sorted_variants.len() + staged_adds.len();
         let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
