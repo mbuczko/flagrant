@@ -1,4 +1,4 @@
-use flagrant_types::{Environment, Feature, IdentityVariant};
+use flagrant_types::{Environment, Identity, IdentityVariant};
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
@@ -8,29 +8,12 @@ use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/identities.sql"]
-struct SQLIdentities {}
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct VariantIdentity {
-    pub identity_id: i32,
-    pub feature_id: i32,
-    pub variant_id: i32,
-    pub migrated_id: Option<i32>,
-    pub identity: String,
-}
-pub async fn get_identities(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    feature: &Feature,
-) -> anyhow::Result<Vec<VariantIdentity>> {
-    let idents = SQLIdentities::fetch_identities(conn, params![environment.id, feature.id]).await?;
-    Ok(idents)
-}
+pub struct SQLIdentities {}
 
 pub async fn get_variants(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    identity: String,
+    Identity(identity): Identity,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let mut tx = conn.begin().await?;
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity).await?;
@@ -71,7 +54,7 @@ pub async fn get_variants(
             })?;
 
             var.variant_id = variant.id;
-            var.value = variant.value;
+            var.feature_value = variant.value;
         }
     }
 

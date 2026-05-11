@@ -4,12 +4,14 @@ use axum::{
     http::request::Parts,
 };
 use flagrant::errors::FlagrantError;
+use flagrant_types::Identity as IdentityInner;
 use sqlx::{Sqlite, SqlitePool, pool::PoolConnection};
 
 use crate::errors::ServiceError;
 
-pub struct Identity(pub String);
 pub struct DbConnection(pub PoolConnection<Sqlite>);
+
+pub struct Identity(pub IdentityInner);
 
 #[async_trait]
 impl<S> FromRequestParts<S> for Identity
@@ -20,7 +22,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         if let Some(Ok(header)) = parts.headers.get("X-Flagrant-Identity").map(|h| h.to_str()) {
-            return Ok(Identity(header.to_owned()));
+            return Ok(Identity(IdentityInner(header.to_owned())));
         }
         Err(FlagrantError::NoIdentity("No identity header found").into())
     }

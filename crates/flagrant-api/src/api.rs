@@ -35,8 +35,8 @@ pub async fn get_features(
         .into_iter()
         .map(|v| FeatureResponse {
             feature_id: v.feature_id,
-            feature_name: v.name,
-            value: v.value,
+            name: v.feature_name,
+            value: v.feature_value,
         })
         .collect::<Vec<_>>();
 

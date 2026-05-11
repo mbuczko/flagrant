@@ -71,13 +71,60 @@ pub struct Variant {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Identity(pub String);
+
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct IdentityTrait {
+    pub name: String,
+    pub value: TraitValue,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TraitValue {
+    String(String),
+    Boolean(bool),
+    Int(i32),
+    Float(f32),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct IdentityVariant {
     pub variant_id: i32,
     pub feature_id: i32,
     pub identity_id: Option<i32>,
     pub migrated_id: Option<i32>,
+    pub feature_name: String,
+    pub feature_value: FeatureValue,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
+pub struct Segment {
+    #[sqlx(rename = "segment_id")]
+    pub id: i32,
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
-    pub value: FeatureValue,
+    #[validate(max_length = 2048)]
+    pub description: Option<String>,
+    pub entries: Vec<SegmentEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
+pub struct SegmentEntry {
+    pub driver: SegmentDriver,
+    pub joiner: SegmentJoiner,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum SegmentDriver {
+    Identity(Identity),
+    Environment(i32),
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub enum SegmentJoiner {
+    And,
+    AndNot,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -99,7 +146,7 @@ pub struct Tag {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FeatureResponse {
     pub feature_id: i32,
-    pub feature_name: String,
+    pub name: String,
     pub value: FeatureValue,
 }
 

@@ -6,7 +6,6 @@ use sqlx::{Sqlite, pool::PoolConnection};
 const KEY_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                              abcdefghijklmnopqrstuvwxyz\
                              0123456789_";
-
 pub fn random_string(len: u16) -> String {
     let mut rng = rand::thread_rng();
     (0..len)

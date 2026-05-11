@@ -1,10 +1,29 @@
-use flagrant::models::{feature, identity, variant};
-use flagrant_types::{Environment, Feature, FeatureValue, Variant};
-use sqlx::{Sqlite, pool::PoolConnection};
+use flagrant::models::{
+    feature,
+    identity::{self, HugSql, SQLIdentities},
+    variant,
+};
+use flagrant_types::{Environment, Feature, FeatureValue, Identity, Variant};
+use hugsqlx::params;
+use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
 
 use crate::common::create_context;
 
 mod common;
+
+#[derive(Debug, sqlx::FromRow)]
+struct VariantMigration {
+    variant_id: i32,
+    migrated_id: Option<i32>,
+}
+
+async fn get_test_migrations(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &Feature,
+) -> anyhow::Result<Vec<VariantMigration>> {
+    Ok(SQLIdentities::fetch_identities(conn, params![environment.id, feature.id]).await?)
+}
 
 async fn migrations_count_for_feature_variant_id(
     conn: &mut PoolConnection<Sqlite>,
@@ -12,7 +31,7 @@ async fn migrations_count_for_feature_variant_id(
     feature: &Feature,
     variant_id: Option<i32>,
 ) -> usize {
-    identity::get_identities(conn, environment, feature)
+    get_test_migrations(conn, environment, feature)
         .await
         .unwrap()
         .iter()
@@ -29,12 +48,12 @@ async fn idents_count_for_feature_variant(
 ) -> usize {
     // Redistribute idents and attach to variants first
     for n in 1..=10 {
-        identity::get_variants(conn, environment, format!("identity_{n}"))
+        identity::get_variants(conn, environment, Identity(format!("identity_{n}")))
             .await
             .unwrap();
     }
 
-    identity::get_identities(conn, environment, feature)
+    get_test_migrations(conn, environment, feature)
         .await
         .unwrap()
         .iter()
@@ -74,7 +93,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
-        identity::get_variants(&mut conn, &environment, format!("identity_{n}"))
+        identity::get_variants(&mut conn, &environment, Identity(format!("identity_{n}")))
             .await
             .unwrap();
     }
