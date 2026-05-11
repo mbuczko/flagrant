@@ -62,8 +62,12 @@ fn parse_state(state: Option<String>) -> Option<bool> {
 }
 
 /// Parses pattern parameter: wraps non-empty string with SQL wildcards.
-fn parse_pattern(pattern: Option<String>) -> Option<String> {
-    pattern.filter(|s| !s.is_empty()).map(|p| format!("%{p}%"))
+fn parse_pattern(pattern: Option<String>, prefix: Option<String>) -> Option<String> {
+    match (pattern, prefix) {
+        (Some(p), _) => Some(format!("%{p}%")),
+        (_, Some(p)) => Some(format!("{p}%")),
+        _ => None,
+    }
 }
 
 /// Parses tags parameter into included and excluded tag lists.
@@ -217,21 +221,21 @@ pub async fn update(
     Ok(Json(()))
 }
 
-/// Lists features with optional filtering.
-/// Listed features are returned with their control variants only for performance reasons.
+/// Lists features optionally pre-filtered by name.
+/// Each feature includes obligatory control variant and optional non-control ones.
 ///
 /// # Endpoint
 /// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]` - list with filters
 ///
 /// # Query Parameters
-/// - `prefix` - Filter by name prefix (e.g., "show_" matches "show_banner", "show_notification")
+/// - `pattern` - Filter by feature name substring (e.g., "banner" matches "show_banner", "show_banner_top")
+/// - `prefix` - Filter by feature name prefix (e.g., "show_" matches "show_banner", "show_notification")
 /// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
 /// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
-/// - `pattern` - SQL LIKE pattern search on feature names (wildcards added automatically)
 /// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 ///
 /// # Returns
-/// Array with single feature or list of features matching the filters, each with only its control variant.
+/// Array with single feature or list of features matching the filters, each with corresponding variants.
 #[utoipa::path(
     get,
     path = "/envs/{environment_id}/features",
@@ -240,7 +244,7 @@ pub async fn update(
         FeatureQueryParams
     ),
     responses(
-        (status = 200, description = "List of features with control variants", body = Vec<Feature>)
+        (status = 200, description = "List of features with corresponding variants", body = Vec<Feature>)
     ),
     tag = "features"
 )]
@@ -250,24 +254,17 @@ pub async fn list(
     Path(environment_id): Path<i32>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let features = match params.prefix {
-        // TODO: get_by_prefix is unnecessary - reuse get_all with an additional (prefix) parameter
-        Some(prefix) => feature::get_by_prefix(&mut conn, &env, prefix).await?,
-        None => {
-            let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());
-
-            feature::get_all(
-                &mut conn,
-                &env,
-                parse_status(params.status),
-                parse_state(params.state),
-                parse_pattern(params.pattern),
-                tags_included,
-                tags_excluded,
-            )
-            .await?
-        }
-    };
+    let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());
+    let features = feature::get_all(
+        &mut conn,
+        &env,
+        parse_status(params.status),
+        parse_state(params.state),
+        parse_pattern(params.pattern, params.prefix),
+        tags_included,
+        tags_excluded,
+    )
+    .await?;
 
     Ok(Json(features))
 }

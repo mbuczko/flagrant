@@ -173,28 +173,7 @@ pub async fn get_by_name(
     Ok(feature.with_variants(variants))
 }
 
-/// Returns features with name starting by given `prefix`.
-///
-/// For performance reasons each feature is returned with its control variant only.
-pub async fn get_by_prefix(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    prefix: String,
-) -> anyhow::Result<Vec<Feature>> {
-    let features = SQLFeatures::fetch_features_by_pattern(
-        conn,
-        params![environment.project_id, environment.id, format!("{prefix}%")],
-        |row| row_to_feature(row, environment),
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
-
-    Ok(features)
-}
-
-/// Returns all features for given `environment`.
-///
-/// For performance reasons each feature is returned with its control variant only.
+/// Returns all features for given `environment`, each with all its variants.
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -208,7 +187,8 @@ pub async fn get_all(
     let has_excluded = tags_excluded.as_ref().map(|t| !t.is_empty());
     let has_pattern = pattern.is_some();
 
-    Ok(SQLFeatures::fetch_features_for_environment(
+    // One row per (feature, variant) — aggregate into features below.
+    let rows = SQLFeatures::fetch_features_for_environment(
         conn,
         |cond_id| match cond_id {
             FetchFeaturesForEnvironment::Pattern => has_pattern,
@@ -226,10 +206,41 @@ pub async fn get_all(
             into_json_string(tags_included),
             into_json_string(tags_excluded)
         ],
-        |row| row_to_feature(row, environment),
+        |row| {
+            let variant = if let Ok(Some(variant_id)) = row.try_get::<Option<i32>, _>("variant_id")
+            {
+                Some(Variant {
+                    id: variant_id,
+                    value: row.get("value"),
+                    weight: row.get("weight"),
+                    accumulator: row.try_get("accumulator").unwrap_or(0),
+                    environment_id: row.try_get("environment_id").ok().flatten(),
+                })
+            } else {
+                None
+            };
+            (row_to_feature(row, environment), variant)
+        },
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?)
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?;
+
+    let mut result: Vec<Feature> = Vec::new();
+    let mut id_to_idx: HashMap<i32, usize> = HashMap::new();
+
+    print!("ROWS: {}", rows.iter().count());
+
+    for (feature, variant) in rows {
+        if let Some(&idx) = id_to_idx.get(&feature.id) {
+            if let Some(v) = variant {
+                result[idx].variants.push(v);
+            }
+        } else {
+            id_to_idx.insert(feature.id, result.len());
+            result.push(feature.with_variants(variant.into_iter().collect()));
+        }
+    }
+    Ok(result)
 }
 
 pub fn update_one<'a>(
