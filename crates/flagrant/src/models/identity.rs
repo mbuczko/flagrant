@@ -132,7 +132,7 @@ pub async fn list(
                     last.traits.push(IdentityTrait {
                         trait_id,
                         name,
-                        value: row.trait_value,
+                        value: row.trait_value.and_then(|v| v.parse().ok()),
                     });
                 }
             }
@@ -142,7 +142,7 @@ pub async fn list(
                         vec![IdentityTrait {
                             trait_id,
                             name,
-                            value: row.trait_value,
+                            value: row.trait_value.and_then(|v| v.parse().ok()),
                         }]
                     }
                     _ => vec![],

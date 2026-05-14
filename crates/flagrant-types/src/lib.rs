@@ -80,11 +80,19 @@ pub struct Trait {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TraitValue {
+    Str(String),
+    Int(i32),
+    Float(f32),
+    Bool(bool),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct IdentityTrait {
     pub trait_id: i32,
     pub name: String,
-    pub value: Option<String>,
+    pub value: Option<TraitValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -336,5 +344,53 @@ impl FromStr for FeatureValue {
             };
         }
         Err(ParseTypeError::Encoding)
+    }
+}
+
+impl fmt::Display for TraitValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Str(v) => write!(f, "str::{v}"),
+            Self::Int(v) => write!(f, "int::{v}"),
+            Self::Float(v) => write!(f, "float::{v}"),
+            Self::Bool(v) => write!(f, "bool::{v}"),
+        }
+    }
+}
+
+impl FromStr for TraitValue {
+    type Err = ParseTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (typ, val) = s.split_once("::").ok_or(ParseTypeError::Encoding)?;
+        match typ {
+            "str" => Ok(Self::Str(val.to_owned())),
+            "int" => val.parse::<i32>().map(Self::Int).map_err(|_| ParseTypeError::Encoding),
+            "float" => val.parse::<f32>().map(Self::Float).map_err(|_| ParseTypeError::Encoding),
+            "bool" => val.parse::<bool>().map(Self::Bool).map_err(|_| ParseTypeError::Encoding),
+            _ => Err(ParseTypeError::Type(typ.to_owned())),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for TraitValue {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+
+impl Encode<'_, Sqlite> for TraitValue {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        Encode::<Sqlite>::encode(self.to_string(), buf)
+    }
+}
+
+impl<'r> Decode<'r, Sqlite> for TraitValue {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        Self::from_str(s).map_err(Into::into)
     }
 }
