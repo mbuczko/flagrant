@@ -25,7 +25,7 @@ async fn get_test_migrations(
     Ok(SQLIdentities::fetch_identities(conn, params![environment.id, feature.id]).await?)
 }
 
-async fn migrations_count_for_feature_variant_id(
+async fn migrations_count_for_feature_variant(
     conn: &mut PoolConnection<Sqlite>,
     environment: &Environment,
     feature: &Feature,
@@ -100,7 +100,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Initially, there should be no migrated identities - all are assigned to the only (control) variant
     assert_eq!(
-        migrations_count_for_feature_variant_id(&mut conn, &environment, &feature, None).await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, None).await,
         10
     );
 
@@ -116,13 +116,8 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Having a new variant created with weight=50%, half of identities should be migrated
     assert_eq!(
-        migrations_count_for_feature_variant_id(
-            &mut conn,
-            &environment,
-            &feature,
-            Some(variant.id)
-        )
-        .await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, Some(variant.id))
+            .await,
         5
     );
 
@@ -138,13 +133,8 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Having the variant updated to weight=80%, 8 out of 10 identities should be migrated
     assert_eq!(
-        migrations_count_for_feature_variant_id(
-            &mut conn,
-            &environment,
-            &feature,
-            Some(variant.id)
-        )
-        .await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, Some(variant.id))
+            .await,
         8
     );
 
@@ -164,13 +154,8 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Having the variant downgraded to weight=10%, 1 out of 10 identities should be migrated
     assert_eq!(
-        migrations_count_for_feature_variant_id(
-            &mut conn,
-            &environment,
-            &feature,
-            Some(variant.id)
-        )
-        .await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, Some(variant.id))
+            .await,
         1
     );
 
@@ -184,13 +169,8 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         .unwrap();
 
     assert_eq!(
-        migrations_count_for_feature_variant_id(
-            &mut conn,
-            &environment,
-            &feature,
-            Some(variant.id)
-        )
-        .await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, Some(variant.id))
+            .await,
         0
     );
 }
@@ -268,13 +248,8 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         .unwrap();
 
     assert_eq!(
-        migrations_count_for_feature_variant_id(
-            &mut conn,
-            &environment,
-            &feature,
-            Some(variant.id)
-        )
-        .await,
+        migrations_count_for_feature_variant(&mut conn, &environment, &feature, Some(variant.id))
+            .await,
         0
     );
 }
