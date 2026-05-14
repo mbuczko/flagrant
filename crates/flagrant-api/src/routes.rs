@@ -6,7 +6,7 @@ use sqlx::{Pool, Sqlite};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::handlers::{environments, features, projects, variants};
+use crate::handlers::{environments, features, identities, projects, traits, variants};
 use crate::openapi::ApiDoc;
 use crate::{api, handlers::tags};
 
@@ -66,6 +66,16 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment_id/variants/:variant_id",
             delete(variants::delete),
         )
+        // Identities
+        .route("/identities", get(identities::list))
+        .route("/identities", post(identities::create))
+        .route("/identities/:identity_id", get(identities::fetch))
+        .route("/identities/:identity_id", put(identities::update))
+        .route("/identities/:identity_id", delete(identities::delete))
+        // Traits
+        .route("/traits", get(traits::list))
+        .route("/traits", post(traits::create))
+        .route("/traits/:trait_id", delete(traits::delete))
         // Public API
         .nest(
             "/api/v1",

@@ -1,3 +1,46 @@
+-- :name fetch_identity_by_id :<> :1
+-- :doc Fetches a single identity by id
+SELECT identity_id, identity FROM identities WHERE identity_id = $1
+
+-- :name fetch_identities_with_traits :<> :*
+-- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
+SELECT i.identity_id, i.identity, t.trait_id, t.name AS trait_name, it.value AS trait_value
+FROM (
+    SELECT identity_id, identity FROM identities
+    WHERE identity LIKE $1
+    ORDER BY identity
+    LIMIT 10
+) i
+LEFT JOIN identity_traits it USING(identity_id)
+LEFT JOIN traits t USING(trait_id)
+ORDER BY i.identity, t.name
+
+-- :name fetch_identity_traits :<> :*
+-- :doc Fetches all traits attached to given identity
+SELECT t.trait_id, t.name, it.value
+FROM identity_traits it
+JOIN traits t USING(trait_id)
+WHERE it.identity_id = $1
+ORDER BY t.name
+
+-- :name upsert_identity_trait :<> :!
+-- :doc Upserts a trait value for given identity
+INSERT INTO identity_traits(identity_id, trait_id, value)
+VALUES($1, $2, $3)
+ON CONFLICT(identity_id, trait_id) DO UPDATE SET value = excluded.value
+
+-- :name delete_identity_traits :<> :!
+-- :doc Removes all trait entries for given identity
+DELETE FROM identity_traits WHERE identity_id = $1
+
+-- :name delete_identity_variants :<> :!
+-- :doc Removes all variant assignments for given identity
+DELETE FROM identity_variants WHERE identity_id = $1
+
+-- :name delete_identity :<> :!
+-- :doc Removes an identity record
+DELETE FROM identities WHERE identity_id = $1
+
 -- :name upsert_identity :<> :1
 -- :doc Connects identity with variant of given id
 INSERT INTO identities(identity)

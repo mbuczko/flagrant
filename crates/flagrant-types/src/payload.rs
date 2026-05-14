@@ -52,6 +52,23 @@ pub struct VariantRequestPayload {
     pub weight: u8,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct TraitRequestPayload {
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityTraitPayload {
+    pub name: String,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityRequestPayload {
+    pub identity: String,
+    pub traits: Option<Vec<IdentityTraitPayload>>,
+}
+
 impl From<Feature> for FeatureRequestPayload {
     fn from(feature: Feature) -> Self {
         FeatureRequestPayload {

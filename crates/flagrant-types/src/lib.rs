@@ -73,18 +73,25 @@ pub struct Variant {
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Identity(pub String);
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct IdentityTrait {
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct Trait {
+    #[sqlx(rename = "trait_id")]
+    pub id: i32,
     pub name: String,
-    pub value: TraitValue,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TraitValue {
-    String(String),
-    Boolean(bool),
-    Int(i32),
-    Float(f32),
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct IdentityTrait {
+    pub trait_id: i32,
+    pub name: String,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityWithTraits {
+    pub id: i32,
+    pub identity: String,
+    pub traits: Vec<IdentityTrait>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]

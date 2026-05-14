@@ -16,4 +16,7 @@ pub enum FlagrantError {
 
     #[error("Invalid operation: {0}")]
     InvalidOperation(&'static str),
+
+    #[error("Not found: {0}")]
+    NotFound(&'static str),
 }

@@ -55,15 +55,31 @@ CREATE TABLE IF NOT EXISTS variant_weights (
   environment_id INTEGER NOT NULL REFERENCES environments,
   weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0 and weight <= 100),
   accumulator INTEGER NOT NULL DEFAULT 100,
+
   PRIMARY KEY (variant_id, environment_id)
+);
+
+CREATE TABLE IF NOT EXISTS traits (
+  trait_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE CHECK(LENGTH(name) <= 255),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS identities (
   identity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  identity TEXT NOT NULL UNIQUE,
+  identity TEXT NOT NULL UNIQUE CHECK(LENGTH(identity) <= 255),
   updated_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS identity_traits (
+  identity_id INTEGER NOT NULL REFERENCES identities,
+  trait_id INTEGER NOT NULL REFERENCES traits,
+  value TEXT CHECK (LENGTH(value) <= 1024),
+
+  PRIMARY KEY (identity_id, trait_id)
+);
+
 
 CREATE TABLE IF NOT EXISTS identity_variants (
   identity_id INTEGER NOT NULL REFERENCES identities,

@@ -48,7 +48,7 @@ async fn idents_count_for_feature_variant(
 ) -> usize {
     // Redistribute idents and attach to variants first
     for n in 1..=10 {
-        identity::get_variants(conn, environment, Identity(format!("identity_{n}")))
+        identity::get_identity_variants(conn, environment, Identity(format!("identity_{n}")))
             .await
             .unwrap();
     }
@@ -93,7 +93,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
-        identity::get_variants(&mut conn, &environment, Identity(format!("identity_{n}")))
+        identity::get_identity_variants(&mut conn, &environment, Identity(format!("identity_{n}")))
             .await
             .unwrap();
     }
