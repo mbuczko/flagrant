@@ -36,7 +36,7 @@ pub(crate) fn rebuild(ctx: &mut Connection) {
         .map(|f| f.variants.as_slice())
         .unwrap_or_default();
     let staged_count = ctx
-        .pending
+        .feature_patch
         .as_ref()
         .map(|p| {
             p.variants

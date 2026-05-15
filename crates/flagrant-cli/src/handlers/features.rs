@@ -50,7 +50,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         {
             let ctx = session.context.read().unwrap();
-            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+            if ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
@@ -88,7 +88,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     if let Some(name) = args.get(1) {
         {
             let ctx = session.context.read().unwrap();
-            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+            if ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
@@ -113,7 +113,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(feature) = &ctx.feature {
-            let patch = ctx.pending.as_ref().filter(|p| !p.is_empty()).cloned();
+            let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty()).cloned();
             feature.describe(patch);
         } else {
             bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
@@ -181,7 +181,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
             // No value provided — open editor with current bare value (without type prefix).
             // Prefer any already-staged value over the committed one.
             let current_fv = ctx
-                .pending
+                .feature_patch
                 .as_ref()
                 .and_then(|p| {
                     p.variants.iter().find_map(|op| match op {
@@ -222,7 +222,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .map(|f| f.id)
         .ok_or_else(|| anyhow::anyhow!("Not within a feature context."))?;
 
-    let patch = match &ctx.pending {
+    let patch = match &ctx.feature_patch {
         Some(p) if !p.is_empty() => p.clone(),
         _ => {
             println!("No pending changes to commit.");
@@ -238,7 +238,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     match ctx.client.patch::<_, Feature>(path, patch) {
         Ok(updated) => {
             updated.describe(None);
-            ctx.pending = None;
+            ctx.feature_patch = None;
             ctx.feature = Some(updated);
         }
         Err(err) => eprintln!("Commit failed: {err}"),
@@ -257,7 +257,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         );
     }
     let mut ctx = session.context.write().unwrap();
-    if ctx.pending.take().is_some() {
+    if ctx.feature_patch.take().is_some() {
         println!("Pending changes discarded.");
     } else {
         println!("No pending changes.");

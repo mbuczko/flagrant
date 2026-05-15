@@ -49,27 +49,37 @@ struct Args {
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
-    let dirty = ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+    let dirty_feature = ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+    let dirty_identity = ctx.has_identity_pending();
     let feat = match &ctx.feature {
-        Some(feat) if dirty => format!(" → {}*", feat.name),
+        Some(feat) if dirty_feature => format!(" → {}*", feat.name),
         Some(feat) => format!(" → {}", feat.name),
         _ => String::default(),
     };
+    let id = match &ctx.identity {
+        Some(id) if dirty_identity => format!(" @ {}*", id.identity),
+        Some(id) => format!(" @ {}", id.identity),
+        _ => String::default(),
+    };
     format!(
-        "{}/{}{}\x1b[0m › ",
+        "{}/{}{}{}\x1b[0m › ",
         ctx.project.name,
         ctx.environment.name.purple(),
-        feat.green()
+        feat.green(),
+        id.cyan()
     )
 }
 
 fn has_feature_ctx(session: &Session<Connection>) -> bool {
-    let ctx = &session.context.read().unwrap();
-    ctx.feature.is_some()
+    session.context.read().unwrap().feature.is_some()
 }
-fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
-    let ctx = &session.context.read().unwrap();
-    ctx.feature.is_some() && ctx.pending.is_some()
+fn has_identity_ctx(session: &Session<Connection>) -> bool {
+    session.context.read().unwrap().identity.is_some()
+}
+fn has_pending_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    (ctx.feature.is_some() && ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false))
+        || (ctx.identity.is_some() && ctx.has_identity_pending())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -114,6 +124,12 @@ fn main() -> anyhow::Result<()> {
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.args("add · delete · describe · list · use"),
+        // Identities
+        Command::Identity.op("add", "identity [trait:value ...]", handlers::identities::add),
+        Command::Identity.op("list", "[pattern]", handlers::identities::list),
+        Command::Identity.op("delete", "identity", handlers::identities::delete),
+        Command::Identity.op("use", "identity", handlers::identities::r#use),
+        Command::Identity.args("add · delete · list · use"),
         // Variants
         Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
         Command::Variant.op_in_context(
@@ -150,7 +166,7 @@ fn main() -> anyhow::Result<()> {
             "list · add · delete · discard · weight · value",
             has_feature_ctx,
         ),
-        // Feature setters (only available in feature context)
+        // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "state",
             "on|off",
@@ -169,17 +185,30 @@ fn main() -> anyhow::Result<()> {
             handlers::features::set_value,
             has_feature_ctx,
         ),
-        Command::Set.args_in_context("state · status · value", has_feature_ctx),
-        // Commit / discard (only available in feature context)
+        // Identity trait setter (catches SET <trait> <value> when in identity context)
+        Command::Set.no_op_in_context(
+            "trait value",
+            handlers::identities::set_trait,
+            has_identity_ctx,
+        ),
+        Command::Set.args("state · status · value · <trait> <value>"),
+        // UNSET (only in identity context)
+        Command::Unset.no_op_in_context(
+            "trait",
+            handlers::identities::unset_trait,
+            has_identity_ctx,
+        ),
+        Command::Unset.args_in_context("trait", has_identity_ctx),
+        // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
-            handlers::features::commit,
-            has_feature_with_pending_ctx,
+            handlers::commit,
+            has_pending_ctx,
         ),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
-            handlers::features::discard,
-            has_feature_with_pending_ctx,
+            handlers::discard,
+            has_pending_ctx,
         ),
     ];
     let overlays = vec![

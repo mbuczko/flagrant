@@ -1,5 +1,8 @@
 use anyhow::bail;
-use flagrant_types::{Environment, Feature, FeatureResponse, Project, payload::FeaturePatch};
+use flagrant_types::{
+    Environment, Feature, FeatureResponse, IdentityWithTraits, Project, payload::FeaturePatch,
+};
+use std::collections::BTreeMap;
 
 use crate::{
     http::{Auth, HttpClient},
@@ -19,12 +22,17 @@ pub enum VariantRef {
 pub struct Connection {
     pub client: HttpClient,
     pub project: Project,
-    pub feature: Option<Feature>,
     pub environment: Environment,
-    pub pending: Option<FeaturePatch>,
+    pub feature: Option<Feature>,
+    pub feature_patch: Option<FeaturePatch>,
     /// Positional index that maps 1-based display index → VariantRef.
     /// Invalidated whenever pending ops change.
     pub variant_index: Vec<VariantRef>,
+    /// Identity currently in context (set by `IDENTITY use`).
+    pub identity: Option<IdentityWithTraits>,
+    /// Staged trait changes for the current identity.
+    /// Value is `Some(encoded)` to upsert or `None` to remove.
+    pub pending_traits: BTreeMap<String, Option<String>>,
 }
 
 impl Connection {
@@ -77,8 +85,10 @@ impl Connection {
                 project,
                 environment,
                 feature: None,
-                pending: None,
+                feature_patch: None,
                 variant_index: Vec::new(),
+                identity: None,
+                pending_traits: BTreeMap::new(),
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
@@ -87,11 +97,19 @@ impl Connection {
     }
 
     pub fn get_or_init_pending(&mut self) -> &mut FeaturePatch {
-        self.pending.get_or_insert_with(FeaturePatch::default)
+        self.feature_patch.get_or_insert_with(FeaturePatch::default)
     }
 
     pub fn discard_pending(&mut self) {
-        self.pending = None;
+        self.feature_patch = None;
+    }
+
+    pub fn discard_identity_pending(&mut self) {
+        self.pending_traits.clear();
+    }
+
+    pub fn has_identity_pending(&self) -> bool {
+        !self.pending_traits.is_empty()
     }
 
     #[cfg(feature = "blocking")]

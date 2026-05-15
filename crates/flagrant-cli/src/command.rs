@@ -9,8 +9,10 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub enum Command {
     Environment,
     Feature,
+    Identity,
     Variant,
     Set,
+    Unset,
     Commit,
     Discard,
 }

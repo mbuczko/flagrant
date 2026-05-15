@@ -358,6 +358,23 @@ impl fmt::Display for TraitValue {
     }
 }
 
+impl TraitValue {
+    /// Infers the type from the raw string and returns the appropriate variant.
+    /// Detection order: bool → i32 → f32 → Str.
+    pub fn build(value: &str) -> Self {
+        if let Ok(b) = value.parse::<bool>() {
+            return Self::Bool(b);
+        }
+        if let Ok(i) = value.parse::<i32>() {
+            return Self::Int(i);
+        }
+        if let Ok(f) = value.parse::<f32>() {
+            return Self::Float(f);
+        }
+        Self::Str(value.to_owned())
+    }
+}
+
 impl FromStr for TraitValue {
     type Err = ParseTypeError;
 

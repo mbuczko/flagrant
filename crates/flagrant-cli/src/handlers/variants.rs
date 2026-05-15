@@ -42,7 +42,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No feature name provided."))?;
     let ops: &[VariantPatchOp] = ctx
-        .pending
+        .feature_patch
         .as_ref()
         .map(|p| p.variants.as_slice())
         .unwrap_or_default();
@@ -86,7 +86,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let adjusted_control_weight: Option<u8> = if !ops.is_empty() {
         let non_control_total = total_non_control_weight(
             feature,
-            ctx.pending.as_ref(),
+            ctx.feature_patch.as_ref(),
             &VariantRef::Staged(usize::MAX),
             0,
         );
@@ -201,7 +201,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let total = weight as u32
         + total_non_control_weight(
             ctx.feature.as_ref().unwrap(),
-            ctx.pending.as_ref(),
+            ctx.feature_patch.as_ref(),
             &VariantRef::Staged(usize::MAX),
             weight,
         );
@@ -300,7 +300,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     let total = total_non_control_weight(
         ctx.feature.as_ref().unwrap(),
-        ctx.pending.as_ref(),
+        ctx.feature_patch.as_ref(),
         &variant_ref,
         new_weight,
     );
@@ -329,7 +329,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided. Use an index or 'all'."),
     };
-    let pending = match ctx.pending.as_mut() {
+    let pending = match ctx.feature_patch.as_mut() {
         Some(p) => p,
         None => {
             println!("No pending variant changes.");
@@ -475,7 +475,7 @@ where
     match variant_ref {
         VariantRef::Committed(id) => {
             let staged = ctx
-                .pending
+                .feature_patch
                 .as_ref()
                 .and_then(|p| p.variants.iter().rev().find_map(|op| extract_set(op, *id)));
             staged.unwrap_or_else(|| {
@@ -487,7 +487,7 @@ where
             })
         }
         VariantRef::Staged(pos) => ctx
-            .pending
+            .feature_patch
             .as_ref()
             .and_then(|p| p.variants.iter().filter_map(|op| extract_add(op)).nth(*pos))
             .unwrap_or_default(),
