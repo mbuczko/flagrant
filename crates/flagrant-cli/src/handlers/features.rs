@@ -50,7 +50,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         {
             let ctx = session.context.read().unwrap();
-            if ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+            if ctx
+                .feature_patch
+                .as_ref()
+                .map(|p| !p.is_empty())
+                .unwrap_or(false)
+            {
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
@@ -88,7 +93,12 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     if let Some(name) = args.get(1) {
         {
             let ctx = session.context.read().unwrap();
-            if ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+            if ctx
+                .feature_patch
+                .as_ref()
+                .map(|p| !p.is_empty())
+                .unwrap_or(false)
+            {
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
@@ -113,7 +123,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(feature) = &ctx.feature {
-            let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty()).cloned();
+            let patch = ctx
+                .feature_patch
+                .as_ref()
+                .filter(|p| !p.is_empty())
+                .cloned();
             feature.describe(patch);
         } else {
             bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")

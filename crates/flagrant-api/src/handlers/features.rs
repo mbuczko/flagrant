@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{environment, feature};
+use flagrant::models::{environment, feature, project};
 use flagrant_types::{
     Feature,
     payload::{FeaturePatch, FeatureRequestPayload},
@@ -51,17 +51,12 @@ impl<'de> Deserialize<'de> for FeatureId {
 /// The feature is created as inactive by default, with the enabled state
 /// determined by the payload. The feature value becomes the environment's
 /// control variant.
-///
-/// # Endpoint
-/// `POST /environments/{environment_id}/features`
-///
-/// # Returns
-/// The newly created feature with its control variant.
 #[utoipa::path(
     post,
-    path = "/envs/{environment_id}/features",
+    path = "/projects/{project_id}/envs/{environment}/features",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID")
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name")
     ),
     request_body = FeatureRequestPayload,
     responses(
@@ -71,10 +66,11 @@ impl<'de> Deserialize<'de> for FeatureId {
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path(environment_id): Path<i32>,
+    Path((project_id, env_name)): Path<(i32, String)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::create(
         &mut conn,
         &env,
@@ -92,17 +88,12 @@ pub async fn create(
 /// Fetches a feature by its ID or name within a specific environment.
 ///
 /// Returns the feature with all its variants (control and non-control).
-///
-/// # Endpoint
-/// `GET /environments/{environment_id}/features/{feature_id}`
-///
-/// # Returns
-/// The feature with all its associated variants.
 #[utoipa::path(
     get,
-    path = "/envs/{environment_id}/features/{feature_id}",
+    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
@@ -112,9 +103,10 @@ pub async fn create(
 )]
 pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, FeatureId)>,
+    Path((project_id, env_name, feature_id)): Path<(i32, String, FeatureId)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = match feature_id {
         FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
         FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, name).await?,
@@ -126,19 +118,12 @@ pub async fn fetch_by_id_or_name(
 ///
 /// All updates are performed within a transaction. The feature value update
 /// affects the environment's control variant.
-///
-/// # Endpoint
-/// `PUT /environments/{environment_id}/features/{feature_id}`
-///
-/// # Parameters
-/// - `environment_id` - The environment containing the feature
-/// - `feature_id` - The ID of the feature to update
-/// - `payload` - The new feature properties (name, value, is_enabled)
 #[utoipa::path(
     put,
-    path = "/envs/{environment_id}/features/{feature_id}",
+    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
     request_body = FeatureRequestPayload,
@@ -149,10 +134,11 @@ pub async fn fetch_by_id_or_name(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::update_one(&mut conn, &env, &feature)
@@ -168,23 +154,18 @@ pub async fn update(
 /// Lists features optionally pre-filtered by name.
 /// Each feature includes obligatory control variant and optional non-control ones.
 ///
-/// # Endpoint
-/// `GET /environments/{environment_id}/features?[prefix=...][status=...][state=...][pattern=...][tags=...]` - list with filters
-///
 /// # Query Parameters
 /// - `pattern` - Filter by feature name substring (e.g., "banner" matches "show_banner", "show_banner_top")
 /// - `prefix` - Filter by feature name prefix (e.g., "show_" matches "show_banner", "show_notification")
 /// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
 /// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
 /// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
-///
-/// # Returns
-/// Array with single feature or list of features matching the filters, each with corresponding variants.
 #[utoipa::path(
     get,
-    path = "/envs/{environment_id}/features",
+    path = "/projects/{project_id}/envs/{environment}/features",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name"),
         FeatureQueryParams
     ),
     responses(
@@ -195,9 +176,10 @@ pub async fn update(
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
-    Path(environment_id): Path<i32>,
+    Path((project_id, env_name)): Path<(i32, String)>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let (tags_included, tags_excluded) = parsers::parse_tags(params.tags.as_ref());
     let features = feature::get_all(
         &mut conn,
@@ -216,20 +198,13 @@ pub async fn list(
 /// Deletes a feature and all its associated variants.
 ///
 /// Deletion is performed within a transaction. All variants (including control
-/// variants) are deleted before the feature itself. Control variants are deleted
-/// last due to strict deletion policy.
-///
-/// # Endpoint
-/// `DELETE /environments/{environment_id}/features/{feature_id}`
-///
-/// # Parameters
-/// - `environment_id` - The environment containing the feature
-/// - `feature_id` - The ID of the feature to delete
+/// variants) are deleted before the feature itself.
 #[utoipa::path(
     delete,
-    path = "/envs/{environment_id}/features/{feature_id}",
+    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
     responses(
@@ -239,9 +214,10 @@ pub async fn list(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::delete(&mut conn, &env, &feature).await?;
@@ -252,19 +228,12 @@ pub async fn delete(
 ///
 /// All changes (feature properties and variant operations) are applied within
 /// a single transaction. Validation errors are returned as 4xx responses.
-///
-/// # Endpoint
-/// `PATCH /environments/{environment_id}/features/{feature_id}`
-///
-/// # Parameters
-/// - `environment_id` - The environment containing the feature
-/// - `feature_id` - The ID of the feature to patch
-/// - `patch` - The set of changes to apply
 #[utoipa::path(
     patch,
-    path = "/envs/{environment_id}/features/{feature_id}",
+    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
     request_body = FeaturePatch,
@@ -275,10 +244,11 @@ pub async fn delete(
 )]
 pub async fn patch(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
     Json(patch): Json<FeaturePatch>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let project = project::get_by_id(&mut conn, project_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::apply_patch(&mut conn, &env, &feature, patch).await?;

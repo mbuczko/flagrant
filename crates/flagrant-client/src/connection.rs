@@ -123,17 +123,17 @@ impl Connection {
 }
 
 pub trait Resource {
-    fn as_base_resource(&self) -> BaseResource;
+    fn as_base_resource(&self) -> BaseResource<'_>;
 }
 
 impl Resource for Project {
-    fn as_base_resource(&self) -> BaseResource {
+    fn as_base_resource(&self) -> BaseResource<'_> {
         BaseResource::Project(self.id)
     }
 }
 
 impl Resource for Environment {
-    fn as_base_resource(&self) -> BaseResource {
-        BaseResource::Environment(self.id)
+    fn as_base_resource(&self) -> BaseResource<'_> {
+        BaseResource::Environment(self.project_id, &self.name)
     }
 }

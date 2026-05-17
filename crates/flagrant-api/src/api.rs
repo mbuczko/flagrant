@@ -13,10 +13,10 @@ use crate::{
 /// determine which variant value to return for each active feature.
 #[utoipa::path(
     get,
-    path = "/api/v1/projects/{project_id}/envs/{environment_id}/features",
+    path = "/api/v1/projects/{project_id}/envs/{environment}/features",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("environment" = String, Path, description = "Environment name"),
         ("X-Flagrant-Identity" = String, Header, description = "Caller identity used for variant assignment")
     ),
     responses(
@@ -27,11 +27,11 @@ use crate::{
 )]
 pub async fn get_features(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, environment_id)): Path<(i32, i32)>,
+    Path((project_id, env_name)): Path<(i32, String)>,
     Identity(identity): Identity,
 ) -> Result<Json<Vec<FeatureResponse>>, ServiceError> {
     let project = project::get_by_id(&mut conn, project_id).await?;
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let variants = identity::get_identity_variants(&mut conn, &project, &env, identity)
         .await?
         .into_iter()

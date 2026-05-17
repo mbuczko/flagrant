@@ -11,89 +11,47 @@ use crate::openapi::ApiDoc;
 use crate::{api, handlers::tags};
 
 pub fn init_router() -> Router<Pool<Sqlite>> {
+    let project_routes = Router::new()
+        // Environments
+        .route("/envs", get(environments::list))
+        .route("/envs", post(environments::create))
+        .route("/envs/:env_id", get(environments::fetch_by_id_or_name))
+        // Tags
+        .route("/envs/:environment/tags", get(tags::list))
+        // Features
+        .route("/envs/:environment/features", get(features::list))
+        .route("/envs/:environment/features", post(features::create))
+        .route("/envs/:environment/features/:feature_id", get(features::fetch_by_id_or_name))
+        .route("/envs/:environment/features/:feature_id", put(features::update))
+        .route("/envs/:environment/features/:feature_id", delete(features::delete))
+        .route("/envs/:environment/features/:feature_id", patch(features::patch))
+        // Variants
+        .route("/envs/:environment/features/:feature_id/variants", get(variants::list))
+        .route("/envs/:environment/features/:feature_id/variants", post(variants::create))
+        .route("/envs/:environment/variants/:variant_id", get(variants::fetch))
+        .route("/envs/:environment/variants/:variant_id", put(variants::update))
+        .route("/envs/:environment/variants/:variant_id", delete(variants::delete))
+        // Identities
+        .route("/identities", get(identities::list))
+        .route("/identities", post(identities::create))
+        .route("/identities/:identity_id", get(identities::fetch))
+        .route("/identities/:identity_id", put(identities::update))
+        .route("/identities/:identity_id", delete(identities::delete))
+        // Traits
+        .route("/traits", get(traits::list))
+        .route("/traits", post(traits::create))
+        .route("/traits/:trait_id", delete(traits::delete));
+
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Projects
         .route("/projects/", get(projects::list))
-        .route("/projects/:project_id", get(projects::fetch))
         .route("/projects/", post(projects::create))
-        // Environments
-        .route("/projects/:project_id/envs", get(environments::list))
-        .route("/projects/:project_id/envs", post(environments::create))
-        .route(
-            "/projects/:project_id/envs/:env_id",
-            get(environments::fetch_by_id_or_name),
-        )
-        // Tags
-        .route("/envs/:environment_id/tags", get(tags::list))
-        // Features
-        .route("/envs/:environment_id/features", get(features::list))
-        .route("/envs/:environment_id/features", post(features::create))
-        .route(
-            "/envs/:environment_id/features/:feature_id",
-            get(features::fetch_by_id_or_name),
-        )
-        .route(
-            "/envs/:environment_id/features/:feature_id",
-            put(features::update),
-        )
-        .route(
-            "/envs/:environment_id/features/:feature_id",
-            delete(features::delete),
-        )
-        .route(
-            "/envs/:environment_id/features/:feature_id",
-            patch(features::patch),
-        )
-        // Variants
-        .route(
-            "/envs/:environment_id/features/:feature_id/variants",
-            get(variants::list),
-        )
-        .route(
-            "/envs/:environment_id/features/:feature_id/variants",
-            post(variants::create),
-        )
-        .route(
-            "/envs/:environment_id/variants/:variant_id",
-            get(variants::fetch),
-        )
-        .route(
-            "/envs/:environment_id/variants/:variant_id",
-            put(variants::update),
-        )
-        .route(
-            "/envs/:environment_id/variants/:variant_id",
-            delete(variants::delete),
-        )
-        // Identities
-        .route("/projects/:project/identities", get(identities::list))
-        .route("/projects/:project/identities", post(identities::create))
-        .route(
-            "/projects/:project/identities/:identity_id",
-            get(identities::fetch),
-        )
-        .route(
-            "/projects/:project/identities/:identity_id",
-            put(identities::update),
-        )
-        .route(
-            "/projects/:project/identities/:identity_id",
-            delete(identities::delete),
-        )
-        // Traits
-        .route("/projects/:project/traits", get(traits::list))
-        .route("/projects/:project/traits", post(traits::create))
-        .route(
-            "/projects/:project/traits/:trait_id",
-            delete(traits::delete),
-        )
+        .route("/projects/:project_id", get(projects::fetch))
+        .nest("/projects/:project_id", project_routes)
         // Public API
         .nest(
-            "/api/v1",
-            Router::new().route(
-                "/projects/:project_id/envs/:environment_id/features",
-                get(api::get_features),
-            ),
+            "/api/v1/projects/:project_id",
+            Router::new().route("/envs/:environment/features", get(api::get_features)),
         )
 }
