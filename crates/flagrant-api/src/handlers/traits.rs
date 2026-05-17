@@ -6,9 +6,9 @@ use flagrant_types::{Trait, payload::TraitRequestPayload};
 /// Lists all defined traits.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/traits",
+    path = "/projects/{project}/traits",
     params(
-        ("project_id" = i32, Path, description = "Project ID")
+        ("project" = String, Path, description = "Project name")
     ),
     responses(
         (status = 200, description = "List of all traits", body = Vec<Trait>)
@@ -17,9 +17,9 @@ use flagrant_types::{Trait, payload::TraitRequestPayload};
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
 ) -> Result<Json<Vec<Trait>>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let all = traits::get_all(&mut conn, &project).await?;
 
     Ok(Json(all))
@@ -28,9 +28,9 @@ pub async fn list(
 /// Creates a new trait. If a trait with the same name already exists, returns it.
 #[utoipa::path(
     post,
-    path = "/projects/{project_id}/traits",
+    path = "/projects/{project}/traits",
     params(
-        ("project_id" = i32, Path, description = "Project ID")
+        ("project" = String, Path, description = "Project name")
     ),
     request_body = TraitRequestPayload,
     responses(
@@ -40,10 +40,10 @@ pub async fn list(
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
     Json(payload): Json<TraitRequestPayload>,
 ) -> Result<Json<Trait>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let t = traits::upsert(&mut conn, &project, payload.name).await?;
 
     Ok(Json(t))
@@ -52,9 +52,9 @@ pub async fn create(
 /// Deletes a trait and removes it from all identities it was attached to.
 #[utoipa::path(
     delete,
-    path = "/projects/{project_id}/traits/{trait_id}",
+    path = "/projects/{project}/traits/{trait_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("trait_id" = i32, Path, description = "Trait ID")
     ),
     responses(
@@ -64,9 +64,9 @@ pub async fn create(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, trait_id)): Path<(i32, i32)>,
+    Path((project_name, trait_id)): Path<(String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
 
     traits::delete(&mut conn, &project, trait_id).await?;
     Ok(Json(()))

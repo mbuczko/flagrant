@@ -24,9 +24,9 @@ pub(crate) struct IdentityQueryParams {
 /// Lists up to 10 identities with their traits, optionally filtered by a pattern.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/identities",
+    path = "/projects/{project}/identities",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         IdentityQueryParams
     ),
     responses(
@@ -36,10 +36,10 @@ pub(crate) struct IdentityQueryParams {
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
     Query(params): Query<IdentityQueryParams>,
 ) -> Result<Json<Vec<IdentityWithTraits>>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let identities = identity::list(
         &mut conn,
         &project,
@@ -52,9 +52,9 @@ pub async fn list(
 /// Fetches a single identity with its traits.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/identities/{identity_id}",
+    path = "/projects/{project}/identities/{identity_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("identity_id" = i32, Path, description = "Identity ID")
     ),
     responses(
@@ -65,7 +65,7 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((_project_id, identity_id)): Path<(i32, i32)>,
+    Path((_project, identity_id)): Path<(String, i32)>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let identity = identity::get_with_traits_by_id(&mut conn, identity_id).await?;
     Ok(Json(identity))
@@ -74,9 +74,9 @@ pub async fn fetch(
 /// Creates a new identity with optional traits. Traits are auto-created if they don't exist yet.
 #[utoipa::path(
     post,
-    path = "/projects/{project_id}/identities",
+    path = "/projects/{project}/identities",
     params(
-        ("project_id" = i32, Path, description = "Project ID")
+        ("project" = String, Path, description = "Project name")
     ),
     request_body = IdentityRequestPayload,
     responses(
@@ -86,10 +86,10 @@ pub async fn fetch(
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
     Json(payload): Json<IdentityRequestPayload>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let identity = identity::create(
         &mut conn,
         &project,
@@ -103,9 +103,9 @@ pub async fn create(
 /// Replaces all traits for an identity. Traits are auto-created if they don't exist yet.
 #[utoipa::path(
     put,
-    path = "/projects/{project_id}/identities/{identity_id}",
+    path = "/projects/{project}/identities/{identity_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("identity_id" = i32, Path, description = "Identity ID")
     ),
     request_body = Vec<IdentityTraitPayload>,
@@ -117,10 +117,10 @@ pub async fn create(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, identity_id)): Path<(i32, i32)>,
+    Path((project_name, identity_id)): Path<(String, i32)>,
     Json(traits): Json<Vec<IdentityTraitPayload>>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let identity = identity::get_by_id(&mut conn, identity_id).await?;
     let identity = identity::update_traits(&mut conn, &project, identity, traits).await?;
 
@@ -130,9 +130,9 @@ pub async fn update(
 /// Deletes an identity and all its trait associations and variant assignments.
 #[utoipa::path(
     delete,
-    path = "/projects/{project_id}/identities/{identity_id}",
+    path = "/projects/{project}/identities/{identity_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("identity_id" = i32, Path, description = "Identity ID")
     ),
     responses(
@@ -143,7 +143,7 @@ pub async fn update(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((_project_id, identity_id)): Path<(i32, i32)>,
+    Path((_project, identity_id)): Path<(String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
     let identity = identity::get_by_id(&mut conn, identity_id).await?;
     identity::delete(&mut conn, identity).await?;

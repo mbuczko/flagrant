@@ -16,7 +16,7 @@ use ulid::Ulid;
 
 const IDENTS_COUNT: usize = 100;
 const THREADS_COUNT: usize = 1;
-const PROJECT_ID: i32 = 1;
+const PROJECT_NAME: &str = "fancy_project";
 const ENVIRONMENT_ID: i32 = 1;
 const FEATURE_ID: i32 = 1;
 
@@ -37,7 +37,7 @@ pub fn main() -> anyhow::Result<()> {
     let connection = Arc::new(Connection::init(
         "http://localhost:3030".into(),
         Auth::None,
-        PROJECT_ID,
+        PROJECT_NAME.to_owned(),
         ENVIRONMENT_ID,
     )?);
 

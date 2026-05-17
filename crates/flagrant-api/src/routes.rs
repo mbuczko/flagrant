@@ -47,11 +47,11 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Projects
         .route("/projects/", get(projects::list))
         .route("/projects/", post(projects::create))
-        .route("/projects/:project_id", get(projects::fetch))
-        .nest("/projects/:project_id", project_routes)
+        .route("/projects/:project", get(projects::fetch))
+        .nest("/projects/:project", project_routes)
         // Public API
         .nest(
-            "/api/v1/projects/:project_id",
+            "/api/v1/projects/:project",
             Router::new().route("/envs/:environment/features", get(api::get_features)),
         )
 }

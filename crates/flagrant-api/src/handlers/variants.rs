@@ -13,9 +13,9 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 /// - the variant should be created for all environments (with the same value by default)
 #[utoipa::path(
     post,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}/variants",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/variants",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
@@ -27,10 +27,10 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
     Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
@@ -42,9 +42,9 @@ pub async fn create(
 /// Updates existing variant with provided value/weight.
 #[utoipa::path(
     put,
-    path = "/projects/{project_id}/envs/{environment}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
@@ -56,10 +56,10 @@ pub async fn create(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, variant_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
     Json(payload): Json<VariantRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
@@ -71,9 +71,9 @@ pub async fn update(
 /// Fetches a variant by ID.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/envs/{environment}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
@@ -84,9 +84,9 @@ pub async fn update(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, variant_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let variant = variant::get_by_id(&mut conn, &env, variant_id).await?;
 
@@ -96,9 +96,9 @@ pub async fn fetch(
 /// Lists all variants for a feature.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}/variants",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/variants",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
@@ -109,9 +109,9 @@ pub async fn fetch(
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let variants = variant::get_for_feature(&mut conn, &env, feature.id).await?;
@@ -122,9 +122,9 @@ pub async fn list(
 /// Deletes a variant.
 #[utoipa::path(
     delete,
-    path = "/projects/{project_id}/envs/{environment}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
@@ -135,9 +135,9 @@ pub async fn list(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, variant_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
 

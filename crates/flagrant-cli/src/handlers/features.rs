@@ -34,7 +34,7 @@ use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
-    let res = ctx.environment.as_base_resource();
+    let res = ctx.env_resource();
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
@@ -60,7 +60,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             }
         }
         let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
+        let res = ctx.env_resource();
         let val = match args.get(2) {
             Some(a) => a.to_string(),
             None => edit_in_editor("")?,
@@ -244,10 +244,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     };
 
-    let path = ctx
-        .environment
-        .as_base_resource()
-        .subpath(format!("/features/{feature_id}"));
+    let path = ctx.env_resource().subpath(format!("/features/{feature_id}"));
 
     match ctx.client.patch::<_, Feature>(path, patch) {
         Ok(updated) => {
@@ -285,7 +282,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// and `state:on`, plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    let res = ctx.environment.as_base_resource();
+    let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);
     let status = concat_values_for_arg("status", args);
@@ -312,7 +309,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
+        let res = ctx.env_resource();
         let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/{name}")));

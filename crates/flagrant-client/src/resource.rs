@@ -1,15 +1,15 @@
 pub enum BaseResource<'a> {
-    Project(i32),
-    Environment(i32, &'a str),
+    Project(&'a str),
+    Environment(&'a str, &'a str),
 }
 
 impl BaseResource<'_> {
     pub fn subpath<S: AsRef<str>>(&self, subpath: S) -> String {
         let relative = subpath.as_ref();
         match self {
-            BaseResource::Project(project_id) => format!("/projects/{project_id}{relative}"),
-            BaseResource::Environment(project_id, env_name) => {
-                format!("/projects/{project_id}/envs/{env_name}{relative}")
+            BaseResource::Project(project) => format!("/projects/{project}{relative}"),
+            BaseResource::Environment(project, env_name) => {
+                format!("/projects/{project}/envs/{env_name}{relative}")
             }
         }
     }

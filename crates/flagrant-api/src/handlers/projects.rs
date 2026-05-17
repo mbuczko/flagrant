@@ -21,12 +21,12 @@ pub async fn list(
     Ok(Json(projects))
 }
 
-/// Fetches a project by ID.
+/// Fetches a project by name.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}",
+    path = "/projects/{project}",
     params(
-        ("project_id" = i32, Path, description = "Project ID")
+        ("project" = String, Path, description = "Project name")
     ),
     responses(
         (status = 200, description = "Project details", body = Project)
@@ -35,9 +35,9 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
 ) -> Result<Json<Project>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
 
     Ok(Json(project))
 }

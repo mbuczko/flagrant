@@ -50,7 +50,7 @@ impl AutoCompleter for ArgCompleter<'_> {
             }
             "FEATURE" if arg_n >= 2 => {
                 let ctx = self.session.context.read().unwrap();
-                let res = ctx.environment.as_base_resource();
+                let res = ctx.env_resource();
                 let op: &str = &args[1];
 
                 Ok(match op {
@@ -67,7 +67,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                     "list" => match prefix.split_once(':') {
                         Some(("tag", val)) => {
                             let ctx = self.session.context.read().unwrap();
-                            let res = ctx.environment.as_base_resource();
+                            let res = ctx.env_resource();
                             let (lhs, modifier, val) = strip_tag(val);
 
                             ctx.client

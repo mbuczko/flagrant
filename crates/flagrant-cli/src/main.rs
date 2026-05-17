@@ -30,9 +30,9 @@ struct Args {
     )]
     host: String,
 
-    /// project ID (mutually exclusive with --create-project)
+    /// project name (mutually exclusive with --create-project)
     #[argh(option, short = 'p')]
-    project: Option<i32>,
+    project: Option<String>,
 
     /// environment ID
     #[argh(option, short = 'e', default = "1")]
@@ -97,21 +97,21 @@ fn main() -> anyhow::Result<()> {
     if args.list_projects {
         let client = HttpClient::new(args.host.clone(), Auth::None);
         let projects = handlers::projects::list_projects(&client)?;
+        println!("Known projects:\n---------------");
         for project in projects {
-            println!("Known projects:\n---------------");
-            println!("{:>4} : {}", project.id, project.name);
+            println!("{}", project.name);
         }
         return Ok(());
     }
 
     let connection = match (args.project, args.create_project) {
-        (Some(project_id), None) => {
-            Connection::init(args.host, Auth::None, project_id, args.environment)?
+        (Some(project_name), None) => {
+            Connection::init(args.host, Auth::None, project_name, args.environment)?
         }
         (None, Some(name)) => {
             let client = HttpClient::new(args.host.clone(), Auth::None);
             let (project, env) = handlers::projects::create_with_env(&name, &client)?;
-            Connection::init(args.host, Auth::None, project.id, env.id)?
+            Connection::init(args.host, Auth::None, project.name, env.id)?
         }
         (Some(_), Some(_)) => {
             anyhow::bail!("--project and --create-project are mutually exclusive")

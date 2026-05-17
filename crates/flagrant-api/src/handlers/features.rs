@@ -53,9 +53,9 @@ impl<'de> Deserialize<'de> for FeatureId {
 /// control variant.
 #[utoipa::path(
     post,
-    path = "/projects/{project_id}/envs/{environment}/features",
+    path = "/projects/{project}/envs/{environment}/features",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name")
     ),
     request_body = FeatureRequestPayload,
@@ -66,10 +66,10 @@ impl<'de> Deserialize<'de> for FeatureId {
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name)): Path<(i32, String)>,
+    Path((project_name, env_name)): Path<(String, String)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::create(
         &mut conn,
@@ -90,9 +90,9 @@ pub async fn create(
 /// Returns the feature with all its variants (control and non-control).
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = String, Path, description = "Feature ID or name")
     ),
@@ -103,9 +103,9 @@ pub async fn create(
 )]
 pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, FeatureId)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = match feature_id {
         FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
@@ -120,9 +120,9 @@ pub async fn fetch_by_id_or_name(
 /// affects the environment's control variant.
 #[utoipa::path(
     put,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
@@ -134,10 +134,10 @@ pub async fn fetch_by_id_or_name(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
     Json(payload): Json<FeatureRequestPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
@@ -162,9 +162,9 @@ pub async fn update(
 /// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/envs/{environment}/features",
+    path = "/projects/{project}/envs/{environment}/features",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         FeatureQueryParams
     ),
@@ -176,9 +176,9 @@ pub async fn update(
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<FeatureQueryParams>,
-    Path((project_id, env_name)): Path<(i32, String)>,
+    Path((project_name, env_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let (tags_included, tags_excluded) = parsers::parse_tags(params.tags.as_ref());
     let features = feature::get_all(
@@ -201,9 +201,9 @@ pub async fn list(
 /// variants) are deleted before the feature itself.
 #[utoipa::path(
     delete,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
@@ -214,9 +214,9 @@ pub async fn list(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
@@ -230,9 +230,9 @@ pub async fn delete(
 /// a single transaction. Validation errors are returned as 4xx responses.
 #[utoipa::path(
     patch,
-    path = "/projects/{project_id}/envs/{environment}/features/{feature_id}",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
@@ -244,10 +244,10 @@ pub async fn delete(
 )]
 pub async fn patch(
     DbConnection(mut conn): DbConnection,
-    Path((project_id, env_name, feature_id)): Path<(i32, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
     Json(patch): Json<FeaturePatch>,
 ) -> Result<Json<Feature>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 

@@ -18,9 +18,9 @@ pub(crate) struct TagQueryParams {
 /// Lists tags for an environment with optional prefix filtering.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}/envs/{environment}/tags",
+    path = "/projects/{project}/envs/{environment}/tags",
     params(
-        ("project_id" = i32, Path, description = "Project ID"),
+        ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
         TagQueryParams
     ),
@@ -32,9 +32,9 @@ pub(crate) struct TagQueryParams {
 pub async fn list(
     DbConnection(mut conn): DbConnection,
     Query(params): Query<TagQueryParams>,
-    Path((project_id, env_name)): Path<(i32, String)>,
+    Path((project_name, env_name)): Path<(String, String)>,
 ) -> Result<Json<Vec<Tag>>, ServiceError> {
-    let proj = project::get_by_id(&mut conn, project_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let features = match params.prefix {
         Some(prefix) => tag::get_by_prefix(&mut conn, &env, prefix).await?,

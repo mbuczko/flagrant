@@ -41,11 +41,11 @@ impl Connection {
     pub fn init(
         api_host: String,
         auth: Auth,
-        project_id: i32,
+        project_name: String,
         environment_id: i32,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, auth);
-        let path = format!("/projects/{project_id}");
+        let path = format!("/projects/{project_name}");
 
         Self::build(
             client.get::<Project>(path.clone()).ok(),
@@ -59,11 +59,11 @@ impl Connection {
     #[cfg(not(feature = "blocking"))]
     pub async fn init(
         api_host: String,
-        project_id: i32,
+        project_name: String,
         environment_id: i32,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, Auth::None);
-        let path = format!("/projects/{project_id}");
+        let path = format!("/projects/{project_name}");
 
         Self::build(
             client.get::<Project>(path.clone()).await.ok(),
@@ -113,9 +113,13 @@ impl Connection {
         !self.pending_traits.is_empty()
     }
 
+    pub fn env_resource(&self) -> BaseResource<'_> {
+        BaseResource::Environment(&self.project.name, &self.environment.name)
+    }
+
     #[cfg(feature = "blocking")]
     pub fn get_features(&self, identity: &str) -> Option<Vec<FeatureResponse>> {
-        let path = self.environment.as_base_resource().subpath("/features");
+        let path = self.env_resource().subpath("/features");
         self.client
             .get_with_identity(format!("/api/v1{path}"), Some(identity))
             .ok()
@@ -128,12 +132,7 @@ pub trait Resource {
 
 impl Resource for Project {
     fn as_base_resource(&self) -> BaseResource<'_> {
-        BaseResource::Project(self.id)
+        BaseResource::Project(&self.name)
     }
 }
 
-impl Resource for Environment {
-    fn as_base_resource(&self) -> BaseResource<'_> {
-        BaseResource::Environment(self.project_id, &self.name)
-    }
-}
