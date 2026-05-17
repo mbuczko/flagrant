@@ -45,6 +45,7 @@ use utoipa::OpenApi;
             flagrant_types::IdentityTrait,
             flagrant_types::IdentityWithTraits,
             flagrant_types::payload::ProjectRequestPayload,
+            flagrant_types::payload::ProjectCreatedResponse,
             flagrant_types::payload::EnvRequestPayload,
             flagrant_types::payload::FeatureRequestPayload,
             flagrant_types::payload::VariantRequestPayload,

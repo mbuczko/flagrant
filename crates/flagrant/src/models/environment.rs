@@ -125,16 +125,23 @@ pub async fn get_by_name(
     Ok(env)
 }
 
-pub async fn get_by_prefix(
+pub async fn list(
     conn: &mut SqliteConnection,
     project: &Project,
-    prefix: String,
+    pattern: Option<String>,
 ) -> anyhow::Result<Vec<Environment>> {
-    let envs = SQLEnvironments::fetch_environments_by_pattern::<_, Environment>(
-        conn,
-        params![project.id, format!("{}%", prefix)],
-    )
-    .await
+    let envs = match pattern {
+        Some(p) => {
+            SQLEnvironments::fetch_environments_by_pattern::<_, Environment>(
+                conn,
+                params![project.id, p],
+            )
+            .await
+        }
+        None => {
+            SQLEnvironments::fetch_environments_for_project(conn, params![project.id]).await
+        }
+    }
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of environments", e))?;
 
     Ok(envs)
@@ -144,9 +151,5 @@ pub async fn get_by_project(
     conn: &mut SqliteConnection,
     project: &Project,
 ) -> anyhow::Result<Vec<Environment>> {
-    let envs = SQLEnvironments::fetch_environments_for_project(conn, params![project.id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of environments", e))?;
-
-    Ok(envs)
+    list(conn, project, None).await
 }

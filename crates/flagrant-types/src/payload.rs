@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Feature, FeatureValue, TraitValue};
+use crate::{Environment, Feature, FeatureValue, Project, TraitValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
@@ -27,6 +27,12 @@ impl FeaturePatch {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ProjectRequestPayload {
     pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ProjectCreatedResponse {
+    pub project: Project,
+    pub environment: Environment,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
