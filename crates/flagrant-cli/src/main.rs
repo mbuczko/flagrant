@@ -49,7 +49,11 @@ struct Args {
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
-    let dirty_feature = ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+    let dirty_feature = ctx
+        .feature_patch
+        .as_ref()
+        .map(|p| !p.is_empty())
+        .unwrap_or(false);
     let dirty_identity = ctx.has_identity_pending();
     let feat = match &ctx.feature {
         Some(feat) if dirty_feature => format!(" → {}*", feat.name),
@@ -57,8 +61,8 @@ fn prompter(session: &Session<Connection>) -> String {
         _ => String::default(),
     };
     let id = match &ctx.identity {
-        Some(id) if dirty_identity => format!(" @ {}*", id.identity),
-        Some(id) => format!(" @ {}", id.identity),
+        Some(id) if dirty_identity => format!(" @ {}*", id.value),
+        Some(id) => format!(" @ {}", id.value),
         _ => String::default(),
     };
     format!(
@@ -78,7 +82,12 @@ fn has_identity_ctx(session: &Session<Connection>) -> bool {
 }
 fn has_pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
-    (ctx.feature.is_some() && ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false))
+    (ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false))
         || (ctx.identity.is_some() && ctx.has_identity_pending())
 }
 
@@ -125,7 +134,11 @@ fn main() -> anyhow::Result<()> {
         Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.args("add · delete · describe · list · use"),
         // Identities
-        Command::Identity.op("add", "identity [trait:value ...]", handlers::identities::add),
+        Command::Identity.op(
+            "add",
+            "identity [trait:value ...]",
+            handlers::identities::add,
+        ),
         Command::Identity.op("list", "[pattern]", handlers::identities::list),
         Command::Identity.op("delete", "identity", handlers::identities::delete),
         Command::Identity.op("use", "identity", handlers::identities::r#use),

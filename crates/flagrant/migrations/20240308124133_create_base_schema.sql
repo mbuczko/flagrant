@@ -61,17 +61,21 @@ CREATE TABLE IF NOT EXISTS variant_weights (
 
 CREATE TABLE IF NOT EXISTS traits (
   trait_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects,
   name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  UNIQUE(name)
+  UNIQUE(project_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS identities (
   identity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  identity TEXT NOT NULL UNIQUE CHECK(LENGTH(identity) <= 255),
+  project_id INTEGER NOT NULL REFERENCES projects,
+  identity TEXT NOT NULL CHECK(LENGTH(identity) <= 255),
   updated_at DATETIME,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(project_id, identity)
 );
 
 CREATE TABLE IF NOT EXISTS identity_traits (

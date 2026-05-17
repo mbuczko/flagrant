@@ -1,6 +1,7 @@
 use anyhow::bail;
 use flagrant_types::{
-    Environment, Feature, FeatureResponse, IdentityWithTraits, Project, payload::FeaturePatch,
+    Environment, Feature, FeatureResponse, IdentityWithTraits, Project, TraitValue,
+    payload::FeaturePatch,
 };
 use std::collections::BTreeMap;
 
@@ -32,7 +33,7 @@ pub struct Connection {
     pub identity: Option<IdentityWithTraits>,
     /// Staged trait changes for the current identity.
     /// Value is `Some(encoded)` to upsert or `None` to remove.
-    pub pending_traits: BTreeMap<String, Option<String>>,
+    pub pending_traits: BTreeMap<String, Option<TraitValue>>,
 }
 
 impl Connection {

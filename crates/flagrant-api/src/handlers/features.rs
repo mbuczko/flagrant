@@ -8,15 +8,10 @@ use flagrant_types::{
     payload::{FeaturePatch, FeatureRequestPayload},
 };
 use serde::Deserialize;
-use smallvec::{SmallVec, smallvec};
 use utoipa::IntoParams;
 
+use super::parsers;
 use crate::{errors::ServiceError, extractors::DbConnection};
-
-type TagsTuple<'a> = (
-    Option<SmallVec<[&'a str; 3]>>, // Tags included
-    Option<SmallVec<[&'a str; 3]>>, // Tags excluded
-);
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeatureQueryParams {
@@ -49,57 +44,6 @@ impl<'de> Deserialize<'de> for FeatureId {
             Err(_) => Ok(FeatureId::Name(s)),
         }
     }
-}
-
-/// Parses status parameter: converts non-empty string to bool (true if "active").
-fn parse_status(status: Option<String>) -> Option<bool> {
-    status.filter(|s| !s.is_empty()).map(|s| s == "active")
-}
-
-/// Parses state parameter: converts non-empty string to bool (true if "on").
-fn parse_state(state: Option<String>) -> Option<bool> {
-    state.filter(|s| !s.is_empty()).map(|s| s == "on")
-}
-
-/// Parses pattern parameter: wraps non-empty string with SQL wildcards.
-fn parse_pattern(pattern: Option<String>, prefix: Option<String>) -> Option<String> {
-    match (pattern, prefix) {
-        (Some(p), _) => Some(format!("%{p}%")),
-        (_, Some(p)) => Some(format!("{p}%")),
-        _ => None,
-    }
-}
-
-/// Parses tags parameter into included and excluded tag lists.
-/// Tags prefixed with '-' are excluded, others are included.
-fn parse_tags<'a>(tags: Option<&'a String>) -> TagsTuple<'a> {
-    tags.map(|tags| {
-        let (mut included, mut excluded) = (smallvec![], smallvec![]);
-
-        for tag in tags.split(',') {
-            if let Some(tag) = tag.strip_prefix('-')
-                && !tag.is_empty()
-            {
-                excluded.push(tag);
-            } else if !tag.is_empty() {
-                included.push(tag);
-            }
-        }
-
-        (
-            if included.is_empty() {
-                None
-            } else {
-                Some(included)
-            },
-            if excluded.is_empty() {
-                None
-            } else {
-                Some(excluded)
-            },
-        )
-    })
-    .unwrap_or((None, None))
 }
 
 /// Creates a new feature in the specified environment.
@@ -254,13 +198,13 @@ pub async fn list(
     Path(environment_id): Path<i32>,
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let (tags_included, tags_excluded) = parse_tags(params.tags.as_ref());
+    let (tags_included, tags_excluded) = parsers::parse_tags(params.tags.as_ref());
     let features = feature::get_all(
         &mut conn,
         &env,
-        parse_status(params.status),
-        parse_state(params.state),
-        parse_pattern(params.pattern, params.prefix),
+        parsers::parse_status(params.status),
+        parsers::parse_state(params.state),
+        parsers::parse_pattern(params.pattern, params.prefix),
         tags_included,
         tags_excluded,
     )

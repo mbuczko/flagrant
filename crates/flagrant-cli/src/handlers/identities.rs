@@ -22,7 +22,7 @@ use flagrant_types::{
 };
 
 fn describe(identity: &IdentityWithTraits) {
-    let title = format!("{} (ID={})", identity.identity, identity.id);
+    let title = format!("{} (ID={})", identity.value, identity.id);
     let traits = if identity.traits.is_empty() {
         "(none)".dimmed().to_string()
     } else {
@@ -69,7 +69,7 @@ fn list_all(identities: &[IdentityWithTraits]) {
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            [id.identity.clone(), traits]
+            [id.value.clone(), traits]
         })
         .collect();
 
@@ -90,7 +90,7 @@ fn resolve_identity(
         .get::<Vec<IdentityWithTraits>>(format!("/identities?pattern={identity_str}"))?;
     identities
         .into_iter()
-        .find(|i| i.identity == identity_str)
+        .find(|i| i.value == identity_str)
         .ok_or_else(|| anyhow::anyhow!("Identity not found: {identity_str}"))
 }
 
@@ -108,7 +108,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 let (name, value) = arg.split_once(':')?;
                 Some(IdentityTraitPayload {
                     name: name.to_owned(),
-                    value: Some(TraitValue::build(value).to_string()),
+                    value: Some(TraitValue::build(value)),
                 })
             })
             .collect();
@@ -140,9 +140,9 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .get(1)
         .map(|a| format!("?pattern={a}"))
         .unwrap_or_default();
-    let identities =
-        ctx.client
-            .get::<Vec<IdentityWithTraits>>(format!("/identities{pattern}"))?;
+    let identities = ctx
+        .client
+        .get::<Vec<IdentityWithTraits>>(format!("/identities{pattern}"))?;
     list_all(&identities);
     Ok(())
 }
@@ -154,8 +154,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if let Some(identity_str) = args.get(1) {
         let ctx = session.context.read().unwrap();
         let identity = resolve_identity(&ctx, identity_str)?;
-        ctx.client
-            .delete(format!("/identities/{}", identity.id))?;
+        ctx.client.delete(format!("/identities/{}", identity.id))?;
         println!("Identity removed.");
         return Ok(());
     }
@@ -200,10 +199,10 @@ pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
         if ctx.identity.is_none() {
             bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
         }
-        let encoded = TraitValue::build(value).to_string();
+        let trait_value = TraitValue::build(value);
         ctx.pending_traits
-            .insert(name.to_string(), Some(encoded.clone()));
-        println!("Staged: {} = {}", name, encoded);
+            .insert(name.to_string(), Some(trait_value.clone()));
+        println!("Staged: {} = {}", name, trait_value);
         return Ok(());
     }
     bail!("Usage: SET <trait> <value>")
@@ -240,13 +239,13 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let identity_id = ctx.identity.as_ref().unwrap().id;
 
     // Merge staged changes onto current trait set
-    let mut merged: std::collections::BTreeMap<String, Option<String>> = ctx
+    let mut merged: std::collections::BTreeMap<String, Option<TraitValue>> = ctx
         .identity
         .as_ref()
         .unwrap()
         .traits
         .iter()
-        .map(|t| (t.name.clone(), t.value.as_ref().map(|v| v.to_string())))
+        .map(|t| (t.name.clone(), t.value.clone()))
         .collect();
 
     for (name, val) in &ctx.pending_traits {

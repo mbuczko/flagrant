@@ -71,7 +71,10 @@ pub struct Variant {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct Identity(pub String);
+pub struct Identity {
+    pub id: i32,
+    pub value: String,
+}
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Trait {
@@ -98,7 +101,7 @@ pub struct IdentityTrait {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct IdentityWithTraits {
     pub id: i32,
-    pub identity: String,
+    pub value: String,
     pub traits: Vec<IdentityTrait>,
 }
 
@@ -300,7 +303,6 @@ impl fmt::Display for FeatureValue {
         write!(f, "{typ}::{}", val.trim())
     }
 }
-
 impl FeatureValue {
     fn new(typ: &str, value: &str) -> Result<Self, ParseTypeError> {
         let val = value.to_owned();
@@ -382,9 +384,18 @@ impl FromStr for TraitValue {
         let (typ, val) = s.split_once("::").ok_or(ParseTypeError::Encoding)?;
         match typ {
             "str" => Ok(Self::Str(val.to_owned())),
-            "int" => val.parse::<i32>().map(Self::Int).map_err(|_| ParseTypeError::Encoding),
-            "float" => val.parse::<f32>().map(Self::Float).map_err(|_| ParseTypeError::Encoding),
-            "bool" => val.parse::<bool>().map(Self::Bool).map_err(|_| ParseTypeError::Encoding),
+            "int" => val
+                .parse::<i32>()
+                .map(Self::Int)
+                .map_err(|_| ParseTypeError::Encoding),
+            "float" => val
+                .parse::<f32>()
+                .map(Self::Float)
+                .map_err(|_| ParseTypeError::Encoding),
+            "bool" => val
+                .parse::<bool>()
+                .map(Self::Bool)
+                .map_err(|_| ParseTypeError::Encoding),
             _ => Err(ParseTypeError::Type(typ.to_owned())),
         }
     }

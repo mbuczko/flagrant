@@ -1,23 +1,190 @@
 use flagrant_types::payload::IdentityTraitPayload;
-use flagrant_types::{Environment, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits};
+use flagrant_types::{
+    Environment, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits, Project,
+};
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError};
 
+use super::traits::upsert;
 use super::variant;
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/identities.sql"]
 pub struct SQLIdentities {}
 
+#[derive(sqlx::FromRow)]
+struct IdentityWithTraitRow {
+    identity_id: i32,
+    identity: String,
+    trait_id: Option<i32>,
+    trait_name: Option<String>,
+    trait_value: Option<String>,
+}
+
+// Helper to load traits for an identity_id
+async fn load_traits(
+    conn: &mut SqliteConnection,
+    identity_id: i32,
+) -> anyhow::Result<Vec<IdentityTrait>> {
+    SQLIdentities::fetch_identity_traits::<_, IdentityTrait>(conn, params![identity_id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity traits", e).into())
+}
+
+/// Lists up to 10 identities with their traits, optionally filtered by pattern.
+pub async fn list(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    pattern: Option<String>,
+) -> anyhow::Result<Vec<IdentityWithTraits>> {
+    let like = pattern
+        .map(|p| format!("%{p}%"))
+        .unwrap_or_else(|| "%".to_string());
+    let rows = SQLIdentities::fetch_identities_with_traits::<_, IdentityWithTraitRow>(
+        conn,
+        params![project.id, like],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not list identities", e))?;
+
+    let mut result: Vec<IdentityWithTraits> = Vec::new();
+    for row in rows {
+        match result.last_mut() {
+            Some(last) if last.id == row.identity_id => {
+                if let (Some(trait_id), Some(name)) = (row.trait_id, row.trait_name) {
+                    last.traits.push(IdentityTrait {
+                        trait_id,
+                        name,
+                        value: row.trait_value.and_then(|v| v.parse().ok()),
+                    });
+                }
+            }
+            _ => {
+                let traits = match (row.trait_id, row.trait_name) {
+                    (Some(trait_id), Some(name)) => {
+                        vec![IdentityTrait {
+                            trait_id,
+                            name,
+                            value: row.trait_value.and_then(|v| v.parse().ok()),
+                        }]
+                    }
+                    _ => vec![],
+                };
+                result.push(IdentityWithTraits {
+                    id: row.identity_id,
+                    value: row.identity,
+                    traits,
+                });
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Fetches a single identity with no traits by id
+pub async fn get_by_id(conn: &mut SqliteConnection, identity_id: i32) -> anyhow::Result<Identity> {
+    let (id, value) =
+        SQLIdentities::fetch_identity_by_id::<_, (i32, String)>(&mut *conn, params![identity_id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
+
+    Ok(Identity { id, value })
+}
+
+/// Fetches a single identity with its traits by id.
+pub async fn get_with_traits_by_id(
+    conn: &mut SqliteConnection,
+    identity_id: i32,
+) -> anyhow::Result<IdentityWithTraits> {
+    let (id, identity) =
+        SQLIdentities::fetch_identity_by_id::<_, (i32, String)>(&mut *conn, params![identity_id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
+    let traits = load_traits(conn, id).await?;
+
+    Ok(IdentityWithTraits {
+        id,
+        value: identity,
+        traits,
+    })
+}
+
+/// Creates a new identity with optional traits. Auto-creates traits that don't exist yet.
+pub async fn create(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    identity: String,
+    trait_payloads: Vec<IdentityTraitPayload>,
+) -> anyhow::Result<IdentityWithTraits> {
+    let mut tx = conn.begin().await?;
+    let (id, value) =
+        SQLIdentities::upsert_identity::<_, (i32, String)>(&mut *tx, params![project.id, identity])
+            .await?;
+
+    attach_traits(&mut *tx, project, id, &trait_payloads).await?;
+    tx.commit().await?;
+
+    let traits = load_traits(conn, id).await?;
+    Ok(IdentityWithTraits { id, value, traits })
+}
+
+/// Replaces all traits for an identity. Auto-creates traits that don't exist yet.
+pub async fn update_traits(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    identity: Identity,
+    trait_payloads: Vec<IdentityTraitPayload>,
+) -> anyhow::Result<IdentityWithTraits> {
+    let mut tx = conn.begin().await?;
+
+    SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
+    attach_traits(&mut *tx, project, identity.id, &trait_payloads).await?;
+
+    tx.commit().await?;
+    get_with_traits_by_id(conn, identity.id).await
+}
+
+/// Deletes an identity and all associated data.
+pub async fn delete(conn: &mut SqliteConnection, identity: Identity) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
+    SQLIdentities::delete_identity_variants(&mut *tx, params![identity.id]).await?;
+    SQLIdentities::delete_identity(&mut *tx, params![identity.id]).await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+// Internal helper: upserts traits and links them to identity
+async fn attach_traits(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    identity_id: i32,
+    trait_payloads: &[IdentityTraitPayload],
+) -> anyhow::Result<()> {
+    for t in trait_payloads {
+        let trait_rec = upsert(&mut *conn, project, t.name.clone()).await?;
+        SQLIdentities::upsert_identity_trait(
+            &mut *conn,
+            params![identity_id, trait_rec.id, t.value.clone()],
+        )
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
+    }
+    Ok(())
+}
+
 /// Returns feature variants assigned to given identity, distributing the identity across
 /// variants as needed. If the identity is new or has a pending migration, it is attached
 /// to a variant determined by the distributor and persisted for future requests.
 pub async fn get_identity_variants(
     conn: &mut SqliteConnection,
+    project: &Project,
     environment: &Environment,
-    Identity(identity): Identity,
+    identity: String,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let mut tx = conn.begin().await?;
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity).await?;
@@ -38,7 +205,7 @@ pub async fn get_identity_variants(
             if identity_id.is_none() {
                 let (id, _) = SQLIdentities::upsert_identity::<_, (i32, String)>(
                     &mut *tx,
-                    params![&identity],
+                    params![project.id, &identity],
                 )
                 .await?;
                 identity_id = Some(id);
@@ -89,153 +256,5 @@ pub async fn detach_identities(
     from_variant_id: i32,
 ) -> anyhow::Result<()> {
     SQLIdentities::delete_attachments(conn, params![from_variant_id]).await?;
-    Ok(())
-}
-
-#[derive(sqlx::FromRow)]
-struct IdentityWithTraitRow {
-    identity_id: i32,
-    identity: String,
-    trait_id: Option<i32>,
-    trait_name: Option<String>,
-    trait_value: Option<String>,
-}
-
-// Helper to load traits for an identity_id
-async fn load_traits(
-    conn: &mut SqliteConnection,
-    identity_id: i32,
-) -> anyhow::Result<Vec<IdentityTrait>> {
-    SQLIdentities::fetch_identity_traits::<_, IdentityTrait>(conn, params![identity_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity traits", e).into())
-}
-
-/// Lists up to 10 identities with their traits, optionally filtered by pattern.
-pub async fn list(
-    conn: &mut SqliteConnection,
-    pattern: Option<String>,
-) -> anyhow::Result<Vec<IdentityWithTraits>> {
-    let like = pattern
-        .map(|p| format!("%{p}%"))
-        .unwrap_or_else(|| "%".to_string());
-    let rows =
-        SQLIdentities::fetch_identities_with_traits::<_, IdentityWithTraitRow>(conn, params![like])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not list identities", e))?;
-
-    let mut result: Vec<IdentityWithTraits> = Vec::new();
-    for row in rows {
-        match result.last_mut() {
-            Some(last) if last.id == row.identity_id => {
-                if let (Some(trait_id), Some(name)) = (row.trait_id, row.trait_name) {
-                    last.traits.push(IdentityTrait {
-                        trait_id,
-                        name,
-                        value: row.trait_value.and_then(|v| v.parse().ok()),
-                    });
-                }
-            }
-            _ => {
-                let traits = match (row.trait_id, row.trait_name) {
-                    (Some(trait_id), Some(name)) => {
-                        vec![IdentityTrait {
-                            trait_id,
-                            name,
-                            value: row.trait_value.and_then(|v| v.parse().ok()),
-                        }]
-                    }
-                    _ => vec![],
-                };
-                result.push(IdentityWithTraits {
-                    id: row.identity_id,
-                    identity: row.identity,
-                    traits,
-                });
-            }
-        }
-    }
-    Ok(result)
-}
-
-/// Fetches a single identity with its traits by id.
-pub async fn get_by_id(
-    conn: &mut SqliteConnection,
-    identity_id: i32,
-) -> anyhow::Result<IdentityWithTraits> {
-    let (id, identity) =
-        SQLIdentities::fetch_identity_by_id::<_, (i32, String)>(&mut *conn, params![identity_id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
-    let traits = load_traits(conn, id).await?;
-    Ok(IdentityWithTraits {
-        id,
-        identity,
-        traits,
-    })
-}
-
-/// Creates a new identity with optional traits. Auto-creates traits that don't exist yet.
-pub async fn create(
-    conn: &mut SqliteConnection,
-    identity_str: String,
-    trait_payloads: Vec<IdentityTraitPayload>,
-) -> anyhow::Result<IdentityWithTraits> {
-    let mut tx = conn.begin().await?;
-    let (identity_id, identity) =
-        SQLIdentities::upsert_identity::<_, (i32, String)>(&mut *tx, params![identity_str]).await?;
-
-    attach_traits(&mut *tx, identity_id, &trait_payloads).await?;
-    tx.commit().await?;
-
-    let traits = load_traits(conn, identity_id).await?;
-    Ok(IdentityWithTraits {
-        id: identity_id,
-        identity,
-        traits,
-    })
-}
-
-/// Replaces all traits for an identity. Auto-creates traits that don't exist yet.
-pub async fn update_traits(
-    conn: &mut SqliteConnection,
-    identity_id: i32,
-    trait_payloads: Vec<IdentityTraitPayload>,
-) -> anyhow::Result<IdentityWithTraits> {
-    let mut tx = conn.begin().await?;
-
-    SQLIdentities::delete_identity_traits(&mut *tx, params![identity_id]).await?;
-    attach_traits(&mut *tx, identity_id, &trait_payloads).await?;
-    tx.commit().await?;
-    get_by_id(conn, identity_id).await
-}
-
-/// Deletes an identity and all associated data.
-pub async fn delete(conn: &mut SqliteConnection, identity_id: i32) -> anyhow::Result<()> {
-    let mut tx = conn.begin().await?;
-
-    SQLIdentities::delete_identity_traits(&mut *tx, params![identity_id]).await?;
-    SQLIdentities::delete_identity_variants(&mut *tx, params![identity_id]).await?;
-    SQLIdentities::delete_identity(&mut *tx, params![identity_id]).await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-// Internal helper: upserts traits and links them to identity
-async fn attach_traits(
-    conn: &mut SqliteConnection,
-    identity_id: i32,
-    trait_payloads: &[IdentityTraitPayload],
-) -> anyhow::Result<()> {
-    for t in trait_payloads {
-        let trait_rec = super::traits::upsert(&mut *conn, t.name.clone()).await?;
-        SQLIdentities::upsert_identity_trait(
-            &mut *conn,
-            params![identity_id, trait_rec.id, t.value.clone()],
-        )
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
-    }
     Ok(())
 }

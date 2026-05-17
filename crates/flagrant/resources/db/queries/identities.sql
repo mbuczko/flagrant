@@ -6,13 +6,13 @@ SELECT identity_id, identity FROM identities WHERE identity_id = $1
 -- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
 SELECT i.identity_id, i.identity, t.trait_id, t.name AS trait_name, it.value AS trait_value
 FROM (
-    SELECT identity_id, identity FROM identities
-    WHERE identity LIKE $1
+    SELECT project_id, identity_id, identity FROM identities
+    WHERE  project_id = $1 and identity LIKE $2
     ORDER BY identity
     LIMIT 10
 ) i
 LEFT JOIN identity_traits it USING(identity_id)
-LEFT JOIN traits t USING(trait_id)
+LEFT JOIN traits t ON t.trait_id = it.trait_id AND t.project_id = i.project_id
 ORDER BY i.identity, t.name
 
 -- :name fetch_identity_traits :<> :*
@@ -43,9 +43,9 @@ DELETE FROM identities WHERE identity_id = $1
 
 -- :name upsert_identity :<> :1
 -- :doc Connects identity with variant of given id
-INSERT INTO identities(identity)
-VALUES(lower($1))
-ON CONFLICT (identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+INSERT INTO identities(project_id, identity)
+VALUES($1, lower($2))
+ON CONFLICT (project_id, identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
 RETURNING identity_id, identity
 
 -- :name upsert_identity_variant :<> :!

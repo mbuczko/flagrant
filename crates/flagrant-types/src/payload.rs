@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Feature, FeatureValue};
+use crate::{Feature, FeatureValue, TraitValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
@@ -20,9 +20,7 @@ pub struct FeaturePatch {
 
 impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none()
-            && self.is_active.is_none()
-            && self.variants.is_empty()
+        self.is_enabled.is_none() && self.is_active.is_none() && self.variants.is_empty()
     }
 }
 
@@ -60,7 +58,7 @@ pub struct TraitRequestPayload {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct IdentityTraitPayload {
     pub name: String,
-    pub value: Option<String>,
+    pub value: Option<TraitValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

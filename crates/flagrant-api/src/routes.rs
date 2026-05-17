@@ -67,18 +67,33 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             delete(variants::delete),
         )
         // Identities
-        .route("/identities", get(identities::list))
-        .route("/identities", post(identities::create))
-        .route("/identities/:identity_id", get(identities::fetch))
-        .route("/identities/:identity_id", put(identities::update))
-        .route("/identities/:identity_id", delete(identities::delete))
+        .route("/projects/:project/identities", get(identities::list))
+        .route("/projects/:project/identities", post(identities::create))
+        .route(
+            "/projects/:project/identities/:identity_id",
+            get(identities::fetch),
+        )
+        .route(
+            "/projects/:project/identities/:identity_id",
+            put(identities::update),
+        )
+        .route(
+            "/projects/:project/identities/:identity_id",
+            delete(identities::delete),
+        )
         // Traits
-        .route("/traits", get(traits::list))
-        .route("/traits", post(traits::create))
-        .route("/traits/:trait_id", delete(traits::delete))
+        .route("/projects/:project/traits", get(traits::list))
+        .route("/projects/:project/traits", post(traits::create))
+        .route(
+            "/projects/:project/traits/:trait_id",
+            delete(traits::delete),
+        )
         // Public API
         .nest(
             "/api/v1",
-            Router::new().route("/envs/:environment_id/features", get(api::get_features)),
+            Router::new().route(
+                "/projects/:project_id/envs/:environment_id/features",
+                get(api::get_features),
+            ),
         )
 }

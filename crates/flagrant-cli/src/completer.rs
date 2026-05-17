@@ -27,6 +27,18 @@ impl AutoCompleter for ArgCompleter<'_> {
                     .map(|c| c.name)
                     .collect::<Vec<_>>())
             }
+            "IDENTITY" => {
+                let ctx = self.session.context.read().unwrap();
+                let res = ctx.project.as_base_resource();
+
+                // Auto-complete environment name
+                Ok(ctx
+                    .client
+                    .get::<Vec<Environment>>(res.subpath(format!("/identities?prefix={prefix}")))?
+                    .into_iter()
+                    .map(|c| c.name)
+                    .collect::<Vec<_>>())
+            }
             "SET" if arg_n >= 2 => {
                 let op: &str = &args[1];
 

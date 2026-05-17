@@ -1,5 +1,5 @@
 use axum::{Json, extract::Path};
-use flagrant::models::{environment, identity};
+use flagrant::models::{environment, identity, project};
 use flagrant_types::FeatureResponse;
 
 use crate::{
@@ -13,8 +13,9 @@ use crate::{
 /// determine which variant value to return for each active feature.
 #[utoipa::path(
     get,
-    path = "/api/v1/envs/{environment_id}/features",
+    path = "/api/v1/projects/{project_id}/envs/{environment_id}/features",
     params(
+        ("project_id" = i32, Path, description = "Project ID"),
         ("environment_id" = i32, Path, description = "Environment ID"),
         ("X-Flagrant-Identity" = String, Header, description = "Caller identity used for variant assignment")
     ),
@@ -26,11 +27,12 @@ use crate::{
 )]
 pub async fn get_features(
     DbConnection(mut conn): DbConnection,
-    Path(environment_id): Path<i32>,
+    Path((project_id, environment_id)): Path<(i32, i32)>,
     Identity(identity): Identity,
 ) -> Result<Json<Vec<FeatureResponse>>, ServiceError> {
+    let project = project::get_by_id(&mut conn, project_id).await?;
     let env = environment::get_by_id(&mut conn, environment_id).await?;
-    let variants = identity::get_identity_variants(&mut conn, &env, identity)
+    let variants = identity::get_identity_variants(&mut conn, &project, &env, identity)
         .await?
         .into_iter()
         .map(|v| FeatureResponse {
