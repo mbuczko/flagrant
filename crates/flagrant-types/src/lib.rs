@@ -70,7 +70,7 @@ pub struct Variant {
     pub environment_id: Option<i32>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Identity {
     pub id: i32,
     pub value: String,

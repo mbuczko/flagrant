@@ -4,7 +4,7 @@ use axum::{
 };
 use sqlx::{Pool, Sqlite};
 use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
+use utoipa_scalar::{Scalar, Servable};
 
 use crate::handlers::{environments, features, identities, projects, traits, variants};
 use crate::openapi::ApiDoc;
@@ -21,16 +21,43 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Features
         .route("/envs/:environment/features", get(features::list))
         .route("/envs/:environment/features", post(features::create))
-        .route("/envs/:environment/features/:feature_id", get(features::fetch_by_id_or_name))
-        .route("/envs/:environment/features/:feature_id", put(features::update))
-        .route("/envs/:environment/features/:feature_id", delete(features::delete))
-        .route("/envs/:environment/features/:feature_id", patch(features::patch))
+        .route(
+            "/envs/:environment/features/:feature_id",
+            get(features::fetch_by_id_or_name),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id",
+            put(features::update),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id",
+            delete(features::delete),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id",
+            patch(features::patch),
+        )
         // Variants
-        .route("/envs/:environment/features/:feature_id/variants", get(variants::list))
-        .route("/envs/:environment/features/:feature_id/variants", post(variants::create))
-        .route("/envs/:environment/variants/:variant_id", get(variants::fetch))
-        .route("/envs/:environment/variants/:variant_id", put(variants::update))
-        .route("/envs/:environment/variants/:variant_id", delete(variants::delete))
+        .route(
+            "/envs/:environment/features/:feature_id/variants",
+            get(variants::list),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id/variants",
+            post(variants::create),
+        )
+        .route(
+            "/envs/:environment/variants/:variant_id",
+            get(variants::fetch),
+        )
+        .route(
+            "/envs/:environment/variants/:variant_id",
+            put(variants::update),
+        )
+        .route(
+            "/envs/:environment/variants/:variant_id",
+            delete(variants::delete),
+        )
         // Identities
         .route("/identities", get(identities::list))
         .route("/identities", post(identities::create))
@@ -43,7 +70,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route("/traits/:trait_id", delete(traits::delete));
 
     Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
         // Projects
         .route("/projects/", get(projects::list))
         .route("/projects/", post(projects::create))

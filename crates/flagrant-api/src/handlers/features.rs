@@ -156,10 +156,10 @@ pub async fn update(
 ///
 /// # Query Parameters
 /// - `pattern` - Filter by feature name substring (e.g., "banner" matches "show_banner", "show_banner_top")
-/// - `prefix` - Filter by feature name prefix (e.g., "show_" matches "show_banner", "show_notification")
-/// - `status` - Filter by active status: "active" or "inactive" (empty string ignored)
-/// - `state` - Filter by enabled state: "on" or "off" (empty string ignored)
-/// - `tags` - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
+/// - `prefix`  - Filter by feature name prefix (e.g., "show_" matches "show_banner", "show_notification")
+/// - `status`  - Filter by active status: "active" or "inactive" (empty string ignored)
+/// - `state`   - Filter by enabled state: "on" or "off" (empty string ignored)
+/// - `tags`    - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 #[utoipa::path(
     get,
     path = "/projects/{project}/envs/{environment}/features",
