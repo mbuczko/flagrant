@@ -19,11 +19,11 @@
 use std::{collections::BTreeSet, ops::Deref};
 
 use anyhow::bail;
-use flagrant_client::connection::{Connection, Resource};
+use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue,
-    payload::{FeatureRequestPayload, VariantPatchOp},
+    payload::{NewFeaturePayload, VariantPatchOp},
 };
 
 use crate::{
@@ -68,7 +68,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
         let feature = ctx.client.post::<_, Feature>(
             res.subpath("/features"),
-            FeatureRequestPayload {
+            NewFeaturePayload {
                 name: name.to_string(),
                 description: args.get(3).map(|d| d.to_string()),
                 is_enabled: false,
@@ -244,7 +244,9 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     };
 
-    let path = ctx.env_resource().subpath(format!("/features/{feature_id}"));
+    let path = ctx
+        .env_resource()
+        .subpath(format!("/features/{feature_id}"));
 
     match ctx.client.patch::<_, Feature>(path, patch) {
         Ok(updated) => {

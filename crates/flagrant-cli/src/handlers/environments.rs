@@ -12,7 +12,7 @@ use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{Environment, payload::EnvRequestPayload};
+use flagrant_types::{Environment, payload::NewEnvironmentPayload};
 
 use crate::printer::tabular::Tabular;
 
@@ -25,7 +25,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let res = ctx.project.as_base_resource();
         let env = ctx.client.post::<_, Environment>(
             res.subpath("/envs"),
-            EnvRequestPayload {
+            NewEnvironmentPayload {
                 name: name.to_string(),
                 description: None,
                 base_env: args.get(2).map(|d| d.to_string()),
@@ -60,7 +60,12 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
-        if ctx.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
+        if ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
+        {
             bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
         }
         let res = ctx.project.as_base_resource();

@@ -5,7 +5,7 @@ use axum::{
 use flagrant::models::{environment, feature, project};
 use flagrant_types::{
     Feature,
-    payload::{FeaturePatch, FeatureRequestPayload},
+    payload::{FeaturePatch, NewFeaturePayload},
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -58,7 +58,7 @@ impl<'de> Deserialize<'de> for FeatureId {
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name")
     ),
-    request_body = FeatureRequestPayload,
+    request_body = NewFeaturePayload,
     responses(
         (status = 200, description = "Created feature", body = Feature)
     ),
@@ -67,7 +67,7 @@ impl<'de> Deserialize<'de> for FeatureId {
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name)): Path<(String, String)>,
-    Json(payload): Json<FeatureRequestPayload>,
+    Json(payload): Json<NewFeaturePayload>,
 ) -> Result<Json<Feature>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
@@ -126,7 +126,7 @@ pub async fn fetch_by_id_or_name(
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
-    request_body = FeatureRequestPayload,
+    request_body = NewFeaturePayload,
     responses(
         (status = 200, description = "Feature updated successfully")
     ),
@@ -135,7 +135,7 @@ pub async fn fetch_by_id_or_name(
 pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
-    Json(payload): Json<FeatureRequestPayload>,
+    Json(payload): Json<NewFeaturePayload>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;

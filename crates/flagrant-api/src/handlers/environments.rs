@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{Environment, payload::EnvRequestPayload};
+use flagrant_types::{Environment, payload::NewEnvironmentPayload};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -43,7 +43,7 @@ impl<'de> Deserialize<'de> for EnvironmentId {
     params(
         ("project" = String, Path, description = "Project name")
     ),
-    request_body = EnvRequestPayload,
+    request_body = NewEnvironmentPayload,
     responses(
         (status = 200, description = "Created environment", body = Environment)
     ),
@@ -52,7 +52,7 @@ impl<'de> Deserialize<'de> for EnvironmentId {
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(project_name): Path<String>,
-    Json(payload): Json<EnvRequestPayload>,
+    Json(payload): Json<NewEnvironmentPayload>,
 ) -> Result<Json<Environment>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::create(

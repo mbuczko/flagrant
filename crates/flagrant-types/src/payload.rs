@@ -36,14 +36,14 @@ pub struct ProjectCreatedResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct EnvRequestPayload {
+pub struct NewEnvironmentPayload {
     pub name: String,
     pub description: Option<String>,
     pub base_env: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct FeatureRequestPayload {
+pub struct NewFeaturePayload {
     pub name: String,
     pub value: FeatureValue,
     pub description: Option<String>,
@@ -73,9 +73,9 @@ pub struct IdentityRequestPayload {
     pub traits: Option<Vec<IdentityTraitPayload>>,
 }
 
-impl From<Feature> for FeatureRequestPayload {
+impl From<Feature> for NewFeaturePayload {
     fn from(feature: Feature) -> Self {
-        FeatureRequestPayload {
+        NewFeaturePayload {
             name: feature.name,
             value: feature
                 .variants
