@@ -7,7 +7,7 @@ use flagrant_types::{Environment, payload::NewEnvironmentPayload};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use crate::{errors::ServiceError, extractors::DbConnection, handlers::parsers};
+use crate::{errors::ServiceError, extractors::DbConnection};
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct EnvQueryParams {
@@ -126,7 +126,7 @@ pub async fn list(
     let envs = environment::list(
         &mut conn,
         &project,
-        parsers::parse_pattern(params.pattern, params.prefix),
+        super::parse_pattern(params.pattern, params.prefix),
     )
     .await?;
 

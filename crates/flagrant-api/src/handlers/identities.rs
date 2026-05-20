@@ -11,7 +11,6 @@ use flagrant_types::{
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use super::parsers;
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IdentityQueryParams {
@@ -43,7 +42,7 @@ pub async fn list(
     let identities = identity::list(
         &mut conn,
         &project,
-        parsers::parse_pattern(params.pattern, params.prefix),
+        super::parse_pattern(params.pattern, params.prefix),
     )
     .await?;
     Ok(Json(identities))

@@ -10,7 +10,6 @@ use flagrant_types::{
 use serde::Deserialize;
 use utoipa::IntoParams;
 
-use super::parsers;
 use crate::{errors::ServiceError, extractors::DbConnection};
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -180,13 +179,13 @@ pub async fn list(
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let (tags_included, tags_excluded) = parsers::parse_tags(params.tags.as_ref());
+    let (tags_included, tags_excluded) = super::parse_tags(params.tags.as_ref());
     let features = feature::get_all(
         &mut conn,
         &env,
-        parsers::parse_status(params.status),
-        parsers::parse_state(params.state),
-        parsers::parse_pattern(params.pattern, params.prefix),
+        super::parse_status(params.status),
+        super::parse_state(params.state),
+        super::parse_pattern(params.pattern, params.prefix),
         tags_included,
         tags_excluded,
     )
