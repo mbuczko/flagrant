@@ -4,6 +4,7 @@
 //! |--------------------------------|-----------------|-----------------------------------------------------|
 //! | `IDENTITY add`                 | [`add`]         | Create or upsert an identity with optional traits.  |
 //! | `IDENTITY list`                | [`list`]        | List up to 10 identities, optionally filtered.      |
+//! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`              | [`delete`]      | Delete an identity by its string value.             |
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
 //! | `SET <trait> <value>`          | [`set_trait`]   | Stage a trait value change for the current identity.|
@@ -12,82 +13,45 @@
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
 use anyhow::bail;
-use colored::Colorize;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
-use flagrant_client::connection::Connection;
+use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     IdentityWithTraits, TraitValue,
     payload::{IdentityRequestPayload, IdentityTraitPayload},
 };
 
-fn describe(identity: &IdentityWithTraits) {
-    let title = format!("{} (ID={})", identity.value, identity.id);
-    let traits = if identity.traits.is_empty() {
-        "(none)".dimmed().to_string()
+use crate::printer::tabular::Tabular;
+
+/// Print details of an identity with its traits.
+///
+/// Expected args: `[identity]`
+///
+/// If an identity argument is provided, fetches and describes that identity.
+/// Otherwise describes the identity in the current context.
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if let Some(identity_str) = args.get(1) {
+        let ctx = session.context.read().unwrap();
+        let identity = resolve_identity(&ctx, identity_str)?;
+        identity.describe(None);
     } else {
-        identity
-            .traits
-            .iter()
-            .map(|t| {
-                let val = t
-                    .value
-                    .as_ref()
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "(unset)".dimmed().to_string());
-                format!("{} = {}", t.name.bright_blue(), val)
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-
-    let table = FancyTable::create(FancyTableOpts::default())
-        .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-        .add_column(
-            None,
-            Layout::Expandable(120),
-            Align::Left,
-            Overflow::Truncate,
-            1,
-        )
-        .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-        .build();
-
-    table.render(vec![&["TRAITS", &traits]]);
-}
-
-fn list_all(identities: &[IdentityWithTraits]) {
-    let rows: Vec<_> = identities
-        .iter()
-        .map(|id| {
-            let traits = id
-                .traits
-                .iter()
-                .map(|t| {
-                    let val = t.value.as_ref().map(|v| v.to_string()).unwrap_or_default();
-                    format!("{}:{}", t.name, val)
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            [id.value.clone(), traits]
-        })
-        .collect();
-
-    FancyTable::create(FancyTableOpts::default())
-        .add_column_named_with_align("IDENTITY".into(), Layout::Fixed(40), Align::Left)
-        .add_column_named_with_align("TRAITS".into(), Layout::Expandable(60), Align::Left)
-        .width(100)
-        .build()
-        .render(rows);
+        let ctx = session.context.read().unwrap();
+        if let Some(identity) = &ctx.identity {
+            identity.describe(None);
+        } else {
+            bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
+        }
+    }
+    Ok(())
 }
 
 fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,
     identity_str: &str,
 ) -> anyhow::Result<IdentityWithTraits> {
-    let identities = ctx
-        .client
-        .get::<Vec<IdentityWithTraits>>(format!("/identities?pattern={identity_str}"))?;
+    let res = ctx.project.as_base_resource();
+    let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
+        res.subpath(format!("/identities?pattern={identity_str}")),
+    )?;
     identities
         .into_iter()
         .find(|i| i.value == identity_str)
@@ -114,8 +78,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             .collect();
 
         let ctx = session.context.read().unwrap();
+        let res = ctx.project.as_base_resource();
         let identity = ctx.client.post::<_, IdentityWithTraits>(
-            "/identities".to_owned(),
+            res.subpath("/identities"),
             IdentityRequestPayload {
                 identity: identity_str.to_string(),
                 traits: if trait_payloads.is_empty() {
@@ -125,7 +90,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 },
             },
         )?;
-        describe(&identity);
+        identity.describe(None);
         return Ok(());
     }
     bail!("No identity provided.")
@@ -136,14 +101,16 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Expected args: `[pattern]`
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
+    let res = ctx.project.as_base_resource();
     let pattern = args
         .get(1)
         .map(|a| format!("?pattern={a}"))
         .unwrap_or_default();
     let identities = ctx
         .client
-        .get::<Vec<IdentityWithTraits>>(format!("/identities{pattern}"))?;
-    list_all(&identities);
+        .get::<Vec<IdentityWithTraits>>(res.subpath(format!("/identities{pattern}")))?;
+
+    IdentityWithTraits::list(&identities);
     Ok(())
 }
 
@@ -153,8 +120,10 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
         let ctx = session.context.read().unwrap();
+        let res = ctx.project.as_base_resource();
         let identity = resolve_identity(&ctx, identity_str)?;
-        ctx.client.delete(format!("/identities/{}", identity.id))?;
+        ctx.client
+            .delete(res.subpath(format!("/identities/{}", identity.id)))?;
         println!("Identity removed.");
         return Ok(());
     }
@@ -180,7 +149,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             let ctx = session.context.read().unwrap();
             resolve_identity(&ctx, identity_str)?
         };
-        describe(&identity);
+        identity.describe(None);
         session.context.write().unwrap().identity = Some(identity);
         return Ok(());
     }
@@ -264,12 +233,13 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .map(|(name, value)| IdentityTraitPayload { name, value })
         .collect();
 
+    let res = ctx.project.as_base_resource();
     ctx.client
-        .put(format!("/identities/{identity_id}"), traits)?;
+        .put(res.subpath(format!("/identities/{identity_id}")), traits)?;
     let updated = ctx
         .client
-        .get::<IdentityWithTraits>(format!("/identities/{identity_id}"))?;
-    describe(&updated);
+        .get::<IdentityWithTraits>(res.subpath(format!("/identities/{identity_id}")))?;
+    updated.describe(None);
     ctx.pending_traits.clear();
     ctx.identity = Some(updated);
     Ok(())

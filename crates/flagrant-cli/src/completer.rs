@@ -1,6 +1,6 @@
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, completer::AutoCompleter, session::Session};
-use flagrant_types::{Environment, Feature, Tag};
+use flagrant_types::{Environment, Feature, IdentityWithTraits, Tag};
 
 pub struct ArgCompleter<'a> {
     pub session: &'a Session<Connection>,
@@ -34,9 +34,11 @@ impl AutoCompleter for ArgCompleter<'_> {
                 // Auto-complete environment name
                 Ok(ctx
                     .client
-                    .get::<Vec<Environment>>(res.subpath(format!("/identities?prefix={prefix}")))?
+                    .get::<Vec<IdentityWithTraits>>(
+                        res.subpath(format!("/identities?prefix={prefix}")),
+                    )?
                     .into_iter()
-                    .map(|c| c.name)
+                    .map(|c| c.value)
                     .collect::<Vec<_>>())
             }
             "SET" if arg_n >= 2 => {

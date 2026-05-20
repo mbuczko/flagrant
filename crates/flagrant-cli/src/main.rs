@@ -140,9 +140,10 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::add,
         ),
         Command::Identity.op("list", "[pattern]", handlers::identities::list),
+        Command::Identity.op("describe", "[identity]", handlers::identities::describe),
         Command::Identity.op("delete", "identity", handlers::identities::delete),
         Command::Identity.op("use", "identity", handlers::identities::r#use),
-        Command::Identity.args("add · delete · list · use"),
+        Command::Identity.args("add · delete · describe · list · use"),
         // Variants
         Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
         Command::Variant.op_in_context(

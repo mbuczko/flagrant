@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Environment, Feature, FeatureValue, Variant,
+    Environment, Feature, FeatureValue, IdentityWithTraits, TraitValue, Variant,
     payload::{FeaturePatch, VariantPatchOp},
 };
 
@@ -49,6 +49,69 @@ impl Tabular for Environment {
             .build();
 
         table.render(vec![&["NAME", &self.name], &["DESCRIPTION", desc_str]]);
+    }
+}
+
+impl Tabular for IdentityWithTraits {
+    fn list(selfs: &[Self]) {
+        let rows: Vec<_> = selfs
+            .iter()
+            .map(|id| {
+                let traits = id
+                    .traits
+                    .iter()
+                    .map(|t| format!("{}:{}", t.name, format_trait_value(&t.value)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                [id.value.clone(), traits]
+            })
+            .collect();
+
+        FancyTable::create(FancyTableOpts::default())
+            .add_column_named_with_align("IDENTITY".into(), Layout::Fixed(40), Align::Left)
+            .add_column_named_with_align("TRAITS".into(), Layout::Expandable(60), Align::Left)
+            .width(100)
+            .build()
+            .render(rows);
+    }
+
+    fn describe(&self, _patch: impl Into<Option<FeaturePatch>>) {
+        let title = format!("{} (ID={})", self.value, self.id);
+        let traits = if self.traits.is_empty() {
+            "(none)".dimmed().to_string()
+        } else {
+            self.traits
+                .iter()
+                .map(|t| {
+                    format!(
+                        "{} → {}",
+                        t.name.bright_blue(),
+                        format_trait_value(&t.value)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(
+                None,
+                Layout::Fixed(10),
+                Align::Right,
+                Overflow::Truncate,
+                10,
+            )
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                10,
+            )
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+
+        table.render(vec![&["TRAITS", &traits]]);
     }
 }
 
@@ -311,4 +374,14 @@ pub fn bar(weight: u8, width: u16) -> String {
         bar.push(' ');
     }
     format!("{0: <3}% {1: <10}", weight, bar)
+}
+
+fn format_trait_value(value: &Option<TraitValue>) -> String {
+    match value {
+        Some(TraitValue::Str(v)) => format!("{v} ({})", "string".yellow()),
+        Some(TraitValue::Int(v)) => format!("{v} ({})", "int".yellow()),
+        Some(TraitValue::Float(v)) => format!("{v} ({})", "float".yellow()),
+        Some(TraitValue::Bool(v)) => format!("{v} ({})", "bool".yellow()),
+        None => "(unset)".dimmed().to_string(),
+    }
 }
