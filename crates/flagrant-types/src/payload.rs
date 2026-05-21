@@ -11,21 +11,23 @@ pub enum VariantPatchOp {
     Delete { id: i32 },
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
-pub struct FeaturePatch {
-    pub is_enabled: Option<bool>,
-    pub is_active: Option<bool>,
-    pub variants: Vec<VariantPatchOp>,
-}
-
-impl FeaturePatch {
-    pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none() && self.is_active.is_none() && self.variants.is_empty()
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TraitPatchOp {
+    Add {
+        name: String,
+        value: Option<TraitValue>,
+    },
+    Delete {
+        name: String,
+    },
+    SetValue {
+        name: String,
+        value: Option<TraitValue>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct ProjectRequestPayload {
+pub struct NewProjectPayload {
     pub name: String,
 }
 
@@ -51,13 +53,19 @@ pub struct NewFeaturePayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct VariantRequestPayload {
+pub struct NewVariantPayload {
     pub value: String,
     pub weight: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct TraitRequestPayload {
+pub struct NewIdentityPayload {
+    pub identity: String,
+    pub traits: Option<Vec<IdentityTraitPayload>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewTraitPayload {
     pub name: String,
 }
 
@@ -67,29 +75,11 @@ pub struct IdentityTraitPayload {
     pub value: Option<TraitValue>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct IdentityRequestPayload {
-    pub identity: String,
-    pub traits: Option<Vec<IdentityTraitPayload>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub enum TraitPatchOp {
-    Add { name: String, value: Option<TraitValue> },
-    Delete { name: String },
-    SetValue { name: String, value: Option<TraitValue> },
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
-pub struct IdentityPatch {
-    pub identity: Option<String>,
-    pub traits: Vec<TraitPatchOp>,
-}
-
-impl IdentityPatch {
-    pub fn is_empty(&self) -> bool {
-        self.identity.is_none() && self.traits.is_empty()
-    }
+pub struct FeaturePatch {
+    pub is_enabled: Option<bool>,
+    pub is_active: Option<bool>,
+    pub variants: Vec<VariantPatchOp>,
 }
 
 impl From<Feature> for NewFeaturePayload {
@@ -105,5 +95,23 @@ impl From<Feature> for NewFeaturePayload {
             description: None,
             is_enabled: feature.is_enabled,
         }
+    }
+}
+
+impl FeaturePatch {
+    pub fn is_empty(&self) -> bool {
+        self.is_enabled.is_none() && self.is_active.is_none() && self.variants.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct IdentityPatch {
+    pub identity: Option<String>,
+    pub traits: Vec<TraitPatchOp>,
+}
+
+impl IdentityPatch {
+    pub fn is_empty(&self) -> bool {
+        self.identity.is_none() && self.traits.is_empty()
     }
 }

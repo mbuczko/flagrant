@@ -1,7 +1,7 @@
 use crate::{errors::ServiceError, extractors::DbConnection};
 use axum::{Json, extract::Path};
 use flagrant::models::{project, traits};
-use flagrant_types::{Trait, payload::TraitRequestPayload};
+use flagrant_types::{Trait, payload::NewTraitPayload};
 
 /// Lists all defined traits.
 #[utoipa::path(
@@ -32,7 +32,7 @@ pub async fn list(
     params(
         ("project" = String, Path, description = "Project name")
     ),
-    request_body = TraitRequestPayload,
+    request_body = NewTraitPayload,
     responses(
         (status = 200, description = "Created or existing trait", body = Trait)
     ),
@@ -41,7 +41,7 @@ pub async fn list(
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(project_name): Path<String>,
-    Json(payload): Json<TraitRequestPayload>,
+    Json(payload): Json<NewTraitPayload>,
 ) -> Result<Json<Trait>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let t = traits::upsert(&mut conn, &project, payload.name).await?;

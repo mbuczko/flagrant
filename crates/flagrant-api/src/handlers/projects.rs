@@ -1,6 +1,6 @@
 use axum::{Json, extract::Path};
 use flagrant::models::project;
-use flagrant_types::{Project, payload::{ProjectCreatedResponse, ProjectRequestPayload}};
+use flagrant_types::{Project, payload::{ProjectCreatedResponse, NewProjectPayload}};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -46,7 +46,7 @@ pub async fn fetch(
 #[utoipa::path(
     post,
     path = "/projects/",
-    request_body = ProjectRequestPayload,
+    request_body = NewProjectPayload,
     responses(
         (status = 200, description = "Created project and its default environment", body = ProjectCreatedResponse)
     ),
@@ -54,7 +54,7 @@ pub async fn fetch(
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Json(payload): Json<ProjectRequestPayload>,
+    Json(payload): Json<NewProjectPayload>,
 ) -> Result<Json<ProjectCreatedResponse>, ServiceError> {
     let (project, environment) = project::create_with_environment(&mut conn, payload.name, None).await?;
 

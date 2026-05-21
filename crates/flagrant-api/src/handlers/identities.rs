@@ -6,7 +6,7 @@ use axum::{
 use flagrant::models::{identity, project};
 use flagrant_types::{
     IdentityWithTraits,
-    payload::{IdentityPatch, IdentityRequestPayload},
+    payload::{IdentityPatch, NewIdentityPayload},
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -79,7 +79,7 @@ pub async fn fetch(
     params(
         ("project" = String, Path, description = "Project name")
     ),
-    request_body = IdentityRequestPayload,
+    request_body = NewIdentityPayload,
     responses(
         (status = 200, description = "Created identity with traits", body = IdentityWithTraits)
     ),
@@ -88,7 +88,7 @@ pub async fn fetch(
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path(project_name): Path<String>,
-    Json(payload): Json<IdentityRequestPayload>,
+    Json(payload): Json<NewIdentityPayload>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let identity = identity::create(

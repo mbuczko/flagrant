@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use axum::{Json, extract::Path};
 use flagrant::models::{environment, feature, project, variant};
-use flagrant_types::{FeatureValue, Variant, payload::VariantRequestPayload};
+use flagrant_types::{FeatureValue, Variant, payload::NewVariantPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -19,7 +19,7 @@ use crate::{errors::ServiceError, extractors::DbConnection};
         ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
-    request_body = VariantRequestPayload,
+    request_body = NewVariantPayload,
     responses(
         (status = 200, description = "Created variant", body = Variant)
     ),
@@ -28,7 +28,7 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 pub async fn create(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
-    Json(payload): Json<VariantRequestPayload>,
+    Json(payload): Json<NewVariantPayload>,
 ) -> Result<Json<Variant>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
@@ -48,7 +48,7 @@ pub async fn create(
         ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
-    request_body = VariantRequestPayload,
+    request_body = NewVariantPayload,
     responses(
         (status = 200, description = "Variant updated successfully")
     ),
@@ -57,7 +57,7 @@ pub async fn create(
 pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
-    Json(payload): Json<VariantRequestPayload>,
+    Json(payload): Json<NewVariantPayload>,
 ) -> Result<Json<()>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;

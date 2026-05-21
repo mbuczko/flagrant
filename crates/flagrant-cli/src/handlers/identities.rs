@@ -18,7 +18,7 @@ use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     IdentityWithTraits, TraitValue,
-    payload::{IdentityRequestPayload, IdentityTraitPayload},
+    payload::{NewIdentityPayload, IdentityTraitPayload},
 };
 
 use crate::{handlers::internal::stage, printer::tabular::Tabular};
@@ -68,7 +68,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let res = ctx.project.as_base_resource();
         let identity = ctx.client.post::<_, IdentityWithTraits>(
             res.subpath("/identities"),
-            IdentityRequestPayload {
+            NewIdentityPayload {
                 identity: identity_str.to_string(),
                 traits: if trait_payloads.is_empty() {
                     None

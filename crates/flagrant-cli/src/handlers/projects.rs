@@ -1,6 +1,6 @@
 use anyhow::bail;
 use flagrant_client::http::HttpClient;
-use flagrant_types::{Environment, Project, payload::{ProjectCreatedResponse, ProjectRequestPayload}};
+use flagrant_types::{Environment, Project, payload::{ProjectCreatedResponse, NewProjectPayload}};
 
 pub fn list_projects(client: &HttpClient) -> anyhow::Result<Vec<Project>> {
     match client.get::<Vec<Project>>("/projects/".into()) {
@@ -12,7 +12,7 @@ pub fn list_projects(client: &HttpClient) -> anyhow::Result<Vec<Project>> {
 pub fn create_with_env(name: &str, client: &HttpClient) -> anyhow::Result<(Project, Environment)> {
     match client.post::<_, ProjectCreatedResponse>(
         "/projects/".into(),
-        ProjectRequestPayload {
+        NewProjectPayload {
             name: name.to_owned(),
         },
     ) {
