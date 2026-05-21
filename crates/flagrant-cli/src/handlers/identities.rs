@@ -210,8 +210,8 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         bail!("Not in an identity context.");
     }
 
-    let patch = match ctx.identity_patch.take() {
-        Some(p) if !p.is_empty() => p,
+    let patch = match &ctx.identity_patch {
+        Some(p) if !p.is_empty() => p.clone(),
         _ => {
             println!("No pending changes to commit.");
             return Ok(());
@@ -227,6 +227,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     {
         Ok(updated) => {
             updated.describe(None);
+            ctx.identity_patch = None;
             ctx.identity = Some(updated);
         }
         Err(err) => eprintln!("Commit failed: {err}"),
