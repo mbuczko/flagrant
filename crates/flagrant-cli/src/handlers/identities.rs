@@ -37,7 +37,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(identity) = &ctx.identity {
-            identity.describe(None);
+            identity.describe(ctx.identity_patch.as_ref().filter(|p| !p.is_empty()));
         } else {
             bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
         }

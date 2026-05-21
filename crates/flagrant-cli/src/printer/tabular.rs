@@ -2,17 +2,21 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
     Environment, Feature, FeatureValue, IdentityWithTraits, TraitValue, Variant,
-    payload::{FeaturePatch, VariantPatchOp},
+    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
 };
 
 pub trait Tabular {
+    type Patch;
+
     fn list(rows: &[Self])
     where
         Self: Sized;
-    fn describe(&self, patch: impl Into<Option<FeaturePatch>>);
+    fn describe(&self, patch: Option<&Self::Patch>);
 }
 
 impl Tabular for Environment {
+    type Patch = ();
+
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
             .iter()
@@ -32,7 +36,7 @@ impl Tabular for Environment {
             .build()
             .render(rows);
     }
-    fn describe(&self, _patch: impl Into<Option<FeaturePatch>>) {
+    fn describe(&self, _patch: Option<&()>) {
         let desc_str = self.description.as_deref().unwrap_or("");
         let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
@@ -53,6 +57,8 @@ impl Tabular for Environment {
 }
 
 impl Tabular for IdentityWithTraits {
+    type Patch = IdentityPatch;
+
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
             .iter()
@@ -75,47 +81,99 @@ impl Tabular for IdentityWithTraits {
             .render(rows);
     }
 
-    fn describe(&self, _patch: impl Into<Option<FeaturePatch>>) {
+    fn describe(&self, patch: Option<&IdentityPatch>) {
         let title = format!("{} (ID={})", self.value, self.id);
-        let traits = if self.traits.is_empty() {
+
+        let ops = patch.map(|p| p.traits.as_slice()).unwrap_or_default();
+
+        let deleted: std::collections::HashSet<&str> = ops
+            .iter()
+            .filter_map(|op| match op {
+                TraitPatchOp::Delete { name } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        let modified: std::collections::HashMap<&str, &Option<TraitValue>> = ops
+            .iter()
+            .filter_map(|op| match op {
+                TraitPatchOp::SetValue { name, value } => Some((name.as_str(), value)),
+                _ => None,
+            })
+            .collect();
+
+        let added: Vec<(&str, &Option<TraitValue>)> = ops
+            .iter()
+            .filter_map(|op| match op {
+                TraitPatchOp::Add { name, value } => Some((name.as_str(), value)),
+                _ => None,
+            })
+            .collect();
+
+        let mut trait_lines: Vec<String> = Vec::new();
+        let mut stage_lines: Vec<String> = Vec::new();
+
+        for t in &self.traits {
+            let name = t.name.bright_blue().to_string();
+            if deleted.contains(t.name.as_str()) {
+                trait_lines.push(
+                    format!("{} → {}", name, format_trait_value(&t.value))
+                        .dimmed()
+                        .to_string(),
+                );
+                stage_lines.push("deleted".red().to_string());
+            } else if let Some(new_val) = modified.get(t.name.as_str()) {
+                trait_lines.push(
+                    format!("{} → {}", name, format_trait_value(new_val))
+                        .yellow()
+                        .to_string(),
+                );
+                stage_lines.push("updated".yellow().to_string());
+            } else {
+                trait_lines.push(format!("{} → {}", name, format_trait_value(&t.value)));
+                stage_lines.push(String::new());
+            }
+        }
+
+        for (name, value) in &added {
+            trait_lines.push(
+                format!("{} → {}", name.bright_blue(), format_trait_value(value))
+                    .green()
+                    .to_string(),
+            );
+            stage_lines.push("added".green().to_string());
+        }
+
+        let traits = if trait_lines.is_empty() {
             "(none)".dimmed().to_string()
         } else {
-            self.traits
-                .iter()
-                .map(|t| {
-                    format!(
-                        "{} → {}",
-                        t.name.bright_blue(),
-                        format_trait_value(&t.value)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+            trait_lines.join("\n")
         };
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(
-                None,
-                Layout::Fixed(10),
-                Align::Right,
-                Overflow::Truncate,
-                10,
-            )
-            .add_column(
-                None,
-                Layout::Expandable(120),
-                Align::Left,
-                Overflow::Truncate,
-                10,
-            )
+            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        table.render(vec![&["TRAITS", &traits]]);
+        let stage = stage_lines.join("\n");
+        if patch.is_some() && !stage_lines.is_empty() {
+            let table_with_stage = FancyTable::create(FancyTableOpts::default())
+                .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 10)
+                .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
+                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .build();
+            table_with_stage.render(vec![&["TRAITS", &traits, &stage]]);
+        } else {
+            table.render(vec![&["TRAITS", &traits]]);
+        }
     }
 }
 
 impl Tabular for Feature {
+    type Patch = FeaturePatch;
+
     fn list(selfs: &[Self]) {
         let rows = selfs
             .iter()
@@ -147,8 +205,7 @@ impl Tabular for Feature {
             .render(rows)
     }
 
-    fn describe(&self, patch: impl Into<Option<FeaturePatch>>) {
-        let patch: Option<FeaturePatch> = patch.into();
+    fn describe(&self, patch: Option<&FeaturePatch>) {
 
         let title = format!("{} (ID={})", &self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
@@ -165,10 +222,7 @@ impl Tabular for Feature {
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let ops = patch
-            .as_ref()
-            .map(|p| p.variants.as_slice())
-            .unwrap_or_default();
+        let ops = patch.map(|p| p.variants.as_slice()).unwrap_or_default();
 
         let deleted_ids: std::collections::HashSet<i32> = ops
             .iter()
@@ -289,8 +343,8 @@ impl Tabular for Feature {
             }
         };
 
-        let pending_enabled = patch.as_ref().and_then(|p| p.is_enabled);
-        let pending_active = patch.as_ref().and_then(|p| p.is_active);
+        let pending_enabled = patch.and_then(|p| p.is_enabled);
+        let pending_active = patch.and_then(|p| p.is_active);
 
         let state = resolve(
             pending_enabled,

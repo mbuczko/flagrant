@@ -123,12 +123,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(feature) = &ctx.feature {
-            let patch = ctx
-                .feature_patch
-                .as_ref()
-                .filter(|p| !p.is_empty())
-                .cloned();
-            feature.describe(patch);
+            feature.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()));
         } else {
             bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
         }
