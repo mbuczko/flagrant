@@ -98,7 +98,7 @@ pub struct IdentityTrait {
     pub value: Option<TraitValue>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IdentityWithTraits {
     pub id: i32,
     pub value: String,

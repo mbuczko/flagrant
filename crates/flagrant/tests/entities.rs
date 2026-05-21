@@ -632,7 +632,7 @@ async fn patch_control_variant_weight_is_rejected(mut conn: PoolConnection<Sqlit
         ..Default::default()
     };
     assert!(
-        feature::apply_patch(&mut conn, &environment, &feature, patch)
+        feature::patch(&mut conn, &environment, &feature, patch)
             .await
             .is_err()
     );
@@ -652,7 +652,7 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
         ..Default::default()
     };
     assert!(
-        feature::apply_patch(&mut conn, &environment, &feature, patch)
+        feature::patch(&mut conn, &environment, &feature, patch)
             .await
             .is_ok()
     );

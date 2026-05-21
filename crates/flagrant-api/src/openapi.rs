@@ -54,6 +54,8 @@ use utoipa::OpenApi;
             flagrant_types::payload::TraitRequestPayload,
             flagrant_types::payload::IdentityTraitPayload,
             flagrant_types::payload::IdentityRequestPayload,
+            flagrant_types::payload::TraitPatchOp,
+            flagrant_types::payload::IdentityPatch,
         )
     ),
     tags(

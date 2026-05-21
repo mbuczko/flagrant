@@ -1,11 +1,11 @@
 use flagrant::models::{
     feature,
     identity::{self, HugSql, SQLIdentities},
-    project,
-    traits,
-    variant,
+    project, traits, variant,
 };
-use flagrant_types::{Environment, Feature, FeatureValue, Project, TraitValue, Variant, payload::IdentityTraitPayload};
+use flagrant_types::{
+    Environment, Feature, FeatureValue, Project, TraitValue, Variant, payload::IdentityTraitPayload,
+};
 use hugsqlx::params;
 use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
 
@@ -277,8 +277,14 @@ async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
     let (project, _) = create_context(&mut conn).await;
 
     let trait_payloads = vec![
-        IdentityTraitPayload { name: "country".to_owned(), value: Some(TraitValue::Str("pl".to_owned())) },
-        IdentityTraitPayload { name: "age".to_owned(), value: Some(TraitValue::Int(30)) },
+        IdentityTraitPayload {
+            name: "country".to_owned(),
+            value: Some(TraitValue::Str("pl".to_owned())),
+        },
+        IdentityTraitPayload {
+            name: "age".to_owned(),
+            value: Some(TraitValue::Int(30)),
+        },
     ];
     let created = identity::create(&mut conn, &project, "user_bob".to_owned(), trait_payloads)
         .await
@@ -296,18 +302,27 @@ async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
 async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
     let (project, _) = create_context(&mut conn).await;
 
-    let initial_traits = vec![
-        IdentityTraitPayload { name: "country".to_owned(), value: Some(TraitValue::Str("pl".to_owned())) },
-    ];
+    let initial_traits = vec![IdentityTraitPayload {
+        name: "country".to_owned(),
+        value: Some(TraitValue::Str("pl".to_owned())),
+    }];
     let created = identity::create(&mut conn, &project, "user_carol".to_owned(), initial_traits)
         .await
         .unwrap();
     assert_eq!(created.traits.len(), 1);
 
-    let stored = identity::get_by_id(&mut conn, created.id).await.unwrap();
+    let stored = identity::get_by_value(&mut conn, &project, created.name)
+        .await
+        .unwrap();
     let new_traits = vec![
-        IdentityTraitPayload { name: "tier".to_owned(), value: Some(TraitValue::Str("premium".to_owned())) },
-        IdentityTraitPayload { name: "beta".to_owned(), value: Some(TraitValue::Bool(true)) },
+        IdentityTraitPayload {
+            name: "tier".to_owned(),
+            value: Some(TraitValue::Str("premium".to_owned())),
+        },
+        IdentityTraitPayload {
+            name: "beta".to_owned(),
+            value: Some(TraitValue::Bool(true)),
+        },
     ];
     let updated = identity::update_traits(&mut conn, &project, stored, new_traits)
         .await
@@ -327,22 +342,35 @@ async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
     let created = identity::create(&mut conn, &project, "user_dave".to_owned(), vec![])
         .await
         .unwrap();
-    let identity_id = created.id;
-
-    let stored = identity::get_by_id(&mut conn, identity_id).await.unwrap();
+    let identity = created.value;
+    let stored = identity::get_by_value(&mut conn, &project, identity.clone())
+        .await
+        .unwrap();
     identity::delete(&mut conn, stored).await.unwrap();
 
-    assert!(identity::get_by_id(&mut conn, identity_id).await.is_err());
+    assert!(
+        identity::get_by_value(&mut conn, &project, identity)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test]
 async fn identities_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
     let (project_a, _) = create_context(&mut conn).await;
-    let project_b = project::create(&mut conn, "second_project".to_owned()).await.unwrap();
+    let project_b = project::create(&mut conn, "second_project".to_owned())
+        .await
+        .unwrap();
 
-    identity::create(&mut conn, &project_a, "alice".to_owned(), vec![]).await.unwrap();
-    identity::create(&mut conn, &project_a, "bob".to_owned(), vec![]).await.unwrap();
-    identity::create(&mut conn, &project_b, "carol".to_owned(), vec![]).await.unwrap();
+    identity::create(&mut conn, &project_a, "alice".to_owned(), vec![])
+        .await
+        .unwrap();
+    identity::create(&mut conn, &project_a, "bob".to_owned(), vec![])
+        .await
+        .unwrap();
+    identity::create(&mut conn, &project_b, "carol".to_owned(), vec![])
+        .await
+        .unwrap();
 
     let a_identities = identity::list(&mut conn, &project_a, None).await.unwrap();
     let b_identities = identity::list(&mut conn, &project_b, None).await.unwrap();
@@ -359,11 +387,19 @@ async fn identities_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn traits_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
     let (project_a, _) = create_context(&mut conn).await;
-    let project_b = project::create(&mut conn, "second_project".to_owned()).await.unwrap();
+    let project_b = project::create(&mut conn, "second_project".to_owned())
+        .await
+        .unwrap();
 
-    traits::upsert(&mut conn, &project_a, "country".to_owned()).await.unwrap();
-    traits::upsert(&mut conn, &project_a, "tier".to_owned()).await.unwrap();
-    traits::upsert(&mut conn, &project_b, "country".to_owned()).await.unwrap();
+    traits::upsert(&mut conn, &project_a, "country".to_owned())
+        .await
+        .unwrap();
+    traits::upsert(&mut conn, &project_a, "tier".to_owned())
+        .await
+        .unwrap();
+    traits::upsert(&mut conn, &project_b, "country".to_owned())
+        .await
+        .unwrap();
 
     let a_traits = traits::get_all(&mut conn, &project_a).await.unwrap();
     let b_traits = traits::get_all(&mut conn, &project_b).await.unwrap();
@@ -377,8 +413,14 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
     let (project, _) = create_context(&mut conn).await;
 
     let trait_payloads = vec![
-        IdentityTraitPayload { name: "country".to_owned(), value: Some(TraitValue::Str("pl".to_owned())) },
-        IdentityTraitPayload { name: "tier".to_owned(), value: Some(TraitValue::Str("free".to_owned())) },
+        IdentityTraitPayload {
+            name: "country".to_owned(),
+            value: Some(TraitValue::Str("pl".to_owned())),
+        },
+        IdentityTraitPayload {
+            name: "tier".to_owned(),
+            value: Some(TraitValue::Str("free".to_owned())),
+        },
     ];
     let created = identity::create(&mut conn, &project, "user_eve".to_owned(), trait_payloads)
         .await
@@ -388,9 +430,13 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
     let all_traits = traits::get_all(&mut conn, &project).await.unwrap();
     let country_trait = all_traits.iter().find(|t| t.name == "country").unwrap();
 
-    traits::delete(&mut conn, &project, country_trait.id).await.unwrap();
+    traits::delete(&mut conn, &project, country_trait.id)
+        .await
+        .unwrap();
 
-    let updated = identity::get_with_traits_by_id(&mut conn, created.id).await.unwrap();
+    let updated = identity::get_with_traits(&mut conn, &project, created.value)
+        .await
+        .unwrap();
     assert_eq!(updated.traits.len(), 1);
     assert_eq!(updated.traits[0].name, "tier");
 }

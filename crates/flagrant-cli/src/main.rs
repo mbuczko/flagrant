@@ -199,16 +199,24 @@ fn main() -> anyhow::Result<()> {
             handlers::features::set_value,
             has_feature_ctx,
         ),
-        // Identity trait setter (catches SET <trait> <value> when in identity context)
-        Command::Set.no_op_in_context(
-            "trait value",
+        // Identity setters (only in identity context)
+        Command::Set.op_in_context(
+            "trait",
+            "name:value",
             handlers::identities::set_trait,
             has_identity_ctx,
         ),
-        Command::Set.args("state · status · value · <trait> <value>"),
+        Command::Set.op_in_context(
+            "identity",
+            "value",
+            handlers::identities::set_identity,
+            has_identity_ctx,
+        ),
+        Command::Set.args("state · status · value · trait · identity"),
         // UNSET (only in identity context)
-        Command::Unset.no_op_in_context(
+        Command::Unset.op_in_context(
             "trait",
+            "name",
             handlers::identities::unset_trait,
             has_identity_ctx,
         ),

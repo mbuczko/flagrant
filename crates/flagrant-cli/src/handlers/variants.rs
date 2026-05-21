@@ -337,7 +337,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         }
     };
 
-    stage::discard(pending, &variant_ref);
+    stage::discard_feature_patch(pending, &variant_ref);
     index::rebuild(&mut ctx);
     Ok(())
 }

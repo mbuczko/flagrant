@@ -61,9 +61,9 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Identities
         .route("/identities", get(identities::list))
         .route("/identities", post(identities::create))
-        .route("/identities/:identity_id", get(identities::fetch))
-        .route("/identities/:identity_id", put(identities::update))
-        .route("/identities/:identity_id", delete(identities::delete))
+        .route("/identities/:identity", get(identities::fetch))
+        .route("/identities/:identity", patch(identities::update))
+        .route("/identities/:identity", delete(identities::delete))
         // Traits
         .route("/traits", get(traits::list))
         .route("/traits", post(traits::create))

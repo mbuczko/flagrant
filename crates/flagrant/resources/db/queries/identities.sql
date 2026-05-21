@@ -1,6 +1,10 @@
 -- :name fetch_identity_by_id :<> :1
 -- :doc Fetches a single identity by id
-SELECT identity_id, identity FROM identities WHERE identity_id = $1
+SELECT identity_id, identity FROM identities WHERE project_id = $1 AND identity_id = $2
+
+-- :name fetch_identity_by_value :<> :1
+-- :doc Fetches a single identity by project and value
+SELECT identity_id, identity FROM identities WHERE project_id = $1 AND identity = lower($2)
 
 -- :name fetch_identities_with_traits :<> :*
 -- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
@@ -29,9 +33,19 @@ INSERT INTO identity_traits(identity_id, trait_id, value)
 VALUES($1, $2, $3)
 ON CONFLICT(identity_id, trait_id) DO UPDATE SET value = excluded.value
 
+-- :name update_identity :<> :!
+-- :doc Updates identity value
+UPDATE identities SET identity = lower($1) WHERE identity_id = $2
+
 -- :name delete_identity_traits :<> :!
 -- :doc Removes all trait entries for given identity
 DELETE FROM identity_traits WHERE identity_id = $1
+
+-- :name delete_identity_trait_by_name :<> :!
+-- :doc Removes a single trait from an identity, looked up by name
+DELETE FROM identity_traits
+WHERE identity_id = $1
+  AND trait_id = (SELECT trait_id FROM traits WHERE project_id = $2 AND name = $3)
 
 -- :name delete_identity_variants :<> :!
 -- :doc Removes all variant assignments for given identity

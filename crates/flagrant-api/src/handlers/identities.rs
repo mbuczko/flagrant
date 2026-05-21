@@ -6,11 +6,10 @@ use axum::{
 use flagrant::models::{identity, project};
 use flagrant_types::{
     IdentityWithTraits,
-    payload::{IdentityRequestPayload, IdentityTraitPayload},
+    payload::{IdentityPatch, IdentityRequestPayload},
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
-
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct IdentityQueryParams {
@@ -45,16 +44,17 @@ pub async fn list(
         super::parse_pattern(params.pattern, params.prefix),
     )
     .await?;
+
     Ok(Json(identities))
 }
 
 /// Fetches a single identity with its traits.
 #[utoipa::path(
     get,
-    path = "/projects/{project}/identities/{identity_id}",
+    path = "/projects/{project}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("identity_id" = i32, Path, description = "Identity ID")
+        ("identity" = String, Path, description = "Identity value")
     ),
     responses(
         (status = 200, description = "Identity with traits", body = IdentityWithTraits),
@@ -64,9 +64,11 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((_project, identity_id)): Path<(String, i32)>,
+    Path((project_name, identity_value)): Path<(String, String)>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
-    let identity = identity::get_with_traits_by_id(&mut conn, identity_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let identity = identity::get_with_traits(&mut conn, &project, identity_value).await?;
+
     Ok(Json(identity))
 }
 
@@ -96,18 +98,19 @@ pub async fn create(
         payload.traits.unwrap_or_default(),
     )
     .await?;
+
     Ok(Json(identity))
 }
 
-/// Replaces all traits for an identity. Traits are auto-created if they don't exist yet.
+/// Applies a patch to an identity: optionally renames it and applies granular trait operations.
 #[utoipa::path(
-    put,
-    path = "/projects/{project}/identities/{identity_id}",
+    patch,
+    path = "/projects/{project}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("identity_id" = i32, Path, description = "Identity ID")
+        ("identity" = String, Path, description = "Identity value")
     ),
-    request_body = Vec<IdentityTraitPayload>,
+    request_body = IdentityPatch,
     responses(
         (status = 200, description = "Updated identity with traits", body = IdentityWithTraits),
         (status = 404, description = "Identity not found")
@@ -116,12 +119,12 @@ pub async fn create(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, identity_id)): Path<(String, i32)>,
-    Json(traits): Json<Vec<IdentityTraitPayload>>,
+    Path((project_name, identity_value)): Path<(String, String)>,
+    Json(patch): Json<IdentityPatch>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let identity = identity::get_by_id(&mut conn, identity_id).await?;
-    let identity = identity::update_traits(&mut conn, &project, identity, traits).await?;
+    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
+    let identity = identity::patch(&mut conn, &project, identity, patch).await?;
 
     Ok(Json(identity))
 }
@@ -129,10 +132,10 @@ pub async fn update(
 /// Deletes an identity and all its trait associations and variant assignments.
 #[utoipa::path(
     delete,
-    path = "/projects/{project}/identities/{identity_id}",
+    path = "/projects/{project}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("identity_id" = i32, Path, description = "Identity ID")
+        ("identity" = String, Path, description = "Identity value")
     ),
     responses(
         (status = 200, description = "Identity deleted"),
@@ -142,10 +145,11 @@ pub async fn update(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((_project, identity_id)): Path<(String, i32)>,
+    Path((project_name, identity_value)): Path<(String, String)>,
 ) -> Result<Json<()>, ServiceError> {
-    let identity = identity::get_by_id(&mut conn, identity_id).await?;
-    identity::delete(&mut conn, identity).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
 
+    identity::delete(&mut conn, identity).await?;
     Ok(Json(()))
 }

@@ -271,7 +271,7 @@ pub async fn bump_up_accumulators(
 /// 2. Variant deletes (free up weight)
 /// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
 /// 4. Variant adds (consume weight)
-pub async fn apply_patch(
+pub async fn patch(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,

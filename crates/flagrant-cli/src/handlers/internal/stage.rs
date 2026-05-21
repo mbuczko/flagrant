@@ -1,12 +1,12 @@
-//! Staging helpers for building up a [`FeaturePatch`] before it is committed to the API.
-//!
-//! [`stage_value`] and [`stage_weight`] upsert the appropriate [`VariantPatchOp`]
-//! into the pending patch. [`discard`] removes all pending ops for a
-//! given variant.
+//! Staging helpers for building up a [`FeaturePatch`] or [`IdentityPatch`] before
+//! they are committed to the API.
 
 use anyhow::bail;
 use flagrant_client::connection::VariantRef;
-use flagrant_types::{FeatureValue, payload::{FeaturePatch, VariantPatchOp}};
+use flagrant_types::{
+    FeatureValue, TraitValue,
+    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
+};
 
 /// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
@@ -89,7 +89,7 @@ pub(crate) fn stage_weight(
 /// Discards all pending ops for the given variant ref from the patch.
 /// For committed variants, removes any SetValue / SetWeight / Delete ops by id.
 /// For staged variants, removes the corresponding Add op by its position.
-pub(crate) fn discard(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
+pub(crate) fn discard_feature_patch(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
     match variant_ref {
         VariantRef::Committed(id) => {
             let before = pending.variants.len();
@@ -128,4 +128,54 @@ pub(crate) fn discard(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
             }
         }
     }
+}
+
+/// Stages a trait value change on an identity patch.
+///
+/// Uses `SetValue` if the trait already exists on the identity, `Add` otherwise.
+/// If a pending op for the same trait name already exists, it is replaced.
+pub(crate) fn stage_trait(
+    pending: &mut IdentityPatch,
+    trait_exists: bool,
+    name: String,
+    value: TraitValue,
+) {
+    let op = if trait_exists {
+        TraitPatchOp::SetValue { name: name.clone(), value: Some(value.clone()) }
+    } else {
+        TraitPatchOp::Add { name: name.clone(), value: Some(value.clone()) }
+    };
+    if let Some(existing) = pending.traits.iter_mut().find(|o| match o {
+        TraitPatchOp::Add { name: n, .. }
+        | TraitPatchOp::SetValue { name: n, .. }
+        | TraitPatchOp::Delete { name: n } => *n == name,
+    }) {
+        *existing = op;
+    } else {
+        pending.traits.push(op);
+    }
+    println!("Staged: {name} = {value}");
+}
+
+/// Stages a trait deletion on an identity patch.
+///
+/// If a pending op for the same trait name already exists, it is replaced.
+pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
+    let op = TraitPatchOp::Delete { name: name.clone() };
+    if let Some(existing) = pending.traits.iter_mut().find(|o| match o {
+        TraitPatchOp::Add { name: n, .. }
+        | TraitPatchOp::SetValue { name: n, .. }
+        | TraitPatchOp::Delete { name: n } => *n == name,
+    }) {
+        *existing = op;
+    } else {
+        pending.traits.push(op);
+    }
+    println!("Staged: unset {name}");
+}
+
+/// Stages an identity rename on an identity patch.
+pub(crate) fn stage_identity(pending: &mut IdentityPatch, value: String) {
+    pending.identity = Some(value.clone());
+    println!("Staged: identity = {value}");
 }

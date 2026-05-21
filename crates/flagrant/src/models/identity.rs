@@ -1,4 +1,4 @@
-use flagrant_types::payload::IdentityTraitPayload;
+use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
     Environment, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits, Project,
 };
@@ -83,31 +83,39 @@ pub async fn list(
     Ok(result)
 }
 
-/// Fetches a single identity with no traits by id
-pub async fn get_by_id(conn: &mut SqliteConnection, identity_id: i32) -> anyhow::Result<Identity> {
-    let (id, value) =
-        SQLIdentities::fetch_identity_by_id::<_, (i32, String)>(&mut *conn, params![identity_id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
+/// Fetches a single identity with no traits by project and value
+pub async fn get_by_value(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    value: String,
+) -> anyhow::Result<Identity> {
+    let (id, val) = SQLIdentities::fetch_identity_by_value::<_, (i32, String)>(
+        &mut *conn,
+        params![project.id, value],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
 
-    Ok(Identity { id, value })
+    Ok(Identity { id, value: val })
 }
 
-/// Fetches a single identity with its traits by id.
-pub async fn get_with_traits_by_id(
+/// Fetches a single identity with its traits by identity value.
+pub async fn get_with_traits(
     conn: &mut SqliteConnection,
-    identity_id: i32,
+    project: &Project,
+    value: String,
 ) -> anyhow::Result<IdentityWithTraits> {
-    let (id, identity) =
-        SQLIdentities::fetch_identity_by_id::<_, (i32, String)>(&mut *conn, params![identity_id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
-    let traits = load_traits(conn, id).await?;
+    let (id, identity) = SQLIdentities::fetch_identity_by_value::<_, (i32, String)>(
+        &mut *conn,
+        params![project.id, value],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
 
     Ok(IdentityWithTraits {
         id,
         value: identity,
-        traits,
+        traits: load_traits(conn, id).await?,
     })
 }
 
@@ -143,7 +151,50 @@ pub async fn update_traits(
     attach_traits(&mut *tx, project, identity.id, &trait_payloads).await?;
 
     tx.commit().await?;
-    get_with_traits_by_id(conn, identity.id).await
+    get_with_traits(conn, project, identity.value).await
+}
+
+/// Applies a patch to an identity — optionally renames it and applies granular trait operations.
+pub async fn patch(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    identity: Identity,
+    patch: IdentityPatch,
+) -> anyhow::Result<IdentityWithTraits> {
+    let mut tx = conn.begin().await?;
+
+    if let Some(new_value) = patch.identity {
+        SQLIdentities::update_identity(&mut *tx, params![new_value, identity.id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update identity value", e))?;
+    }
+
+    for op in patch.traits {
+        match op {
+            TraitPatchOp::Add { name, value } | TraitPatchOp::SetValue { name, value } => {
+                let trait_rec = upsert(&mut *tx, project, name).await?;
+                SQLIdentities::upsert_identity_trait(
+                    &mut *tx,
+                    params![identity.id, trait_rec.id, value],
+                )
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
+            }
+            TraitPatchOp::Delete { name } => {
+                SQLIdentities::delete_identity_trait_by_name(
+                    &mut *tx,
+                    params![identity.id, project.id, name],
+                )
+                .await
+                .map_err(|e| {
+                    FlagrantError::QueryFailed("Could not delete trait from identity", e)
+                })?;
+            }
+        }
+    }
+
+    tx.commit().await?;
+    get_with_traits(conn, project, identity.value).await
 }
 
 /// Deletes an identity and all associated data.

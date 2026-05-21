@@ -73,6 +73,25 @@ pub struct IdentityRequestPayload {
     pub traits: Option<Vec<IdentityTraitPayload>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TraitPatchOp {
+    Add { name: String, value: Option<TraitValue> },
+    Delete { name: String },
+    SetValue { name: String, value: Option<TraitValue> },
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct IdentityPatch {
+    pub identity: Option<String>,
+    pub traits: Vec<TraitPatchOp>,
+}
+
+impl IdentityPatch {
+    pub fn is_empty(&self) -> bool {
+        self.identity.is_none() && self.traits.is_empty()
+    }
+}
+
 impl From<Feature> for NewFeaturePayload {
     fn from(feature: Feature) -> Self {
         NewFeaturePayload {

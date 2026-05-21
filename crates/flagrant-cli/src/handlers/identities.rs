@@ -7,8 +7,9 @@
 //! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`              | [`delete`]      | Delete an identity by its string value.             |
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
-//! | `SET <trait> <value>`          | [`set_trait`]   | Stage a trait value change for the current identity.|
-//! | `UNSET <trait>`                | [`unset_trait`] | Stage a trait removal for the current identity.     |
+//! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
+//! | `SET identity <value>`         | [`set_identity`]| Stage an identity rename.                           |
+//! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
@@ -20,7 +21,7 @@ use flagrant_types::{
     payload::{IdentityRequestPayload, IdentityTraitPayload},
 };
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::internal::stage, printer::tabular::Tabular};
 
 /// Print details of an identity with its traits.
 ///
@@ -42,20 +43,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         }
     }
     Ok(())
-}
-
-fn resolve_identity(
-    ctx: &flagrant_client::connection::Connection,
-    identity_str: &str,
-) -> anyhow::Result<IdentityWithTraits> {
-    let res = ctx.project.as_base_resource();
-    let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
-        res.subpath(format!("/identities?pattern={identity_str}")),
-    )?;
-    identities
-        .into_iter()
-        .find(|i| i.value == identity_str)
-        .ok_or_else(|| anyhow::anyhow!("Identity not found: {identity_str}"))
 }
 
 /// Create or upsert an identity with optional traits.
@@ -123,7 +110,8 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         let res = ctx.project.as_base_resource();
         let identity = resolve_identity(&ctx, identity_str)?;
         ctx.client
-            .delete(res.subpath(format!("/identities/{}", identity.id)))?;
+            .delete(res.subpath(format!("/identities/{}", identity.value)))?;
+
         println!("Identity removed.");
         return Ok(());
     }
@@ -149,6 +137,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             let ctx = session.context.read().unwrap();
             resolve_identity(&ctx, identity_str)?
         };
+
         identity.describe(None);
         session.context.write().unwrap().identity = Some(identity);
         return Ok(());
@@ -156,41 +145,61 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     bail!("No identity provided.")
 }
 
-/// Stage a trait value for the current identity.
+/// Stage a trait value change for the current identity.
 ///
-/// Expected args: `<trait> <value>`
+/// Expected args: `trait <name:value>`
 ///
-/// The value is auto-typed (bool → i32 → f32 → str) and stored in encoded
-/// form (`type::value`).
+/// The value is auto-typed (bool → i32 → f32 → str).
 pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let (Some(name), Some(value)) = (args.get(1), args.get(2)) {
-        let mut ctx = session.context.write().unwrap();
-        if ctx.identity.is_none() {
+    if let Some(arg) = args.get(1) {
+        if let Some((name, value)) = arg.split_once(':') {
+            let mut ctx = session.context.write().unwrap();
+            if let Some(identity) = &ctx.identity {
+                let trait_exists = identity.traits.iter().any(|t| t.name == name);
+                let trait_value = TraitValue::build(value);
+
+                stage::stage_trait(
+                    ctx.get_or_init_identity_patch(),
+                    trait_exists,
+                    name.to_string(),
+                    trait_value,
+                );
+                return Ok(());
+            }
             bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
         }
-        let trait_value = TraitValue::build(value);
-        ctx.pending_traits
-            .insert(name.to_string(), Some(trait_value.clone()));
-        println!("Staged: {} = {}", name, trait_value);
-        return Ok(());
     }
-    bail!("Usage: SET <trait> <value>")
+    bail!("Usage: SET trait <name:value>")
 }
 
 /// Stage a trait removal for the current identity.
 ///
-/// Expected args: `<trait>`
+/// Expected args: `trait <name>`
 pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let mut ctx = session.context.write().unwrap();
         if ctx.identity.is_none() {
             bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
         }
-        ctx.pending_traits.insert(name.to_string(), None);
-        println!("Staged: unset {name}");
+        stage::stage_trait_delete(ctx.get_or_init_identity_patch(), name.to_string());
         return Ok(());
     }
-    bail!("Usage: UNSET <trait>")
+    bail!("Usage: UNSET trait <name>")
+}
+
+/// Stage an identity rename.
+///
+/// Expected args: `identity <value>`
+pub fn set_identity(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if let Some(value) = args.get(1) {
+        let mut ctx = session.context.write().unwrap();
+        if ctx.identity.is_none() {
+            bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
+        }
+        stage::stage_identity(ctx.get_or_init_identity_patch(), value.to_string());
+        return Ok(());
+    }
+    bail!("Usage: SET identity <value>")
 }
 
 /// Commit staged trait changes for the current identity to the API.
@@ -200,59 +209,48 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     if ctx.identity.is_none() {
         bail!("Not in an identity context.");
     }
-    if ctx.pending_traits.is_empty() {
-        println!("No pending changes to commit.");
-        return Ok(());
-    }
 
-    let identity_id = ctx.identity.as_ref().unwrap().id;
-
-    // Merge staged changes onto current trait set
-    let mut merged: std::collections::BTreeMap<String, Option<TraitValue>> = ctx
-        .identity
-        .as_ref()
-        .unwrap()
-        .traits
-        .iter()
-        .map(|t| (t.name.clone(), t.value.clone()))
-        .collect();
-
-    for (name, val) in &ctx.pending_traits {
-        match val {
-            Some(v) => {
-                merged.insert(name.clone(), Some(v.clone()));
-            }
-            None => {
-                merged.remove(name);
-            }
+    let patch = match ctx.identity_patch.take() {
+        Some(p) if !p.is_empty() => p,
+        _ => {
+            println!("No pending changes to commit.");
+            return Ok(());
         }
-    }
+    };
 
-    let traits: Vec<IdentityTraitPayload> = merged
-        .into_iter()
-        .map(|(name, value)| IdentityTraitPayload { name, value })
-        .collect();
-
+    let identity = ctx.identity.as_ref().unwrap().value.clone();
     let res = ctx.project.as_base_resource();
-    ctx.client
-        .put(res.subpath(format!("/identities/{identity_id}")), traits)?;
-    let updated = ctx
+
+    match ctx
         .client
-        .get::<IdentityWithTraits>(res.subpath(format!("/identities/{identity_id}")))?;
-    updated.describe(None);
-    ctx.pending_traits.clear();
-    ctx.identity = Some(updated);
+        .patch::<_, IdentityWithTraits>(res.subpath(format!("/identities/{identity}")), patch)
+    {
+        Ok(updated) => {
+            updated.describe(None);
+            ctx.identity = Some(updated);
+        }
+        Err(err) => eprintln!("Commit failed: {err}"),
+    }
     Ok(())
 }
 
 /// Drop all staged trait changes for the current identity.
 pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    if ctx.pending_traits.is_empty() {
-        println!("No pending changes.");
-    } else {
-        ctx.pending_traits.clear();
+    if ctx.has_identity_pending() {
+        ctx.discard_identity_pending();
         println!("Pending changes discarded.");
+    } else {
+        println!("No pending changes.");
     }
     Ok(())
+}
+
+fn resolve_identity(
+    ctx: &flagrant_client::connection::Connection,
+    identity_str: &str,
+) -> anyhow::Result<IdentityWithTraits> {
+    let res = ctx.project.as_base_resource();
+    ctx.client
+        .get::<IdentityWithTraits>(res.subpath(format!("/identities/{identity_str}")))
 }

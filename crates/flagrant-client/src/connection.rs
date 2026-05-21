@@ -1,9 +1,8 @@
 use anyhow::bail;
 use flagrant_types::{
-    Environment, Feature, FeatureResponse, IdentityWithTraits, Project, TraitValue,
-    payload::FeaturePatch,
+    Environment, Feature, FeatureResponse, IdentityWithTraits, Project,
+    payload::{FeaturePatch, IdentityPatch},
 };
-use std::collections::BTreeMap;
 
 use crate::{
     http::{Auth, HttpClient},
@@ -31,9 +30,8 @@ pub struct Connection {
     pub variant_index: Vec<VariantRef>,
     /// Identity currently in context (set by `IDENTITY use`).
     pub identity: Option<IdentityWithTraits>,
-    /// Staged trait changes for the current identity.
-    /// Value is `Some(encoded)` to upsert or `None` to remove.
-    pub pending_traits: BTreeMap<String, Option<TraitValue>>,
+    /// Staged patch for the current identity.
+    pub identity_patch: Option<IdentityPatch>,
 }
 
 impl Connection {
@@ -89,7 +87,7 @@ impl Connection {
                 feature_patch: None,
                 variant_index: Vec::new(),
                 identity: None,
-                pending_traits: BTreeMap::new(),
+                identity_patch: None,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
@@ -105,12 +103,16 @@ impl Connection {
         self.feature_patch = None;
     }
 
+    pub fn get_or_init_identity_patch(&mut self) -> &mut IdentityPatch {
+        self.identity_patch.get_or_insert_with(IdentityPatch::default)
+    }
+
     pub fn discard_identity_pending(&mut self) {
-        self.pending_traits.clear();
+        self.identity_patch = None;
     }
 
     pub fn has_identity_pending(&self) -> bool {
-        !self.pending_traits.is_empty()
+        self.identity_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
     }
 
     pub fn env_resource(&self) -> BaseResource<'_> {
