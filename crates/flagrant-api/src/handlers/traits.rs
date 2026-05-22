@@ -1,14 +1,26 @@
 use crate::{errors::ServiceError, extractors::DbConnection};
-use axum::{Json, extract::Path};
+use axum::{
+    Json,
+    extract::{Path, Query},
+};
 use flagrant::models::{project, traits};
 use flagrant_types::{Trait, payload::NewTraitPayload};
+use serde::Deserialize;
+use utoipa::IntoParams;
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct TraitQueryParams {
+    /// Filter traits by name prefix
+    prefix: Option<String>,
+}
 
 /// Lists all defined traits.
 #[utoipa::path(
     get,
     path = "/projects/{project}/traits",
     params(
-        ("project" = String, Path, description = "Project name")
+        ("project" = String, Path, description = "Project name"),
+        TraitQueryParams
     ),
     responses(
         (status = 200, description = "List of all traits", body = Vec<Trait>)
@@ -17,10 +29,14 @@ use flagrant_types::{Trait, payload::NewTraitPayload};
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
+    Query(params): Query<TraitQueryParams>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<Trait>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let all = traits::get_all(&mut conn, &project).await?;
+    let all = match super::parse_pattern(None, params.prefix) {
+        Some(pattern) => traits::get_by_prefix(&mut conn, &project, pattern).await?,
+        _ => traits::get_all(&mut conn, &project).await?,
+    };
 
     Ok(Json(all))
 }

@@ -34,6 +34,17 @@ pub async fn get_all(conn: &mut SqliteConnection, project: &Project) -> anyhow::
     Ok(traits)
 }
 
+/// Returns traits with names matching the given LIKE pattern.
+pub async fn get_by_prefix(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    pattern: String,
+) -> anyhow::Result<Vec<Trait>> {
+    let traits =
+        SQLTraits::fetch_traits_by_prefix::<_, Trait>(conn, params![project.id, pattern]).await?;
+    Ok(traits)
+}
+
 /// Deletes a trait and removes it from all identities.
 pub async fn delete(
     conn: &mut SqliteConnection,

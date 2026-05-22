@@ -1,6 +1,6 @@
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, completer::AutoCompleter, session::Session};
-use flagrant_types::{Environment, Feature, IdentityWithTraits, Tag};
+use flagrant_types::{Environment, Feature, IdentityWithTraits, Tag, Trait};
 
 pub struct ArgCompleter<'a> {
     pub session: &'a Session<Connection>,
@@ -28,18 +28,27 @@ impl AutoCompleter for ArgCompleter<'_> {
                     .collect::<Vec<_>>())
             }
             "IDENTITY" => {
+                let op: &str = &args[1];
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.project.as_base_resource();
 
-                // Auto-complete environment name
-                Ok(ctx
-                    .client
-                    .get::<Vec<IdentityWithTraits>>(
-                        res.subpath(format!("/identities?prefix={prefix}")),
-                    )?
-                    .into_iter()
-                    .map(|c| c.value)
-                    .collect::<Vec<_>>())
+                Ok(match op {
+                    "add" if arg_n >= 3 && !prefix.contains(':') => ctx
+                        .client
+                        .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
+                        .into_iter()
+                        .map(|t| format!("{}:", t.name))
+                        .collect::<Vec<_>>(),
+                    "delete" | "describe" | "use" if arg_n == 2 => ctx
+                        .client
+                        .get::<Vec<IdentityWithTraits>>(
+                            res.subpath(format!("/identities?prefix={prefix}")),
+                        )?
+                        .into_iter()
+                        .map(|c| c.value)
+                        .collect::<Vec<_>>(),
+                    _ => vec![],
+                })
             }
             "SET" if arg_n >= 2 => {
                 let op: &str = &args[1];
@@ -47,6 +56,33 @@ impl AutoCompleter for ArgCompleter<'_> {
                 Ok(match op {
                     "state" => filter_by_prefix(&["on", "off"], prefix),
                     "status" => filter_by_prefix(&["active", "inactive"], prefix),
+                    "trait" if arg_n == 2 && !prefix.contains(':') => {
+                        let ctx = self.session.context.read().unwrap();
+                        let res = ctx.project.as_base_resource();
+
+                        ctx.client
+                            .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
+                            .into_iter()
+                            .map(|t| format!("{}:", t.name))
+                            .collect::<Vec<_>>()
+                    }
+                    _ => vec![],
+                })
+            }
+            "UNSET" if arg_n >= 2 => {
+                let op: &str = &args[1];
+
+                Ok(match op {
+                    "trait" if arg_n == 2 => {
+                        let ctx = self.session.context.read().unwrap();
+                        let res = ctx.project.as_base_resource();
+
+                        ctx.client
+                            .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
+                            .into_iter()
+                            .map(|t| t.name)
+                            .collect::<Vec<_>>()
+                    }
                     _ => vec![],
                 })
             }

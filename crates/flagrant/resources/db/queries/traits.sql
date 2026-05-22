@@ -15,6 +15,12 @@ SELECT trait_id, name FROM traits t
 WHERE t.project_id = $1
 ORDER BY name
 
+-- :name fetch_traits_by_prefix :<> :*
+-- :doc Returns traits with names matching LIKE pattern
+SELECT trait_id, name FROM traits t
+WHERE t.project_id = $1 AND t.name LIKE $2
+ORDER BY name
+
 -- :name delete_trait_entries :<> :!
 -- :doc Removes all identity_traits entries for given trait
 DELETE FROM identity_traits WHERE trait_id = $1
