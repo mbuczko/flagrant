@@ -233,10 +233,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     let patch = match &ctx.feature_patch {
         Some(p) if !p.is_empty() => p.clone(),
-        _ => {
-            println!("No pending changes to commit.");
-            return Ok(());
-        }
+        _ => return Ok(()),
     };
 
     let path = ctx
@@ -267,8 +264,6 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let mut ctx = session.context.write().unwrap();
     if ctx.feature_patch.take().is_some() {
         println!("Pending changes discarded.");
-    } else {
-        println!("No pending changes.");
     }
     Ok(())
 }

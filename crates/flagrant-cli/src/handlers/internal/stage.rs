@@ -2,11 +2,66 @@
 //! they are committed to the API.
 
 use anyhow::bail;
-use flagrant_client::connection::VariantRef;
+use flagrant_client::connection::{Connection, VariantRef};
+use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     FeatureValue, TraitValue,
     payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
 };
+
+use crate::handlers::{features, identities};
+
+/// Commits all staged changes across active contexts (feature and/or identity).
+pub fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity {
+        println!("No pending changes to commit.");
+        return Ok(());
+    }
+
+    if has_feature {
+        features::commit(args, session)?;
+    }
+    if has_identity {
+        identities::commit(args, session)?;
+    }
+    Ok(())
+}
+
+/// Discards all staged changes across active contexts (feature and/or identity).
+pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity {
+        println!("No pending changes.");
+        return Ok(());
+    }
+
+    if has_feature {
+        features::discard(args, session)?;
+    }
+    if has_identity {
+        identities::discard(args, session)?;
+    }
+    Ok(())
+}
 
 /// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
@@ -141,9 +196,15 @@ pub(crate) fn stage_trait(
     value: TraitValue,
 ) {
     let op = if trait_exists {
-        TraitPatchOp::SetValue { name: name.clone(), value: Some(value.clone()) }
+        TraitPatchOp::SetValue {
+            name: name.clone(),
+            value: Some(value.clone()),
+        }
     } else {
-        TraitPatchOp::Add { name: name.clone(), value: Some(value.clone()) }
+        TraitPatchOp::Add {
+            name: name.clone(),
+            value: Some(value.clone()),
+        }
     };
     if let Some(existing) = pending.traits.iter_mut().find(|o| match o {
         TraitPatchOp::Add { name: n, .. }

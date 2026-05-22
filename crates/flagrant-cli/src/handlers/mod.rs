@@ -6,28 +6,7 @@ pub mod variants;
 
 pub(crate) mod internal;
 
-use flagrant_client::connection::Connection;
-use flagrant_repl::{command::Arg, session::Session};
-
-/// Commits staged changes. Delegates to the feature or identity handler
-/// depending on which context is currently active.
-pub fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if session.context.read().unwrap().feature.is_some() {
-        features::commit(args, session)
-    } else {
-        identities::commit(args, session)
-    }
-}
-
-/// Discards staged changes. Delegates to the feature or identity handler
-/// depending on which context is currently active.
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if session.context.read().unwrap().feature.is_some() {
-        features::discard(args, session)
-    } else {
-        identities::discard(args, session)
-    }
-}
+pub use internal::stage::{commit, discard};
 
 /// Opens `$EDITOR` (falling back to `vi`) pre-filled with `content` and returns the
 /// trimmed result after the editor exits. The temp file is removed automatically.

@@ -18,7 +18,7 @@ use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     IdentityWithTraits, TraitValue,
-    payload::{NewIdentityPayload, IdentityTraitPayload},
+    payload::{IdentityTraitPayload, NewIdentityPayload},
 };
 
 use crate::{handlers::internal::stage, printer::tabular::Tabular};
@@ -207,15 +207,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let mut ctx = session.context.write().unwrap();
 
     if ctx.identity.is_none() {
-        bail!("Not in an identity context.");
+        return Ok(());
     }
 
     let patch = match &ctx.identity_patch {
         Some(p) if !p.is_empty() => p.clone(),
-        _ => {
-            println!("No pending changes to commit.");
-            return Ok(());
-        }
+        _ => return Ok(()),
     };
 
     let identity = ctx.identity.as_ref().unwrap().value.clone();
@@ -241,8 +238,6 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     if ctx.has_identity_pending() {
         ctx.discard_identity_pending();
         println!("Pending changes discarded.");
-    } else {
-        println!("No pending changes.");
     }
     Ok(())
 }
