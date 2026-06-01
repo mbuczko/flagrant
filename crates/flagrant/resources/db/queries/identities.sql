@@ -75,7 +75,7 @@ FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE environment_id = $1 AND feature_id = $2
 
 -- :name migrate_identities :<> :!
--- :doc Migrates given percent of identities attached to some variant to the other variant
+-- :doc Migrates given percent of identities attached to one variant into the other variant
 WITH attached AS (
   SELECT identity_id, migrated_id, attached_at
   FROM identity_variants

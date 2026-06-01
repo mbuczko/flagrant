@@ -288,14 +288,14 @@ pub async fn migrate_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,
     from_variant_id: i32,
-    to_variant_id: i32,
+    into_variant_id: i32,
     by_percent: u8,
 ) -> anyhow::Result<()> {
-    if from_variant_id != to_variant_id {
-        tracing::info!(from_variant_id, to_variant_id, "Migrating identities");
+    if from_variant_id != into_variant_id {
+        tracing::info!(from_variant_id, into_variant_id, "Migrating identities");
         SQLIdentities::migrate_identities(
             conn,
-            params![environment.id, from_variant_id, to_variant_id, by_percent],
+            params![environment.id, from_variant_id, into_variant_id, by_percent],
         )
         .await?;
     }

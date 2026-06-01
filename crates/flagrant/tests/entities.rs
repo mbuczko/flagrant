@@ -138,7 +138,7 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
 #[sqlx::test]
 async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    for name in [" ble", "123", "💕333", "foo-bazz"] {
+    for name in [" ble", "123", "1feature", "my feature", "💕333", "foo-bazz"] {
         let feature = feature::create(
             &mut conn,
             &environment,

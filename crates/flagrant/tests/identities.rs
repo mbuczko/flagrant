@@ -311,7 +311,7 @@ async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
         .unwrap();
     assert_eq!(created.traits.len(), 1);
 
-    let stored = identity::get_by_value(&mut conn, &project, created.name)
+    let stored = identity::get_by_value(&mut conn, &project, created.value)
         .await
         .unwrap();
     let new_traits = vec![

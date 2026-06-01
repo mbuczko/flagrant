@@ -6,7 +6,7 @@ pub mod variants;
 
 pub(crate) mod internal;
 
-pub use internal::stage::{commit, discard};
+pub(crate) use internal::stage::{commit, discard};
 
 /// Opens `$EDITOR` (falling back to `vi`) pre-filled with `content` and returns the
 /// trimmed result after the editor exits. The temp file is removed automatically.

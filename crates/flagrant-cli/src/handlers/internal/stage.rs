@@ -11,59 +11,7 @@ use flagrant_types::{
 
 use crate::handlers::{features, identities};
 
-/// Commits all staged changes across active contexts (feature and/or identity).
-pub fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let has_feature = ctx.feature.is_some()
-        && ctx
-            .feature_patch
-            .as_ref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false);
-    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
-    drop(ctx);
-
-    if !has_feature && !has_identity {
-        println!("No pending changes to commit.");
-        return Ok(());
-    }
-
-    if has_feature {
-        features::commit(args, session)?;
-    }
-    if has_identity {
-        identities::commit(args, session)?;
-    }
-    Ok(())
-}
-
-/// Discards all staged changes across active contexts (feature and/or identity).
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let has_feature = ctx.feature.is_some()
-        && ctx
-            .feature_patch
-            .as_ref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false);
-    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
-    drop(ctx);
-
-    if !has_feature && !has_identity {
-        println!("No pending changes.");
-        return Ok(());
-    }
-
-    if has_feature {
-        features::discard(args, session)?;
-    }
-    if has_identity {
-        identities::discard(args, session)?;
-    }
-    Ok(())
-}
-
-/// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
+/// Stages a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
@@ -105,7 +53,7 @@ pub(crate) fn stage_value(
     Ok(())
 }
 
-/// Upserts a `SetWeight` op for a committed variant, or updates the weight of a staged `Add` op.
+/// Stages a `SetWeight` op for a committed variant, or updates the weight of a staged `Add` op.
 pub(crate) fn stage_weight(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
@@ -239,4 +187,56 @@ pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
 pub(crate) fn stage_identity(pending: &mut IdentityPatch, value: String) {
     pending.identity = Some(value.clone());
     println!("Staged: identity = {value}");
+}
+
+/// Commits all staged changes across active contexts (feature and/or identity).
+pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity {
+        println!("No pending changes to commit.");
+        return Ok(());
+    }
+
+    if has_feature {
+        features::commit(args, session)?;
+    }
+    if has_identity {
+        identities::commit(args, session)?;
+    }
+    Ok(())
+}
+
+/// Discards all staged changes across active contexts (feature and/or identity).
+pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity {
+        println!("No pending changes.");
+        return Ok(());
+    }
+
+    if has_feature {
+        features::discard(args, session)?;
+    }
+    if has_identity {
+        identities::discard(args, session)?;
+    }
+    Ok(())
 }
