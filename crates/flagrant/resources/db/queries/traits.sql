@@ -7,7 +7,7 @@ RETURNING trait_id, name
 -- :name fetch_trait_by_id :<> :1
 -- :doc Returns trait by its id
 SELECT trait_id, name FROM traits t
-WHERE t.project_id = $1 AND t.trait_id = $2
+WHERE t.trait_id = $1
 
 -- :name fetch_all_traits :<> :*
 -- :doc Returns all traits ordered by name

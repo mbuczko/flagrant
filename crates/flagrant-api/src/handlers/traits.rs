@@ -34,8 +34,8 @@ pub async fn list(
 ) -> Result<Json<Vec<Trait>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let all = match super::parse_pattern(None, params.prefix) {
-        Some(pattern) => traits::get_by_prefix(&mut conn, &project, pattern).await?,
-        _ => traits::get_all(&mut conn, &project).await?,
+        Some(pattern) => traits::get_by_prefix(&mut conn, project.id, pattern).await?,
+        _ => traits::get_all(&mut conn, project.id).await?,
     };
 
     Ok(Json(all))
@@ -60,7 +60,7 @@ pub async fn create(
     Json(payload): Json<NewTraitPayload>,
 ) -> Result<Json<Trait>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let t = traits::upsert(&mut conn, &project, payload.name).await?;
+    let t = traits::upsert(&mut conn, project.id, payload.name).await?;
 
     Ok(Json(t))
 }
@@ -80,10 +80,8 @@ pub async fn create(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, trait_id)): Path<(String, i32)>,
+    Path((_project_name, trait_id)): Path<(String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-
-    traits::delete(&mut conn, &project, trait_id).await?;
+    traits::delete(&mut conn, trait_id).await?;
     Ok(Json(()))
 }

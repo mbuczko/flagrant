@@ -1,10 +1,10 @@
 -- :name fetch_identity_by_id :<> :1
 -- :doc Fetches a single identity by id
-SELECT identity_id, identity FROM identities WHERE project_id = $1 AND identity_id = $2
+SELECT identity_id, identity, project_id FROM identities WHERE project_id = $1 AND identity_id = $2
 
 -- :name fetch_identity_by_value :<> :1
 -- :doc Fetches a single identity by project and value
-SELECT identity_id, identity FROM identities WHERE project_id = $1 AND identity = lower($2)
+SELECT identity_id, identity, project_id FROM identities WHERE project_id = $1 AND identity = lower($2)
 
 -- :name fetch_identities_with_traits :<> :*
 -- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
@@ -60,7 +60,7 @@ DELETE FROM identities WHERE identity_id = $1
 INSERT INTO identities(project_id, identity)
 VALUES($1, lower($2))
 ON CONFLICT (project_id, identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-RETURNING identity_id, identity
+RETURNING identity_id, identity, project_id
 
 -- :name fetch_identity_variant_for_feature :<> :?
 -- :doc Returns variant_id assigned to identity for given feature+environment

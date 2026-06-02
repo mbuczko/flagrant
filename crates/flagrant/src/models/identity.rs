@@ -89,10 +89,10 @@ pub async fn get_or_create_by_value(
     project: &Project,
     value: String,
 ) -> anyhow::Result<Identity> {
-    let (id, value) =
-        SQLIdentities::upsert_identity::<_, (i32, String)>(conn, params![project.id, value])
+    let (id, value, project_id) =
+        SQLIdentities::upsert_identity::<_, (i32, String, i32)>(conn, params![project.id, value])
             .await?;
-    Ok(Identity { id, value })
+    Ok(Identity { id, value, project_id })
 }
 
 /// Fetches a single identity with no traits by project and identity value
@@ -101,14 +101,14 @@ pub async fn get_by_value(
     project: &Project,
     value: String,
 ) -> anyhow::Result<Identity> {
-    let (id, val) = SQLIdentities::fetch_identity_by_value::<_, (i32, String)>(
+    let (id, val, project_id) = SQLIdentities::fetch_identity_by_value::<_, (i32, String, i32)>(
         &mut *conn,
         params![project.id, value],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
 
-    Ok(Identity { id, value: val })
+    Ok(Identity { id, value: val, project_id })
 }
 
 /// Fetches a single identity with its traits by identity value
@@ -117,7 +117,7 @@ pub async fn get_by_value_with_traits(
     project: &Project,
     value: String,
 ) -> anyhow::Result<IdentityWithTraits> {
-    let (id, identity) = SQLIdentities::fetch_identity_by_value::<_, (i32, String)>(
+    let (id, value, _) = SQLIdentities::fetch_identity_by_value::<_, (i32, String, i32)>(
         &mut *conn,
         params![project.id, value],
     )
@@ -126,7 +126,7 @@ pub async fn get_by_value_with_traits(
 
     Ok(IdentityWithTraits {
         id,
-        value: identity,
+        value,
         traits: load_traits(conn, id).await?,
     })
 }
@@ -139,13 +139,13 @@ pub async fn create(
     trait_payloads: Vec<IdentityTraitPayload>,
 ) -> anyhow::Result<IdentityWithTraits> {
     let mut tx = conn.begin().await?;
-    let Identity { id, value } = get_or_create_by_value(&mut *tx, project, identity).await?;
+    let identity = get_or_create_by_value(&mut *tx, project, identity).await?;
 
-    attach_traits(&mut *tx, project, id, &trait_payloads).await?;
+    attach_traits(&mut *tx, &identity, &trait_payloads).await?;
     tx.commit().await?;
 
-    let traits = load_traits(conn, id).await?;
-    Ok(IdentityWithTraits { id, value, traits })
+    let traits = load_traits(conn, identity.id).await?;
+    Ok(IdentityWithTraits { id: identity.id, value: identity.value, traits })
 }
 
 /// Replaces all traits for an identity. Auto-creates traits that don't exist yet.
@@ -158,7 +158,7 @@ pub async fn update_traits(
     let mut tx = conn.begin().await?;
 
     SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
-    attach_traits(&mut *tx, project, identity.id, &trait_payloads).await?;
+    attach_traits(&mut *tx, &identity, &trait_payloads).await?;
 
     tx.commit().await?;
     get_by_value_with_traits(conn, project, identity.value).await
@@ -182,7 +182,7 @@ pub async fn patch(
     for op in patch.traits {
         match op {
             TraitPatchOp::Add { name, value } | TraitPatchOp::SetValue { name, value } => {
-                let trait_rec = upsert(&mut *tx, project, name).await?;
+                let trait_rec = upsert(&mut *tx, identity.project_id, name).await?;
                 SQLIdentities::upsert_identity_trait(
                     &mut *tx,
                     params![identity.id, trait_rec.id, value],
@@ -324,15 +324,14 @@ pub async fn detach_identities(
 // Internal helper: upserts traits and links them to identity
 async fn attach_traits(
     conn: &mut SqliteConnection,
-    project: &Project,
-    identity_id: i32,
+    identity: &Identity,
     trait_payloads: &[IdentityTraitPayload],
 ) -> anyhow::Result<()> {
     for t in trait_payloads {
-        let trait_rec = upsert(&mut *conn, project, t.name.clone()).await?;
+        let trait_rec = upsert(&mut *conn, identity.project_id, t.name.clone()).await?;
         SQLIdentities::upsert_identity_trait(
             &mut *conn,
-            params![identity_id, trait_rec.id, t.value.clone()],
+            params![identity.id, trait_rec.id, t.value.clone()],
         )
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;

@@ -498,18 +498,18 @@ async fn traits_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    traits::upsert(&mut conn, &project_a, "country".to_owned())
+    traits::upsert(&mut conn, project_a.id, "country".to_owned())
         .await
         .unwrap();
-    traits::upsert(&mut conn, &project_a, "tier".to_owned())
+    traits::upsert(&mut conn, project_a.id, "tier".to_owned())
         .await
         .unwrap();
-    traits::upsert(&mut conn, &project_b, "country".to_owned())
+    traits::upsert(&mut conn, project_b.id, "country".to_owned())
         .await
         .unwrap();
 
-    let a_traits = traits::get_all(&mut conn, &project_a).await.unwrap();
-    let b_traits = traits::get_all(&mut conn, &project_b).await.unwrap();
+    let a_traits = traits::get_all(&mut conn, project_a.id).await.unwrap();
+    let b_traits = traits::get_all(&mut conn, project_b.id).await.unwrap();
 
     assert_eq!(a_traits.len(), 2);
     assert_eq!(b_traits.len(), 1);
@@ -534,12 +534,10 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
         .unwrap();
     assert_eq!(created.traits.len(), 2);
 
-    let all_traits = traits::get_all(&mut conn, &project).await.unwrap();
+    let all_traits = traits::get_all(&mut conn, project.id).await.unwrap();
     let country_trait = all_traits.iter().find(|t| t.name == "country").unwrap();
 
-    traits::delete(&mut conn, &project, country_trait.id)
-        .await
-        .unwrap();
+    traits::delete(&mut conn, country_trait.id).await.unwrap();
 
     let updated = identity::get_by_value_with_traits(&mut conn, &project, created.value)
         .await
