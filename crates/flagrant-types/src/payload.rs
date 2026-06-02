@@ -104,6 +104,11 @@ impl FeaturePatch {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct OverridePayload {
+    pub variant_id: i32,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct IdentityPatch {
     pub identity: Option<String>,

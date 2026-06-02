@@ -58,6 +58,11 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment/variants/:variant_id",
             delete(variants::delete),
         )
+        // Identity variant override (env-scoped)
+        .route(
+            "/envs/:environment/features/:feature_id/identities/:identity/override",
+            get(identities::get_override).put(identities::set_override),
+        )
         // Identities
         .route("/identities", get(identities::list))
         .route("/identities", post(identities::create))

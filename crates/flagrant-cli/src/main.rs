@@ -80,6 +80,10 @@ fn has_feature_ctx(session: &Session<Connection>) -> bool {
 fn has_identity_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().identity.is_some()
 }
+fn has_feature_and_identity_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    ctx.feature.is_some() && ctx.identity.is_some()
+}
 fn has_pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     (ctx.feature.is_some()
@@ -212,7 +216,13 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_identity,
             has_identity_ctx,
         ),
-        Command::Set.args("state · status · value · trait · identity"),
+        Command::Set.op_in_context(
+            "override",
+            "[value]",
+            handlers::features::set_override,
+            has_feature_and_identity_ctx,
+        ),
+        Command::Set.args("state · status · value · override · trait · identity"),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",

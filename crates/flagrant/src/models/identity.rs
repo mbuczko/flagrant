@@ -33,7 +33,7 @@ async fn load_traits(
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity traits", e).into())
 }
 
-/// Lists up to 10 identities with their traits, optionally filtered by pattern.
+/// Lists up to 10 identities with their traits, optionally filtered by pattern
 pub async fn list(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -83,7 +83,19 @@ pub async fn list(
     Ok(result)
 }
 
-/// Fetches a single identity with no traits by project and value
+/// Returns an existing identity or creates a new one if it doesn't exist yet.
+pub async fn get_or_create_by_value(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    value: String,
+) -> anyhow::Result<Identity> {
+    let (id, value) =
+        SQLIdentities::upsert_identity::<_, (i32, String)>(conn, params![project.id, value])
+            .await?;
+    Ok(Identity { id, value })
+}
+
+/// Fetches a single identity with no traits by project and identity value
 pub async fn get_by_value(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -99,8 +111,8 @@ pub async fn get_by_value(
     Ok(Identity { id, value: val })
 }
 
-/// Fetches a single identity with its traits by identity value.
-pub async fn get_with_traits(
+/// Fetches a single identity with its traits by identity value
+pub async fn get_by_value_with_traits(
     conn: &mut SqliteConnection,
     project: &Project,
     value: String,
@@ -127,9 +139,7 @@ pub async fn create(
     trait_payloads: Vec<IdentityTraitPayload>,
 ) -> anyhow::Result<IdentityWithTraits> {
     let mut tx = conn.begin().await?;
-    let (id, value) =
-        SQLIdentities::upsert_identity::<_, (i32, String)>(&mut *tx, params![project.id, identity])
-            .await?;
+    let Identity { id, value } = get_or_create_by_value(&mut *tx, project, identity).await?;
 
     attach_traits(&mut *tx, project, id, &trait_payloads).await?;
     tx.commit().await?;
@@ -151,7 +161,7 @@ pub async fn update_traits(
     attach_traits(&mut *tx, project, identity.id, &trait_payloads).await?;
 
     tx.commit().await?;
-    get_with_traits(conn, project, identity.value).await
+    get_by_value_with_traits(conn, project, identity.value).await
 }
 
 /// Applies a patch to an identity — optionally renames it and applies granular trait operations.
@@ -194,7 +204,7 @@ pub async fn patch(
     }
 
     tx.commit().await?;
-    get_with_traits(conn, project, identity.value).await
+    get_by_value_with_traits(conn, project, identity.value).await
 }
 
 /// Deletes an identity and all associated data.
@@ -209,37 +219,35 @@ pub async fn delete(conn: &mut SqliteConnection, identity: Identity) -> anyhow::
     Ok(())
 }
 
-// Internal helper: upserts traits and links them to identity
-async fn attach_traits(
+/// Returns the variant_id currently assigned to the given identity for the given
+/// feature+environment, or None if no assignment exists.
+pub async fn get_variant_for_identity(
     conn: &mut SqliteConnection,
-    project: &Project,
-    identity_id: i32,
-    trait_payloads: &[IdentityTraitPayload],
-) -> anyhow::Result<()> {
-    for t in trait_payloads {
-        let trait_rec = upsert(&mut *conn, project, t.name.clone()).await?;
-        SQLIdentities::upsert_identity_trait(
-            &mut *conn,
-            params![identity_id, trait_rec.id, t.value.clone()],
-        )
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
-    }
-    Ok(())
+    environment: &Environment,
+    feature_id: i32,
+    identity: &Identity,
+) -> anyhow::Result<Option<i32>> {
+    SQLIdentities::fetch_identity_variant_for_feature::<_, (i32,)>(
+        conn,
+        params![identity.id, feature_id, environment.id],
+    )
+    .await
+    .map(|id| id.map(|(i,)| i))
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity variant", e).into())
 }
 
-/// Returns feature variants assigned to given identity, distributing the identity across
-/// variants as needed. If the identity is new or has a pending migration, it is attached
-/// to a variant determined by the distributor and persisted for future requests.
+/// Returns enabled features variants assigned to given identity, distributing the
+/// identity across variants as needed.
+///
+/// If the identity has a pending migration, it is re-attached to a variant determined
+/// by the distributor and persisted for future requests.
 pub async fn get_identity_variants(
     conn: &mut SqliteConnection,
-    project: &Project,
     environment: &Environment,
-    identity: String,
+    identity: &Identity,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
     let mut tx = conn.begin().await?;
-    let mut variants = variant::get_by_identity(&mut tx, environment, &identity).await?;
-    let mut identity_id: Option<i32> = None;
+    let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
     for var in variants.iter_mut() {
         let attach_to_variant = if let Some(id) = var.migrated_id {
@@ -247,28 +255,13 @@ pub async fn get_identity_variants(
         } else if var.identity_id.is_none() {
             Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
         } else {
-            // Cache identity_id to avoid an unnecessary query for the same information later
-            identity_id = var.identity_id;
             None
         };
 
         if let Some(variant) = attach_to_variant {
-            if identity_id.is_none() {
-                let (id, _) = SQLIdentities::upsert_identity::<_, (i32, String)>(
-                    &mut *tx,
-                    params![project.id, &identity],
-                )
-                .await?;
-                identity_id = Some(id);
-            }
             SQLIdentities::upsert_identity_variant(
                 &mut *tx,
-                params![
-                    identity_id.unwrap(),
-                    environment.id,
-                    var.feature_id,
-                    variant.id
-                ],
+                params![identity.id, environment.id, var.feature_id, variant.id],
             )
             .await
             .map_err(|e| {
@@ -302,10 +295,47 @@ pub async fn migrate_identities(
     Ok(())
 }
 
+/// Pins an identity to a specific variant for a given feature in the given environment,
+/// bypassing normal variant distribution.
+pub async fn override_variant(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    identity: &Identity,
+    feature_id: i32,
+    variant_id: i32,
+) -> anyhow::Result<()> {
+    SQLIdentities::upsert_identity_variant(
+        conn,
+        params![identity.id, environment.id, feature_id, variant_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
+    Ok(())
+}
+
 pub async fn detach_identities(
     conn: &mut SqliteConnection,
     from_variant_id: i32,
 ) -> anyhow::Result<()> {
     SQLIdentities::delete_attachments(conn, params![from_variant_id]).await?;
+    Ok(())
+}
+
+// Internal helper: upserts traits and links them to identity
+async fn attach_traits(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    identity_id: i32,
+    trait_payloads: &[IdentityTraitPayload],
+) -> anyhow::Result<()> {
+    for t in trait_payloads {
+        let trait_rec = upsert(&mut *conn, project, t.name.clone()).await?;
+        SQLIdentities::upsert_identity_trait(
+            &mut *conn,
+            params![identity_id, trait_rec.id, t.value.clone()],
+        )
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
+    }
     Ok(())
 }

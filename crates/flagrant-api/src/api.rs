@@ -32,7 +32,8 @@ pub async fn get_features(
 ) -> Result<Json<Vec<FeatureResponse>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let variants = identity::get_identity_variants(&mut conn, &project, &env, identity)
+    let identity = identity::get_or_create_by_value(&mut conn, &project, identity).await?;
+    let variants = identity::get_identity_variants(&mut conn, &env, &identity)
         .await?
         .into_iter()
         .map(|v| FeatureResponse {

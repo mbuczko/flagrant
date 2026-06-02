@@ -62,6 +62,11 @@ VALUES($1, lower($2))
 ON CONFLICT (project_id, identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
 RETURNING identity_id, identity
 
+-- :name fetch_identity_variant_for_feature :<> :?
+-- :doc Returns variant_id assigned to identity for given feature+environment
+SELECT iv.variant_id FROM identity_variants iv
+WHERE iv.identity_id = $1 AND iv.feature_id = $2 AND iv.environment_id = $3
+
 -- :name upsert_identity_variant :<> :!
 -- :doc Connects identity with variant of given id
 INSERT INTO identity_variants(identity_id, environment_id, feature_id, variant_id)

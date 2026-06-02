@@ -3,10 +3,13 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{identity, project};
+use flagrant::{
+    errors::FlagrantError,
+    models::{environment, identity, project},
+};
 use flagrant_types::{
     IdentityWithTraits,
-    payload::{IdentityPatch, NewIdentityPayload},
+    payload::{IdentityPatch, NewIdentityPayload, OverridePayload},
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -67,7 +70,7 @@ pub async fn fetch(
     Path((project_name, identity_value)): Path<(String, String)>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let identity = identity::get_with_traits(&mut conn, &project, identity_value).await?;
+    let identity = identity::get_by_value_with_traits(&mut conn, &project, identity_value).await?;
 
     Ok(Json(identity))
 }
@@ -127,6 +130,68 @@ pub async fn update(
     let identity = identity::patch(&mut conn, &project, identity, patch).await?;
 
     Ok(Json(identity))
+}
+
+/// Returns the variant currently pinned to an identity for a given feature+environment,
+/// or 404 if no override exists.
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/override",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("identity" = String, Path, description = "Identity value")
+    ),
+    responses(
+        (status = 200, description = "Current override", body = OverridePayload),
+        (status = 404, description = "No override set for this identity")
+    ),
+    tag = "identities"
+)]
+pub async fn get_override(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, feature_id, identity_value)): Path<(String, String, i32, String)>,
+) -> Result<Json<OverridePayload>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_by_value(&mut conn, &project, identity_value)
+        .await
+        .map_err(|_| FlagrantError::NotFound("No override set for this identity"))?;
+    let variant_id = identity::get_variant_for_identity(&mut conn, &env, feature_id, &identity)
+        .await?
+        .ok_or(FlagrantError::NotFound("No override set for this identity"))?;
+    Ok(Json(OverridePayload { variant_id }))
+}
+
+/// Overrides the variant assigned to an identity for a specific feature and environment,
+/// bypassing normal variant distribution.
+#[utoipa::path(
+    put,
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/override",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("identity" = String, Path, description = "Identity value")
+    ),
+    request_body = OverridePayload,
+    responses(
+        (status = 200, description = "Override applied"),
+        (status = 404, description = "Identity or variant not found")
+    ),
+    tag = "identities"
+)]
+pub async fn set_override(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, feature_id, identity_value)): Path<(String, String, i32, String)>,
+    Json(payload): Json<OverridePayload>,
+) -> Result<Json<()>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
+    identity::override_variant(&mut conn, &env, &identity, feature_id, payload.variant_id).await?;
+    Ok(Json(()))
 }
 
 /// Deletes an identity and all its trait associations and variant assignments.

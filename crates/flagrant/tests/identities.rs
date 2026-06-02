@@ -51,7 +51,10 @@ async fn idents_count_for_feature_variant(
 ) -> usize {
     // Redistribute idents and attach to variants first
     for n in 1..=10 {
-        identity::get_identity_variants(conn, project, environment, format!("identity_{n}"))
+        let ident = identity::get_or_create_by_value(conn, project, format!("identity_{n}"))
+            .await
+            .unwrap();
+        identity::get_identity_variants(conn, environment, &ident)
             .await
             .unwrap();
     }
@@ -96,7 +99,10 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
-        identity::get_identity_variants(&mut conn, &project, &environment, format!("identity_{n}"))
+        let ident = identity::get_or_create_by_value(&mut conn, &project, format!("identity_{n}"))
+            .await
+            .unwrap();
+        identity::get_identity_variants(&mut conn, &environment, &ident)
             .await
             .unwrap();
     }
@@ -336,6 +342,107 @@ async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
+async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = feature::create(
+        &mut conn,
+        &environment,
+        "override_feature".to_owned(),
+        None,
+        FeatureValue::build("control_value"),
+        true,
+        true,
+    )
+    .await
+    .unwrap();
+
+    let variant = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt_value"),
+        50,
+    )
+    .await
+    .unwrap();
+
+    // Distribute identity naturally first (lands on whichever variant the distributor picks)
+    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+        .await
+        .unwrap();
+    identity::get_identity_variants(&mut conn, &environment, &alice)
+        .await
+        .unwrap();
+
+    // No override yet → get_variant_for_identity may return Some (naturally distributed) or None
+    // (before first request) — either way we check after the override below.
+
+    // Pin alice to the non-control variant explicitly
+    identity::override_variant(&mut conn, &environment, &alice, feature.id, variant.id)
+        .await
+        .unwrap();
+
+    // get_variant_for_identity must return the overridden variant_id
+    let pinned = identity::get_variant_for_identity(&mut conn, &environment, feature.id, &alice)
+        .await
+        .unwrap();
+    assert_eq!(
+        pinned,
+        Some(variant.id),
+        "override should pin alice to the chosen variant"
+    );
+
+    // get_identity_variants should now surface the overridden value, not redistribute
+    let iv = identity::get_identity_variants(&mut conn, &environment, &alice)
+        .await
+        .unwrap();
+    let alice_variant = iv.iter().find(|iv| iv.feature_id == feature.id).unwrap();
+    assert_eq!(
+        alice_variant.feature_value,
+        FeatureValue::build("alt_value"),
+        "get_identity_variants should return the overridden value"
+    );
+}
+
+#[sqlx::test]
+async fn override_variant_works_without_prior_distribution(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = feature::create(
+        &mut conn,
+        &environment,
+        "override_feature2".to_owned(),
+        None,
+        FeatureValue::build("default"),
+        true,
+        true,
+    )
+    .await
+    .unwrap();
+
+    let variant = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("special"),
+        30,
+    )
+    .await
+    .unwrap();
+
+    // Override without any prior distribution (no identity_variants row yet)
+    let bob = identity::get_or_create_by_value(&mut conn, &project, "bob".to_owned())
+        .await
+        .unwrap();
+    identity::override_variant(&mut conn, &environment, &bob, feature.id, variant.id)
+        .await
+        .unwrap();
+    let pinned = identity::get_variant_for_identity(&mut conn, &environment, feature.id, &bob)
+        .await
+        .unwrap();
+    assert_eq!(pinned, Some(variant.id));
+}
+
+#[sqlx::test]
 async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
     let (project, _) = create_context(&mut conn).await;
 
@@ -434,7 +541,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
         .await
         .unwrap();
 
-    let updated = identity::get_with_traits(&mut conn, &project, created.value)
+    let updated = identity::get_by_value_with_traits(&mut conn, &project, created.value)
         .await
         .unwrap();
     assert_eq!(updated.traits.len(), 1);
