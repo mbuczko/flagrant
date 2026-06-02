@@ -1,4 +1,5 @@
 use common::{create_context, create_environment, random_string};
+use flagrant::errors::FlagrantError;
 use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{
     FeatureValue,
@@ -69,6 +70,43 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
         .await
         .unwrap();
     assert_eq!(feature_env2.get_default_value(), &value);
+}
+
+#[sqlx::test]
+async fn same_control_value_is_allowed_across_environments(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let value = FeatureValue::build("shared-default");
+
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
+
+    // Both environments set the same control value — this must not violate the unique constraint.
+    feature::update_one(&mut conn, &environment1, &feature)
+        .value(value.clone())
+        .update()
+        .await
+        .unwrap();
+
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(value.clone())
+        .update()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        feature::get_by_id(&mut conn, &environment1, feature.id)
+            .await
+            .unwrap()
+            .get_default_value(),
+        &value
+    );
+    assert_eq!(
+        feature::get_by_id(&mut conn, &environment2, feature.id)
+            .await
+            .unwrap()
+            .get_default_value(),
+        &value
+    );
 }
 
 #[sqlx::test]
@@ -267,6 +305,81 @@ async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
+async fn create_variant_with_duplicate_value_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        10,
+    )
+    .await
+    .unwrap();
+
+    let err = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        20,
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(e, FlagrantError::BadRequest(_))),
+        "expected BadRequest, got: {err}"
+    );
+}
+
+#[sqlx::test]
+async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let v1 = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        10,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("baz"),
+        20,
+    )
+    .await
+    .unwrap();
+
+    // Updating v1's value to "baz" conflicts with the second variant.
+    let err = variant::update_one(
+        &mut conn,
+        &environment,
+        &v1,
+        FeatureValue::build("baz"),
+        10,
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(e, FlagrantError::BadRequest(_))),
+        "expected BadRequest, got: {err}"
+    );
+}
+
+#[sqlx::test]
 async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "bar").await;
@@ -327,7 +440,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        FeatureValue::build("bar-2"),
         30,
     )
     .await

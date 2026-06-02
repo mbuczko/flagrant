@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS variants (
 -- using a partial index, ensure that there is only one control value for feature per environment
 --CREATE UNIQUE INDEX idx_unique_is_control ON variants(feature_id, environment_id) WHERE is_control = true;
 
+-- Enforce unique values only among non-control variants (environment_id IS NULL).
+-- Control variants may share the same value across different environments.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_variant_value ON variants(feature_id, value) WHERE environment_id IS NULL;
+
 CREATE TABLE IF NOT EXISTS variant_weights (
   variant_id INTEGER NOT NULL REFERENCES variants,
   environment_id INTEGER NOT NULL REFERENCES environments,

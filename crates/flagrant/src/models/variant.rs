@@ -65,7 +65,17 @@ pub async fn create(
         v.get("variant_id")
     })
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e))?;
+    .map_err(|e| -> anyhow::Error {
+        if let sqlx::Error::Database(db_err) = &e {
+            if db_err.is_unique_violation() {
+                return FlagrantError::BadRequest(
+                    "A variant with this value already exists for this feature",
+                )
+                .into();
+            }
+        }
+        FlagrantError::QueryFailed("Could not create a variant", e).into()
+    })?;
 
     SQLVariants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight])
         .await
@@ -92,7 +102,17 @@ async fn update(
             v.get("feature_id")
         })
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e))?;
+        .map_err(|e| -> anyhow::Error {
+            if let sqlx::Error::Database(db_err) = &e {
+                if db_err.is_unique_violation() {
+                    return FlagrantError::BadRequest(
+                        "A variant with this value already exists for this feature",
+                    )
+                    .into();
+                }
+            }
+            FlagrantError::QueryFailed("Could not update variant value", e).into()
+        })?;
 
     SQLVariants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
         .await

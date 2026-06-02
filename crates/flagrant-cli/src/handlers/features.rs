@@ -23,7 +23,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue,
-    payload::{NewFeaturePayload, OverridePayload, VariantPatchOp},
+    payload::{NewFeaturePayload, VariantPatchOp},
 };
 
 use crate::{
@@ -59,24 +59,27 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
-        let ctx = session.context.read().unwrap();
-        let res = ctx.env_resource();
-        let val = match args.get(2) {
-            Some(a) => a.to_string(),
-            None => edit_in_editor("")?,
+        let feature = {
+            let ctx = session.context.read().unwrap();
+            let res = ctx.env_resource();
+            let val = match args.get(2) {
+                Some(a) => a.to_string(),
+                None => edit_in_editor("")?,
+            };
+            let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
+            ctx.client.post::<_, Feature>(
+                res.subpath("/features"),
+                NewFeaturePayload {
+                    name: name.to_string(),
+                    description: args.get(3).map(|d| d.to_string()),
+                    is_enabled: false,
+                    value: parsed,
+                },
+            )?
         };
-        let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
-        let feature = ctx.client.post::<_, Feature>(
-            res.subpath("/features"),
-            NewFeaturePayload {
-                name: name.to_string(),
-                description: args.get(3).map(|d| d.to_string()),
-                is_enabled: false,
-                value: parsed,
-            },
-        )?;
 
         feature.describe(None);
+        session.context.write().unwrap().feature = Some(feature);
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -219,123 +222,6 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
         return Ok(());
     }
     bail!("Not within a feature context.")
-}
-
-/// Overrides the variant assigned to the current identity for the current feature,
-/// bypassing normal distribution.
-///
-/// Expected args: `[value]`
-///
-/// When called without a value argument, opens `$EDITOR` pre-filled with all existing
-/// variants (shown as comments with weights) so the user can choose one. All comment
-/// lines (starting with `#`) are stripped before the value is used.
-///
-/// The entered value must match an existing variant exactly. To use an arbitrary value,
-/// first create a variant with `VARIANT add`.
-pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let feature = ctx
-        .feature
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a feature context."))?;
-    let identity = ctx
-        .identity
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in an identity context."))?;
-
-    let raw: String = if let Some(val) = args.get(1) {
-        val.to_string()
-    } else {
-        // Resolve which variant this identity is currently assigned to (if any)
-        // by querying the override endpoint directly (avoids the is_enabled filter
-        // of the public API).
-        let override_path = ctx.env_resource().subpath(format!(
-            "/features/{}/identities/{}/override",
-            feature.id, identity.value
-        ));
-        let current_variant_id = ctx.client.get::<OverridePayload>(override_path).ok().map(|p| p.variant_id);
-
-        let content = build_override_editor_content(feature, current_variant_id);
-        let edited = edit_in_editor(&content)?;
-        strip_comments(&edited)
-    };
-
-    if raw.is_empty() {
-        bail!("No value provided.");
-    }
-
-    let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
-
-    let variant = feature
-        .variants
-        .iter()
-        .find(|v| {
-            let (_, bare) = v.value.decompose();
-            *bare == raw || v.value == parsed
-        })
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No variant matches value '{raw}'. Use `VARIANT add` to create a new variant first."
-            )
-        })?;
-
-    let path = ctx.env_resource().subpath(format!(
-        "/features/{}/identities/{}/override",
-        feature.id, identity.value
-    ));
-    ctx.client.put(path, OverridePayload { variant_id: variant.id })?;
-    println!(
-        "Override set: '{}' → {} (variant id={})",
-        identity.value, parsed, variant.id
-    );
-    Ok(())
-}
-
-fn build_override_editor_content(feature: &Feature, current_variant_id: Option<i32>) -> String {
-    let mut content = String::new();
-    let non_control: Vec<_> = feature
-        .variants
-        .iter()
-        .filter(|v| !v.is_control())
-        .collect();
-
-    for (i, variant) in non_control.iter().enumerate() {
-        let (_, bare) = variant.value.decompose();
-        let current = if current_variant_id == Some(variant.id) {
-            " ← current"
-        } else {
-            ""
-        };
-        content.push_str(&format!(
-            "# variant {} ({}%){}\n{}\n\n",
-            i + 1,
-            variant.weight,
-            current,
-            bare
-        ));
-    }
-    if let Some(control) = feature.variants.iter().find(|v| v.is_control()) {
-        let (_, bare) = control.value.decompose();
-        let current = if current_variant_id == Some(control.id) {
-            " ← current"
-        } else {
-            ""
-        };
-        content.push_str(&format!(
-            "# default value ({}%){}\n{}",
-            control.weight, current, bare
-        ));
-    }
-    content
-}
-
-fn strip_comments(text: &str) -> String {
-    text.lines()
-        .filter(|line| !line.starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_owned()
 }
 
 /// Commits all staged changes for the current feature to the API atomically.

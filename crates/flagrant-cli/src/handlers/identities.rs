@@ -9,6 +9,7 @@
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
 //! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
 //! | `SET identity <value>`         | [`set_identity`]| Stage an identity rename.                           |
+//! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
 //! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
@@ -17,11 +18,11 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    IdentityWithTraits, TraitValue,
-    payload::{IdentityTraitPayload, NewIdentityPayload},
+    Feature, FeatureValue, IdentityWithTraits, TraitValue,
+    payload::{IdentityTraitPayload, NewIdentityPayload, OverridePayload},
 };
 
-use crate::{handlers::internal::stage, printer::tabular::Tabular};
+use crate::{handlers::{edit_in_editor, internal::stage}, printer::tabular::Tabular};
 
 /// Print details of an identity with its traits.
 ///
@@ -200,6 +201,127 @@ pub fn set_identity(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         return Ok(());
     }
     bail!("Usage: SET identity <value>")
+}
+
+/// Overrides the variant assigned to the current identity for the current feature,
+/// bypassing normal distribution.
+///
+/// Expected args: `[value]`
+///
+/// When called without a value argument, opens `$EDITOR` pre-filled with all existing
+/// variants (shown as comments with weights) so the user can choose one. All comment
+/// lines (starting with `#`) are stripped before the value is used.
+///
+/// The entered value must match an existing variant exactly. To use an arbitrary value,
+/// first create a variant with `VARIANT add`.
+pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let feature = ctx
+        .feature
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a feature context."))?;
+    let identity = ctx
+        .identity
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in an identity context."))?;
+
+    let raw: String = if let Some(val) = args.get(1) {
+        val.to_string()
+    } else {
+        // Resolve which variant this identity is currently assigned to (if any)
+        // by querying the override endpoint directly (avoids the is_enabled filter
+        // of the public API).
+        let override_path = ctx.env_resource().subpath(format!(
+            "/features/{}/identities/{}/override",
+            feature.id, identity.value
+        ));
+        let current_variant_id = ctx
+            .client
+            .get::<OverridePayload>(override_path)
+            .ok()
+            .map(|p| p.variant_id);
+
+        let content = build_override_editor_content(feature, current_variant_id);
+        let edited = edit_in_editor(&content)?;
+        strip_comments(&edited)
+    };
+
+    if raw.is_empty() {
+        bail!("No value provided.");
+    }
+
+    let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
+
+    let variant = feature
+        .variants
+        .iter()
+        .find(|v| {
+            let (_, bare) = v.value.decompose();
+            *bare == raw || v.value == parsed
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No variant matches value '{raw}'. Use `VARIANT add` to create a new variant first."
+            )
+        })?;
+
+    let path = ctx.env_resource().subpath(format!(
+        "/features/{}/identities/{}/override",
+        feature.id, identity.value
+    ));
+    ctx.client.put(path, OverridePayload { variant_id: variant.id })?;
+    println!(
+        "Override set: '{}' → {} (variant id={})",
+        identity.value, parsed, variant.id
+    );
+    Ok(())
+}
+
+fn build_override_editor_content(feature: &Feature, current_variant_id: Option<i32>) -> String {
+    let mut content = String::new();
+    let non_control: Vec<_> = feature
+        .variants
+        .iter()
+        .filter(|v| !v.is_control())
+        .collect();
+
+    for (i, variant) in non_control.iter().enumerate() {
+        let (_, bare) = variant.value.decompose();
+        let current = if current_variant_id == Some(variant.id) {
+            " ← current"
+        } else {
+            ""
+        };
+        content.push_str(&format!(
+            "# variant {} ({}%){}\n{}\n\n",
+            i + 1,
+            variant.weight,
+            current,
+            bare
+        ));
+    }
+    if let Some(control) = feature.variants.iter().find(|v| v.is_control()) {
+        let (_, bare) = control.value.decompose();
+        let current = if current_variant_id == Some(control.id) {
+            " ← current"
+        } else {
+            ""
+        };
+        content.push_str(&format!(
+            "# default value ({}%){}\n{}",
+            control.weight, current, bare
+        ));
+    }
+    content
+}
+
+fn strip_comments(text: &str) -> String {
+    text.lines()
+        .filter(|line| !line.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_owned()
 }
 
 /// Commit staged trait changes for the current identity to the API.

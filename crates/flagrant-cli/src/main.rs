@@ -219,7 +219,7 @@ fn main() -> anyhow::Result<()> {
         Command::Set.op_in_context(
             "override",
             "[value]",
-            handlers::features::set_override,
+            handlers::identities::set_override,
             has_feature_and_identity_ctx,
         ),
         Command::Set.args("state · status · value · override · trait · identity"),

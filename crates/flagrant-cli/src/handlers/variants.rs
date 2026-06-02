@@ -209,11 +209,22 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
-    println!("Staged: variant add weight={weight} value={value}");
-
     let fv: FeatureValue = value
         .parse()
         .unwrap_or_else(|_| FeatureValue::build(&value));
+
+    let feature = ctx.feature.as_ref().unwrap();
+    if feature.variants.iter().any(|v| v.value == fv)
+        || ctx.feature_patch.as_ref().map_or(false, |p| {
+            p.variants
+                .iter()
+                .any(|op| matches!(op, VariantPatchOp::Add { value, .. } if *value == fv))
+        })
+    {
+        bail!("A variant with this value already exists for this feature.");
+    }
+
+    println!("Staged: variant add weight={weight} value={value}");
 
     ctx.get_or_init_pending()
         .variants
@@ -247,6 +258,21 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let fv = raw
         .parse::<FeatureValue>()
         .unwrap_or_else(|_| current.clone_with(raw.trim()));
+
+    let feature = ctx.feature.as_ref().unwrap();
+    let duplicate = feature.variants.iter().any(|v| {
+        v.value == fv && !matches!(&variant_ref, VariantRef::Committed(id) if *id == v.id)
+    }) || ctx.feature_patch.as_ref().map_or(false, |p| {
+        p.variants.iter().enumerate().any(|(i, op)| match op {
+            VariantPatchOp::Add { value, .. } => {
+                *value == fv && !matches!(&variant_ref, VariantRef::Staged(pos) if *pos == i)
+            }
+            _ => false,
+        })
+    });
+    if duplicate {
+        bail!("A variant with this value already exists for this feature.");
+    }
 
     stage::stage_value(ctx.get_or_init_pending(), &variant_ref, fv)?;
     index::rebuild(&mut ctx);
