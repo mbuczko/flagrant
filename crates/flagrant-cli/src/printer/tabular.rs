@@ -1,9 +1,11 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Environment, Feature, FeatureValue, IdentityWithTraits, TraitValue, Variant,
-    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
+    Environment, Feature, IdentityWithTraits, TraitValue,
+    payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch, TraitPatchOp},
 };
+
+use crate::handlers::internal::variants as effective;
 
 pub trait Tabular {
     type Patch;
@@ -111,7 +113,7 @@ impl Tabular for IdentityWithTraits {
             .collect();
 
         let mut trait_lines: Vec<String> = Vec::new();
-        let mut stage_lines: Vec<String> = Vec::new();
+        let mut trait_stage: Vec<String> = Vec::new();
 
         for t in &self.traits {
             let name = t.name.bright_blue().to_string();
@@ -121,17 +123,17 @@ impl Tabular for IdentityWithTraits {
                         .dimmed()
                         .to_string(),
                 );
-                stage_lines.push("deleted".red().to_string());
+                trait_stage.push("deleted".red().to_string());
             } else if let Some(new_val) = modified.get(t.name.as_str()) {
                 trait_lines.push(
                     format!("{} → {}", name, format_trait_value(new_val))
                         .yellow()
                         .to_string(),
                 );
-                stage_lines.push("updated".yellow().to_string());
+                trait_stage.push("updated".yellow().to_string());
             } else {
                 trait_lines.push(format!("{} → {}", name, format_trait_value(&t.value)));
-                stage_lines.push(String::new());
+                trait_stage.push(String::new());
             }
         }
 
@@ -141,32 +143,66 @@ impl Tabular for IdentityWithTraits {
                     .green()
                     .to_string(),
             );
-            stage_lines.push("added".green().to_string());
+            trait_stage.push("added".green().to_string());
         }
 
-        let traits = if trait_lines.is_empty() {
+        let traits_str = if trait_lines.is_empty() {
             "(none)".dimmed().to_string()
         } else {
             trait_lines.join("\n")
         };
 
-        let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
-            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-            .build();
+        let staged_overrides: &[IdentityOverridePatch] = patch
+            .map(|p| p.overrides.as_slice())
+            .unwrap_or_default();
 
-        let stage = stage_lines.join("\n");
-        if patch.is_some() && !stage_lines.is_empty() {
-            let table_with_stage = FancyTable::create(FancyTableOpts::default())
+        let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
+        let has_staged_overrides = !staged_overrides.is_empty();
+
+        if has_staged_traits || has_staged_overrides {
+            let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
                 .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 10)
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
-            table_with_stage.render(vec![&["TRAITS", &traits, &stage]]);
+
+            let mut rows: Vec<Vec<String>> = vec![vec![
+                "TRAITS".to_string(),
+                traits_str,
+                trait_stage.join("\n"),
+            ]];
+
+            if has_staged_overrides {
+                let override_lines = staged_overrides
+                    .iter()
+                    .map(|o| {
+                        format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
+                            .green()
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let override_stage = staged_overrides
+                    .iter()
+                    .map(|_| "staged".green().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                rows.push(vec!["OVERRIDES".to_string(), override_lines, override_stage]);
+            }
+
+            table.render(
+                rows.iter()
+                    .map(|r| r.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+                    .collect::<Vec<_>>(),
+            );
         } else {
-            table.render(vec![&["TRAITS", &traits]]);
+            let table = FancyTable::create(FancyTableOpts::default())
+                .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
+                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .build();
+            table.render(vec![vec!["TRAITS", &traits_str]]);
         }
     }
 }
@@ -222,104 +258,42 @@ impl Tabular for Feature {
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let ops = patch.map(|p| p.variants.as_slice()).unwrap_or_default();
-
-        let deleted_ids: std::collections::HashSet<i32> = ops
-            .iter()
-            .filter_map(|op| match op {
-                VariantPatchOp::Delete { id } => Some(*id),
-                _ => None,
-            })
-            .collect();
-
-        let value_overrides: std::collections::HashMap<i32, &FeatureValue> = ops
-            .iter()
-            .filter_map(|op| match op {
-                VariantPatchOp::SetValue { id, value } => Some((*id, value)),
-                _ => None,
-            })
-            .collect();
-
-        let weight_overrides: std::collections::HashMap<i32, u8> = ops
-            .iter()
-            .filter_map(|op| match op {
-                VariantPatchOp::SetWeight { id, weight } => Some((*id, *weight)),
-                _ => None,
-            })
-            .collect();
-
-        let staged_adds: Vec<(&FeatureValue, u8)> = ops
-            .iter()
-            .filter_map(|op| match op {
-                VariantPatchOp::Add { value, weight } => Some((value, *weight)),
-                _ => None,
-            })
-            .collect();
+        let eff = effective::effective_variants(self, patch);
 
         // Compute the adjusted control weight when there are pending ops that affect non-control
         // variants, mirroring the auto-adjustment done on the backend.
-        let non_control_total: u32 = self
-            .variants
+        let has_ops = patch.map_or(false, |p| !p.variants.is_empty());
+        let non_control_total: u32 = eff
             .iter()
-            .filter(|v| !v.is_control() && !deleted_ids.contains(&v.id))
-            .map(|v| *weight_overrides.get(&v.id).unwrap_or(&v.weight) as u32)
-            .sum::<u32>()
-            + staged_adds.iter().map(|(_, w)| *w as u32).sum::<u32>();
+            .filter(|e| !e.is_control && !e.is_deleted)
+            .map(|e| e.weight as u32)
+            .sum();
 
-        let mut sorted_variants: Vec<&Variant> = self.variants.iter().collect();
-        sorted_variants.sort_by_key(|v| std::cmp::Reverse(v.weight));
-
-        let total_lines = sorted_variants.len() + staged_adds.len();
+        let total_lines = eff.len();
         let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
 
-        for (i, v) in sorted_variants.iter().enumerate() {
-            let connector = if i + 1 == total_lines {
-                "╰╴"
-            } else {
-                "├╴"
-            };
-            let is_deleted = deleted_ids.contains(&v.id);
-            let new_value = value_overrides.get(&v.id).copied();
-            let new_weight = weight_overrides.get(&v.id).copied();
+        for (i, e) in eff.iter().enumerate() {
+            let connector = if i + 1 == total_lines { "╰╴" } else { "├╴" };
 
-            let weight = if v.is_control() && ops.is_empty() {
-                v.weight
-            } else if v.is_control() {
+            let weight = if e.is_control && has_ops {
                 100u32.saturating_sub(non_control_total) as u8
             } else {
-                new_weight.unwrap_or(v.weight)
+                e.weight
             };
+            let line = format!("{}{} {}", connector, bar(weight, 10), e.value);
 
-            let value_str = match new_value {
-                Some(nv) => nv.to_string(),
-                None => v.value.to_string(),
-            };
-
-            let line = format!("{}{} {}", connector, bar(weight, 10), value_str);
-
-            variant_lines.push(if is_deleted {
+            variant_lines.push(if e.is_deleted {
                 line.dimmed().to_string()
-            } else if new_value.is_some()
-                || new_weight.is_some()
-                || (v.is_control() && !ops.is_empty() && weight != v.weight)
+            } else if e.is_staged_add {
+                line.green().to_string()
+            } else if e.value_modified
+                || e.weight_modified
+                || (e.is_control && has_ops && weight != e.weight)
             {
                 line.yellow().to_string()
             } else {
                 line
             });
-        }
-
-        for (i, (value, weight)) in staged_adds.iter().enumerate() {
-            let connector = if sorted_variants.len() + i + 1 == total_lines {
-                "╰╴"
-            } else {
-                "├╴"
-            };
-            variant_lines.push(
-                format!("{}{} {}", connector, bar(*weight, 10), value)
-                    .green()
-                    .to_string(),
-            );
         }
 
         let variants = variant_lines.join("\n");

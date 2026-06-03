@@ -1,7 +1,10 @@
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
-    Environment, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits, Project,
+    Environment, FeatureValue, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits,
+    Project,
 };
+
+use super::feature;
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
@@ -92,7 +95,11 @@ pub async fn get_or_create_by_value(
     let (id, value, project_id) =
         SQLIdentities::upsert_identity::<_, (i32, String, i32)>(conn, params![project.id, value])
             .await?;
-    Ok(Identity { id, value, project_id })
+    Ok(Identity {
+        id,
+        value,
+        project_id,
+    })
 }
 
 /// Fetches a single identity with no traits by project and identity value
@@ -108,7 +115,11 @@ pub async fn get_by_value(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
 
-    Ok(Identity { id, value: val, project_id })
+    Ok(Identity {
+        id,
+        value: val,
+        project_id,
+    })
 }
 
 /// Fetches a single identity with its traits by identity value
@@ -145,7 +156,11 @@ pub async fn create(
     tx.commit().await?;
 
     let traits = load_traits(conn, identity.id).await?;
-    Ok(IdentityWithTraits { id: identity.id, value: identity.value, traits })
+    Ok(IdentityWithTraits {
+        id: identity.id,
+        value: identity.value,
+        traits,
+    })
 }
 
 /// Replaces all traits for an identity. Auto-creates traits that don't exist yet.
@@ -164,10 +179,12 @@ pub async fn update_traits(
     get_by_value_with_traits(conn, project, identity.value).await
 }
 
-/// Applies a patch to an identity — optionally renames it and applies granular trait operations.
+/// Applies a patch to an identity — optionally renames it, applies granular trait operations,
+/// and pins the identity to specific variants (overrides) per feature.
 pub async fn patch(
     conn: &mut SqliteConnection,
     project: &Project,
+    environment: &Environment,
     identity: Identity,
     patch: IdentityPatch,
 ) -> anyhow::Result<IdentityWithTraits> {
@@ -201,6 +218,27 @@ pub async fn patch(
                 })?;
             }
         }
+    }
+
+    for ovr in patch.overrides {
+        let feat = feature::get_by_name(&mut *tx, environment, ovr.feature_name).await?;
+        let fv: FeatureValue = ovr
+            .variant_value
+            .parse()
+            .unwrap_or_else(|_| FeatureValue::build(&ovr.variant_value));
+
+        let variant = variant::get_by_value(&mut *tx, environment, feat.id, &fv)
+            .await?
+            .ok_or(FlagrantError::BadRequest(
+                "No variant with given value found for this feature",
+            ))?;
+
+        SQLIdentities::upsert_identity_variant(
+            &mut *tx,
+            params![identity.id, environment.id, feat.id, variant.id],
+        )
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not set variant override", e))?;
     }
 
     tx.commit().await?;

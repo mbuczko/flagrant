@@ -25,7 +25,7 @@ use flagrant_types::{
 
 use crate::handlers::{
     edit_in_editor,
-    internal::{index, stage},
+    internal::{index, stage, variants as effective},
 };
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 
@@ -47,41 +47,6 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .map(|p| p.variants.as_slice())
         .unwrap_or_default();
 
-    let mut sorted_variants: Vec<&Variant> = feature.variants.iter().collect();
-    sorted_variants.sort_by_key(|v| std::cmp::Reverse(v.weight));
-
-    let deleted_ids: std::collections::HashSet<i32> = ops
-        .iter()
-        .filter_map(|op| match op {
-            VariantPatchOp::Delete { id } => Some(*id),
-            _ => None,
-        })
-        .collect();
-
-    let value_overrides: std::collections::HashMap<i32, &FeatureValue> = ops
-        .iter()
-        .filter_map(|op| match op {
-            VariantPatchOp::SetValue { id, value } => Some((*id, value)),
-            _ => None,
-        })
-        .collect();
-
-    let weight_overrides: std::collections::HashMap<i32, u8> = ops
-        .iter()
-        .filter_map(|op| match op {
-            VariantPatchOp::SetWeight { id, weight } => Some((*id, *weight)),
-            _ => None,
-        })
-        .collect();
-
-    let staged_adds: Vec<(&FeatureValue, u8)> = ops
-        .iter()
-        .filter_map(|op| match op {
-            VariantPatchOp::Add { value, weight } => Some((value, *weight)),
-            _ => None,
-        })
-        .collect();
-
     // Pre-compute adjusted control weight once; it is constant across all variants in the loop.
     let adjusted_control_weight: Option<u8> = if !ops.is_empty() {
         let non_control_total = total_non_control_weight(
@@ -100,74 +65,80 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         None
     };
 
-    let mut rows: Vec<VariantRow> = sorted_variants
+    let eff = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+
+    let mut rows: Vec<VariantRow> = eff
         .iter()
         .enumerate()
-        .map(|(i, var)| {
-            let is_deleted = deleted_ids.contains(&var.id);
-            let new_value = value_overrides.get(&var.id).copied();
-            let new_weight = weight_overrides.get(&var.id).copied();
-            let is_modified = new_value.is_some() || new_weight.is_some();
-
-            let weight = if var.is_control() {
-                adjusted_control_weight.unwrap_or(var.weight)
-            } else {
-                new_weight.unwrap_or(var.weight)
-            };
-            let weight_str = bar(weight, 10);
-            let value_str = new_value
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| var.value.to_string());
-            let idx_str = if var.is_control() {
+        .filter(|(_, e)| !e.is_staged_add)
+        .map(|(i, e)| {
+            let idx_str = if e.is_control {
                 format!("{}★", i + 1)
             } else {
                 (i + 1).to_string()
             };
 
-            if is_deleted {
+            if e.is_deleted {
                 VariantRow {
                     index: idx_str.dimmed().to_string(),
-                    weight: weight_str.dimmed().to_string(),
-                    value: value_str.dimmed().to_string(),
+                    weight: bar(e.weight, 10).dimmed().to_string(),
+                    value: e.value.to_string().dimmed().to_string(),
                     state: Some("deleted".red().to_string()),
                 }
-            } else if is_modified || (var.is_control() && adjusted_control_weight.is_some()) {
-                let label = if is_modified { "modified" } else { "adjusted" };
-                VariantRow {
-                    index: idx_str.yellow().to_string(),
-                    weight: weight_str.yellow().to_string(),
-                    value: value_str.yellow().to_string(),
-                    state: Some(label.yellow().to_string()),
-                }
             } else {
-                VariantRow {
-                    index: idx_str,
-                    weight: weight_str,
-                    value: value_str,
-                    state: Some(String::new()),
+                let weight = if e.is_control {
+                    adjusted_control_weight.unwrap_or(e.weight)
+                } else {
+                    e.weight
+                };
+                let is_modified = e.value_modified
+                    || e.weight_modified
+                    || (e.is_control && adjusted_control_weight.is_some());
+                let label = if e.value_modified || e.weight_modified {
+                    "modified"
+                } else {
+                    "adjusted"
+                };
+                if is_modified {
+                    VariantRow {
+                        index: idx_str.yellow().to_string(),
+                        weight: bar(weight, 10).yellow().to_string(),
+                        value: e.value.to_string().yellow().to_string(),
+                        state: Some(label.yellow().to_string()),
+                    }
+                } else {
+                    VariantRow {
+                        index: idx_str,
+                        weight: bar(weight, 10),
+                        value: e.value.to_string(),
+                        state: Some(String::new()),
+                    }
                 }
             }
         })
         .collect();
 
-    for (staged_pos, (value, weight)) in staged_adds.iter().enumerate() {
+    let committed_count = eff.iter().filter(|e| !e.is_staged_add).count();
+    for (staged_pos, e) in eff.iter().filter(|e| e.is_staged_add).enumerate() {
         rows.push(VariantRow {
-            index: (sorted_variants.len() + staged_pos + 1)
+            index: (committed_count + staged_pos + 1)
                 .to_string()
                 .green()
                 .to_string(),
-            weight: bar(*weight, 10).green().to_string(),
-            value: value.to_string().green().to_string(),
+            weight: bar(e.weight, 10).green().to_string(),
+            value: e.value.to_string().green().to_string(),
             state: Some("added".green().to_string()),
         });
     }
 
     variant_list(rows);
 
-    ctx.variant_index = sorted_variants
+    let staged_adds_count = eff.iter().filter(|e| e.is_staged_add).count();
+    ctx.variant_index = eff
         .iter()
-        .map(|v| VariantRef::Committed(v.id))
-        .chain((0..staged_adds.len()).map(VariantRef::Staged))
+        .filter(|e| !e.is_staged_add)
+        .filter_map(|e| e.id.map(VariantRef::Committed))
+        .chain((0..staged_adds_count).map(VariantRef::Staged))
         .collect();
 
     Ok(())

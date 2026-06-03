@@ -109,14 +109,23 @@ pub struct OverridePayload {
     pub variant_id: i32,
 }
 
+/// A single staged variant override for one feature, carried inside [`IdentityPatch`].
+/// The server resolves feature name to an existing feature and value to a variant.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct IdentityOverridePatch {
+    pub feature_name: String,
+    pub variant_value: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct IdentityPatch {
     pub identity: Option<String>,
     pub traits: Vec<TraitPatchOp>,
+    pub overrides: Vec<IdentityOverridePatch>,
 }
 
 impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
-        self.identity.is_none() && self.traits.is_empty()
+        self.identity.is_none() && self.traits.is_empty() && self.overrides.is_empty()
     }
 }

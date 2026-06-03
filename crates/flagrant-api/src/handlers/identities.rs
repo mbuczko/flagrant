@@ -105,12 +105,14 @@ pub async fn create(
     Ok(Json(identity))
 }
 
-/// Applies a patch to an identity: optionally renames it and applies granular trait operations.
+/// Applies a patch to an identity: optionally renames it, applies granular trait operations,
+/// and pins the identity to specific variants per feature (overrides).
 #[utoipa::path(
     patch,
-    path = "/projects/{project}/identities/{identity}",
+    path = "/projects/{project}/envs/{environment}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("identity" = String, Path, description = "Identity value")
     ),
     request_body = IdentityPatch,
@@ -122,12 +124,13 @@ pub async fn create(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, identity_value)): Path<(String, String)>,
+    Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
     Json(patch): Json<IdentityPatch>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
-    let identity = identity::patch(&mut conn, &project, identity, patch).await?;
+    let identity = identity::patch(&mut conn, &project, &env, identity, patch).await?;
 
     Ok(Json(identity))
 }
@@ -136,7 +139,7 @@ pub async fn update(
 /// or 404 if no override exists.
 #[utoipa::path(
     get,
-    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/override",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/variant",
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
@@ -168,7 +171,7 @@ pub async fn get_override(
 /// bypassing normal variant distribution.
 #[utoipa::path(
     put,
-    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/override",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/identities/{identity}/variant",
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),

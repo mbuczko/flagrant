@@ -909,3 +909,94 @@ async fn create_environment_with_non_unique_name(mut conn: PoolConnection<Sqlite
         .await
         .unwrap();
 }
+
+#[sqlx::test]
+async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+
+    // Feature created in env1 propagates its control variant to env2.
+    let feature = create_feature(&mut conn, &environment1, "control-env1").await;
+
+    // Give env2 a distinct control value.
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(FeatureValue::build("control-env2"))
+        .update()
+        .await
+        .unwrap();
+
+    // Add a shared (non-control, NULL env_id) variant visible in both environments.
+    variant::create(
+        &mut conn,
+        &environment1,
+        &feature,
+        FeatureValue::build("shared"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    // env1's control value is found in env1.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("control-env1"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_some_and(|v| v.is_control()));
+
+    // env2's control value is found in env2.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("control-env2"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_some_and(|v| v.is_control()));
+
+    // env2's control value is NOT visible in env1.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("control-env2"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_none());
+
+    // env1's control value is NOT visible in env2.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("control-env1"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_none());
+
+    // Shared non-control variant is found in both environments.
+    let v1 = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("shared"),
+    )
+    .await
+    .unwrap();
+    let v2 = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("shared"),
+    )
+    .await
+    .unwrap();
+    assert!(v1.is_some_and(|v| !v.is_control()));
+    assert!(v2.is_some_and(|v| !v.is_control()));
+}
