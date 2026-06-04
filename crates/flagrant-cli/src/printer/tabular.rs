@@ -84,6 +84,21 @@ impl Tabular for IdentityWithTraits {
     }
 
     fn describe(&self, patch: Option<&IdentityPatch>) {
+        self.describe_with_variant(patch, None);
+    }
+}
+
+/// Extension trait for describing an identity with a committed variant assignment.
+pub trait DescribeWithVariant {
+    /// Like [`Tabular::describe`] but also renders a VARIANT row showing the current assignment.
+    ///
+    /// - `assigned_variant = None` — identity not yet assigned to any variant.
+    /// - `assigned_variant = Some(value)` — assigned to the variant with this value.
+    fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>);
+}
+
+impl DescribeWithVariant for IdentityWithTraits {
+    fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>) {
         let title = format!("{} (ID={})", self.value, self.id);
 
         let ops = patch.map(|p| p.traits.as_slice()).unwrap_or_default();
@@ -119,27 +134,27 @@ impl Tabular for IdentityWithTraits {
             let name = t.name.bright_blue().to_string();
             if deleted.contains(t.name.as_str()) {
                 trait_lines.push(
-                    format!("{} → {}", name, format_trait_value(&t.value))
+                    format!("{}:{}", name, format_trait_value(&t.value))
                         .dimmed()
                         .to_string(),
                 );
                 trait_stage.push("deleted".red().to_string());
             } else if let Some(new_val) = modified.get(t.name.as_str()) {
                 trait_lines.push(
-                    format!("{} → {}", name, format_trait_value(new_val))
+                    format!("{}:{}", name, format_trait_value(new_val))
                         .yellow()
                         .to_string(),
                 );
                 trait_stage.push("updated".yellow().to_string());
             } else {
-                trait_lines.push(format!("{} → {}", name, format_trait_value(&t.value)));
+                trait_lines.push(format!("{}:{}", name, format_trait_value(&t.value)));
                 trait_stage.push(String::new());
             }
         }
 
         for (name, value) in &added {
             trait_lines.push(
-                format!("{} → {}", name.bright_blue(), format_trait_value(value))
+                format!("{}:{}", name.bright_blue(), format_trait_value(value))
                     .green()
                     .to_string(),
             );
@@ -152,9 +167,8 @@ impl Tabular for IdentityWithTraits {
             trait_lines.join("\n")
         };
 
-        let staged_overrides: &[IdentityOverridePatch] = patch
-            .map(|p| p.overrides.as_slice())
-            .unwrap_or_default();
+        let staged_overrides: &[IdentityOverridePatch] =
+            patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
 
         let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
         let has_staged_overrides = !staged_overrides.is_empty();
@@ -162,7 +176,13 @@ impl Tabular for IdentityWithTraits {
         if has_staged_traits || has_staged_overrides {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 10)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
@@ -172,6 +192,14 @@ impl Tabular for IdentityWithTraits {
                 traits_str,
                 trait_stage.join("\n"),
             ]];
+
+            if let Some(value) = assigned_variant {
+                rows.push(vec![
+                    "VARIANT".to_string(),
+                    value.to_string(),
+                    String::new(),
+                ]);
+            }
 
             if has_staged_overrides {
                 let override_lines = staged_overrides
@@ -188,7 +216,11 @@ impl Tabular for IdentityWithTraits {
                     .map(|_| "staged".green().to_string())
                     .collect::<Vec<_>>()
                     .join("\n");
-                rows.push(vec!["OVERRIDES".to_string(), override_lines, override_stage]);
+                rows.push(vec![
+                    "OVERRIDES".to_string(),
+                    override_lines,
+                    override_stage,
+                ]);
             }
 
             table.render(
@@ -199,10 +231,27 @@ impl Tabular for IdentityWithTraits {
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
-            table.render(vec![vec!["TRAITS", &traits_str]]);
+
+            let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
+
+            if let Some(value) = assigned_variant {
+                rows.push(vec!["VARIANT".to_string(), value.to_string()]);
+            }
+
+            table.render(
+                rows.iter()
+                    .map(|r| r.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+                    .collect::<Vec<_>>(),
+            );
         }
     }
 }
@@ -242,7 +291,6 @@ impl Tabular for Feature {
     }
 
     fn describe(&self, patch: Option<&FeaturePatch>) {
-
         let title = format!("{} (ID={})", &self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
@@ -273,7 +321,11 @@ impl Tabular for Feature {
         let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
 
         for (i, e) in eff.iter().enumerate() {
-            let connector = if i + 1 == total_lines { "╰╴" } else { "├╴" };
+            let connector = if i + 1 == total_lines {
+                "╰╴"
+            } else {
+                "├╴"
+            };
 
             let weight = if e.is_control && has_ops {
                 100u32.saturating_sub(non_control_total) as u8

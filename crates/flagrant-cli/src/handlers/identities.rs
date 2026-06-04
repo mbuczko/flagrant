@@ -15,19 +15,23 @@
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
 use anyhow::bail;
+use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue, IdentityWithTraits, TraitValue,
     payload::{
-        FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
-        OverridePayload,
+        FeaturePatch, IdentityOverridePatch, IdentityPatch, IdentityTraitPayload,
+        NewIdentityPayload, OverridePayload,
     },
 };
 
 use crate::{
-    handlers::{edit_in_editor, internal::{stage, variants as effective}},
-    printer::tabular::Tabular,
+    handlers::{
+        edit_in_editor,
+        internal::{stage, variants as effective},
+    },
+    printer::tabular::{DescribeWithVariant, Tabular},
 };
 
 /// Print details of an identity with its traits.
@@ -40,16 +44,55 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     if let Some(identity_str) = args.get(1) {
         let ctx = session.context.read().unwrap();
         let identity = resolve_identity(&ctx, identity_str)?;
-        identity.describe(None);
+
+        describe_identity(&ctx, &identity, None);
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(identity) = &ctx.identity {
-            identity.describe(ctx.identity_patch.as_ref().filter(|p| !p.is_empty()));
+            let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
+            describe_identity(&ctx, identity, patch);
         } else {
             bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
         }
     }
     Ok(())
+}
+
+/// Fetches the variant currently assigned to `identity_value` for the active feature context.
+///
+/// Returns `None` if the identity has no assignment yet, `Some(value)` if assigned.
+/// Should only be called when already confirmed to be in a feature context.
+fn describe_identity(
+    ctx: &Connection,
+    identity: &IdentityWithTraits,
+    patch: Option<&IdentityPatch>,
+) {
+    if let Some(feature) = ctx.feature.as_ref() {
+        let assignment = fetch_variant_assignment(ctx, &identity.value);
+        let display = match assignment.as_deref() {
+            Some(v) => format!("{} → {}", feature.name.bright_blue(), v),
+            None => format!("{} → {}", feature.name.bright_blue(), "(not yet assigned)".dimmed()),
+        };
+        identity.describe_with_variant(patch, Some(&display));
+    } else {
+        identity.describe(patch);
+    }
+}
+
+fn fetch_variant_assignment(ctx: &Connection, identity_value: &str) -> Option<String> {
+    let feature = ctx.feature.as_ref()?;
+    let path = ctx.env_resource().subpath(format!(
+        "/features/{}/identities/{}/variant",
+        feature.id, identity_value
+    ));
+    ctx.client.get::<OverridePayload>(path).ok().map(|payload| {
+        feature
+            .variants
+            .iter()
+            .find(|v| v.id == payload.variant_id)
+            .map(|v| v.value.to_string())
+            .unwrap_or_else(|| format!("(unknown id={})", payload.variant_id))
+    })
 }
 
 /// Create or upsert an identity with optional traits, then switch into its context.
@@ -148,7 +191,10 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             resolve_identity(&ctx, identity_str)?
         };
 
-        identity.describe(None);
+        {
+            let ctx = session.context.read().unwrap();
+            describe_identity(&ctx, &identity, None);
+        }
         session.context.write().unwrap().identity = Some(identity);
         return Ok(());
     }
@@ -249,16 +295,16 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 .ok()
                 .map(|p| p.variant_id);
 
-            let content = build_override_editor_content(feature, ctx.feature_patch.as_ref(), current_variant_id);
+            let content = build_override_editor_content(
+                feature,
+                ctx.feature_patch.as_ref(),
+                current_variant_id,
+            );
             let edited = edit_in_editor(&content)?;
             strip_comments(&edited)
         };
 
-        (
-            feature.name.clone(),
-            identity.value.clone(),
-            raw,
-        )
+        (feature.name.clone(), identity.value.clone(), raw)
     };
 
     if raw.is_empty() {
@@ -270,10 +316,9 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         let ctx = session.context.read().unwrap();
         let feature = ctx.feature.as_ref().unwrap();
         let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
-        let variant = feature
-            .variants
-            .iter()
-            .find(|v| v.value == parsed)
+        let variant = effective::effective_variants(feature, ctx.feature_patch.as_ref())
+            .into_iter()
+            .find(|v| !v.is_deleted && v.value == parsed)
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "No variant matches value '{raw}'. Use `VARIANT add` to create a new variant first."
@@ -318,7 +363,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     match ctx.client.patch::<_, IdentityWithTraits>(path, patch) {
         Ok(updated) => {
-            updated.describe(None);
+            describe_identity(&ctx, &updated, None);
             ctx.identity_patch = None;
             ctx.identity = Some(updated);
         }
@@ -365,8 +410,16 @@ fn build_override_editor_content(
     let mut idx = 1;
 
     for e in variants.iter().filter(|e| !e.is_control && !e.is_deleted) {
-        let staged = if e.value_modified || e.is_staged_add { " (staged)" } else { "" };
-        let current = if e.id.is_some() && e.id == current_variant_id { " ← current" } else { "" };
+        let staged = if e.value_modified || e.is_staged_add {
+            " (staged)"
+        } else {
+            ""
+        };
+        let current = if e.id.is_some() && e.id == current_variant_id {
+            " ← current"
+        } else {
+            ""
+        };
         content.push_str(&format!(
             "# variant {} ({}%){}{}\n{}\n\n",
             idx, e.weight, staged, current, e.value
@@ -377,7 +430,11 @@ fn build_override_editor_content(
     for e in variants.iter().filter(|e| e.is_control && !e.is_deleted) {
         let (_, bare) = e.value.decompose();
         let staged = if e.value_modified { " (staged)" } else { "" };
-        let current = if e.id.is_some() && e.id == current_variant_id { " ← current" } else { "" };
+        let current = if e.id.is_some() && e.id == current_variant_id {
+            " ← current"
+        } else {
+            ""
+        };
         content.push_str(&format!(
             "# default value ({}%){}{}\n{}",
             e.weight, staged, current, bare
