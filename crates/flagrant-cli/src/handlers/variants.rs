@@ -238,6 +238,9 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             VariantPatchOp::Add { value, .. } => {
                 *value == fv && !matches!(&variant_ref, VariantRef::Staged(pos) if *pos == i)
             }
+            VariantPatchOp::SetValue { id, value } => {
+                *value == fv && !matches!(&variant_ref, VariantRef::Committed(vid) if *vid == *id)
+            }
             _ => false,
         })
     });
@@ -245,7 +248,25 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("A variant with this value already exists for this feature.");
     }
 
+    let old_value = current.to_string();
+    let new_value = fv.to_string();
+
     stage::stage_value(ctx.get_or_init_pending(), &variant_ref, fv)?;
+
+    // Keep any staged identity override in sync: if it was pointing at the old value,
+    // update it to the new value so it doesn't become stale after commit.
+    if old_value != new_value {
+        let feature_name = ctx.feature.as_ref().unwrap().name.clone();
+        if let Some(patch) = ctx.identity_patch.as_mut() {
+            for o in patch.overrides.iter_mut() {
+                if o.feature_name == feature_name && o.variant_value == old_value {
+                    o.variant_value = new_value.clone();
+                    println!("Updated staged override value: '{old_value}' → '{new_value}'");
+                }
+            }
+        }
+    }
+
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -376,6 +397,14 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         }
     };
 
+    // Find the variant's value before staging deletion, so we can clean up any
+    // staged identity override that references it (overrides are keyed by value string).
+    let deleted_variant_value = ctx
+        .feature
+        .as_ref()
+        .and_then(|f| f.variants.iter().find(|v| v.id == variant_id))
+        .map(|v| v.value.to_string());
+
     let ops = &mut ctx.get_or_init_pending().variants;
     ops.retain(|op| {
         !matches!(op,
@@ -386,6 +415,20 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     println!("Staged: variant delete id={variant_id}");
     ops.push(VariantPatchOp::Delete { id: variant_id });
+
+    // If there's a staged identity override pointing at this variant, remove it —
+    // committing it after the variant is deleted would leave a dangling reference.
+    if let Some(val) = deleted_variant_value {
+        let feature_name = ctx.feature.as_ref().unwrap().name.clone();
+        if let Some(patch) = ctx.identity_patch.as_mut() {
+            let before = patch.overrides.len();
+            patch.overrides.retain(|o| !(o.feature_name == feature_name && o.variant_value == val));
+            if patch.overrides.len() < before {
+                let identity = ctx.identity.as_ref().map(|i| i.value.as_str()).unwrap_or("<unknown>");
+                println!("Dropped staged override for '{val}' on identity '{identity}' (variant is being deleted).");
+            }
+        }
+    }
 
     index::rebuild(&mut ctx);
     Ok(())
