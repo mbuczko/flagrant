@@ -51,7 +51,7 @@ AND f.is_enabled = $4
 --~{ pattern
 AND f.name LIKE($5)
 --~}
-ORDER BY f.is_enabled DESC, f.archived_at DESC, f.name, weight DESC
+ORDER BY f.is_enabled DESC, f.archived_at ASC, f.name, weight DESC
 
 -- :name update_feature :<> :!
 -- :doc Updates feature with new values of name and is_enabled flag

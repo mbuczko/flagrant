@@ -318,7 +318,8 @@ impl Tabular for Feature {
             } else {
                 e.weight
             };
-            let line = format!("{}{} {}", connector, bar(weight, 10), e.value);
+            let marker = if e.is_control { "★" } else { " " };
+            let line = format!("{}{} {}{}", connector, bar(weight, 10), marker, e.value);
 
             variant_lines.push(if e.is_deleted {
                 line.dimmed().to_string()
@@ -378,6 +379,7 @@ impl Tabular for Feature {
             &["VARIANTS", &variants],
             &["TAGS", &tags],
         ]);
+        println!("  {} control variant\n", "★".dimmed());
     }
 }
 
