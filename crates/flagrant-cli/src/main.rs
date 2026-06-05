@@ -84,6 +84,10 @@ fn has_feature_and_identity_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     ctx.feature.is_some() && ctx.identity.is_some()
 }
+fn has_any_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    ctx.feature.is_some() || ctx.identity.is_some()
+}
 fn has_pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     (ctx.feature.is_some()
@@ -233,6 +237,11 @@ fn main() -> anyhow::Result<()> {
             "→ discard staged changes",
             handlers::discard,
             has_pending_ctx,
+        ),
+        Command::Reset.no_op_in_context(
+            "→ reset feature and identity context",
+            handlers::reset,
+            has_any_ctx,
         ),
     ];
     let overlays = vec![

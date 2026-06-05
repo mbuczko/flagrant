@@ -15,6 +15,7 @@ pub enum Command {
     Unset,
     Commit,
     Discard,
+    Reset,
 }
 
 impl Command {

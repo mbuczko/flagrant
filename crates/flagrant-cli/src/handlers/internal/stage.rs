@@ -208,6 +208,32 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
     Ok(())
 }
 
+/// Resets both feature and identity contexts, clearing all state.
+///
+/// Refuses to run if there are any uncommitted staged changes — run `COMMIT` or
+/// `DISCARD` first to avoid losing work.
+pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    {
+        let ctx = session.context.read().unwrap();
+        let has_pending_feature = ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+        if has_pending_feature || ctx.has_identity_pending() {
+            anyhow::bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+        }
+    }
+    let mut ctx = session.context.write().unwrap();
+    ctx.feature = None;
+    ctx.feature_patch = None;
+    ctx.variant_index.clear();
+    ctx.identity = None;
+    ctx.identity_patch = None;
+    println!("Context reset.");
+    Ok(())
+}
+
 /// Discards all staged changes across active contexts (feature and/or identity).
 pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();

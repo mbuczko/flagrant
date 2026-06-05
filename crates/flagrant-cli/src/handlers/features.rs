@@ -27,7 +27,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::{open_in_editor, internal::stage},
+    handlers::{identities, open_in_editor, internal::stage},
     printer::tabular::Tabular,
 };
 use flagrant_client::connection::VariantRef;
@@ -94,6 +94,10 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// staged changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
+        let (feature_name, identity_str) = match name.split_once('@') {
+            Some((f, i)) => (f, Some(i)),
+            None => (name.deref(), None),
+        };
         {
             let ctx = session.context.read().unwrap();
             if ctx
@@ -105,10 +109,13 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
-        let feature = fetch_feature(name, session)?;
+        let feature = fetch_feature(feature_name, session)?;
         feature.describe(None);
-
         session.context.write().unwrap().feature = Some(feature);
+
+        if let Some(identity_str) = identity_str {
+            identities::switch_to(identity_str, session)?;
+        }
         return Ok(());
     }
     bail!("No feature name provided.")

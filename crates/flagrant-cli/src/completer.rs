@@ -91,8 +91,29 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
+                    // Auto-complete feature name, or `feature@identity` when prefix contains `@`
+                    "use" if arg_n == 2 => {
+                        if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
+                            let project_res = ctx.project.as_base_resource();
+                            ctx.client
+                                .get::<Vec<IdentityWithTraits>>(project_res.subpath(format!(
+                                    "/identities?prefix={identity_prefix}"
+                                )))?
+                                .into_iter()
+                                .map(|i| format!("{feature_part}@{}", i.value))
+                                .collect::<Vec<_>>()
+                        } else {
+                            ctx.client
+                                .get::<Vec<Feature>>(
+                                    res.subpath(format!("/features?prefix={prefix}")),
+                                )?
+                                .into_iter()
+                                .map(|c| c.name)
+                                .collect::<Vec<_>>()
+                        }
+                    }
                     // Auto-complete feature name
-                    "delete" | "describe" | "use" if arg_n == 2 => ctx
+                    "delete" | "describe" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
                         .into_iter()

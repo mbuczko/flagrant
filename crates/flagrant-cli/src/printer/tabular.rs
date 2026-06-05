@@ -159,6 +159,7 @@ impl DescribeWithVariant for IdentityWithTraits {
                 )
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(100)
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![vec![
@@ -169,7 +170,7 @@ impl DescribeWithVariant for IdentityWithTraits {
 
             if let Some(value) = assigned_variant {
                 rows.push(vec![
-                    "VARIANT".to_string(),
+                    "VARIANTS".to_string(),
                     value.to_string(),
                     String::new(),
                 ]);
@@ -213,12 +214,13 @@ impl DescribeWithVariant for IdentityWithTraits {
                     10,
                 )
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(100)
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
 
             if let Some(value) = assigned_variant {
-                rows.push(vec!["VARIANT".to_string(), value.to_string()]);
+                rows.push(vec!["VARIANTS".to_string(), value.to_string()]);
             }
 
             table.render(

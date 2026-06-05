@@ -174,25 +174,32 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// uncommitted staged trait changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
-        {
-            let ctx = session.context.read().unwrap();
-            if ctx.has_identity_pending() {
-                bail!("You have uncommitted trait changes. Run `COMMIT` or `DISCARD` first.");
-            }
-        }
-        let identity = {
-            let ctx = session.context.read().unwrap();
-            resolve_identity(&ctx, identity_str)?
-        };
-
-        {
-            let ctx = session.context.read().unwrap();
-            describe_identity(&ctx, &identity, None);
-        }
-        session.context.write().unwrap().identity = Some(identity);
-        return Ok(());
+        return switch_to(identity_str, session);
     }
     bail!("No identity provided.")
+}
+
+/// Switch the session into an identity context by name.
+///
+/// Shared entry point used by both `IDENTITY use` and the `FEATURE use feature@identity`
+/// shortcut. Fails if there are uncommitted staged trait changes.
+pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
+    {
+        let ctx = session.context.read().unwrap();
+        if ctx.has_identity_pending() {
+            bail!("You have uncommitted trait changes. Run `COMMIT` or `DISCARD` first.");
+        }
+    }
+    let identity = {
+        let ctx = session.context.read().unwrap();
+        resolve_identity(&ctx, identity_str)?
+    };
+    {
+        let ctx = session.context.read().unwrap();
+        describe_identity(&ctx, &identity, None);
+    }
+    session.context.write().unwrap().identity = Some(identity);
+    Ok(())
 }
 
 /// Stage a trait value change for the current identity.
