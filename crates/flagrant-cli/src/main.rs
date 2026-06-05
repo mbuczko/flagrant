@@ -209,12 +209,6 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Set.op_in_context(
-            "identity",
-            "value",
-            handlers::identities::set_identity,
-            has_identity_ctx,
-        ),
-        Command::Set.op_in_context(
             "override",
             "[value]",
             handlers::identities::set_override,

@@ -183,11 +183,6 @@ pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
     println!("Staged: unset {name}");
 }
 
-/// Stages an identity rename on an identity patch.
-pub(crate) fn stage_identity(pending: &mut IdentityPatch, value: String) {
-    pending.identity = Some(value.clone());
-    println!("Staged: identity = {value}");
-}
 
 /// Commits all staged changes across active contexts (feature and/or identity).
 pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {

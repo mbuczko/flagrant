@@ -102,7 +102,7 @@ pub async fn create(
     Ok(Json(identity))
 }
 
-/// Applies a patch to an identity: optionally renames it, applies granular trait operations,
+/// Applies a patch to an identity: applies granular trait operations
 /// and pins the identity to specific variants per feature (overrides).
 #[utoipa::path(
     patch,

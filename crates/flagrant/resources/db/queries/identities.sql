@@ -33,10 +33,6 @@ INSERT INTO identity_traits(identity_id, trait_id, value)
 VALUES($1, $2, $3)
 ON CONFLICT(identity_id, trait_id) DO UPDATE SET value = excluded.value
 
--- :name update_identity :<> :!
--- :doc Updates identity value
-UPDATE identities SET identity = lower($1) WHERE identity_id = $2
-
 -- :name delete_identity_traits :<> :!
 -- :doc Removes all trait entries for given identity
 DELETE FROM identity_traits WHERE identity_id = $1

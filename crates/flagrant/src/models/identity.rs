@@ -180,7 +180,7 @@ pub async fn update_traits(
     get_by_value_with_traits(conn, project, identity.value).await
 }
 
-/// Applies a patch to an identity — optionally renames it, applies granular trait operations,
+/// Applies a patch to an identity — applies granular trait operations
 /// and pins the identity to specific variants (overrides) per feature.
 pub async fn patch(
     conn: &mut SqliteConnection,
@@ -190,12 +190,6 @@ pub async fn patch(
     patch: IdentityPatch,
 ) -> anyhow::Result<IdentityWithTraits> {
     let mut tx = conn.begin().await?;
-
-    if let Some(new_value) = patch.identity {
-        SQLIdentities::update_identity(&mut *tx, params![new_value, identity.id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not update identity value", e))?;
-    }
 
     for op in patch.traits {
         match op {

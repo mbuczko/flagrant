@@ -8,7 +8,6 @@
 //! | `IDENTITY delete`              | [`delete`]      | Delete an identity by its string value.             |
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
 //! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
-//! | `SET identity <value>`         | [`set_identity`]| Stage an identity rename.                           |
 //! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
 //! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
@@ -238,20 +237,6 @@ pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
     bail!("Usage: UNSET trait <name>")
 }
 
-/// Stage an identity rename.
-///
-/// Expected args: `identity <value>`
-pub fn set_identity(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(value) = args.get(1) {
-        let mut ctx = session.context.write().unwrap();
-        if ctx.identity.is_none() {
-            bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
-        }
-        stage::stage_identity(ctx.get_or_init_identity_patch(), value.to_string());
-        return Ok(());
-    }
-    bail!("Usage: SET identity <value>")
-}
 
 /// Overrides the variant assigned to the current identity for the current feature,
 /// bypassing normal distribution.

@@ -114,13 +114,12 @@ pub struct IdentityOverridePatch {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct IdentityPatch {
-    pub identity: Option<String>,
     pub traits: Vec<TraitPatchOp>,
     pub overrides: Vec<IdentityOverridePatch>,
 }
 
 impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
-        self.identity.is_none() && self.traits.is_empty() && self.overrides.is_empty()
+        self.traits.is_empty() && self.overrides.is_empty()
     }
 }
