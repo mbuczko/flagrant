@@ -183,7 +183,6 @@ pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
     println!("Staged: unset {name}");
 }
 
-
 /// Commits all staged changes across active contexts (feature and/or identity).
 pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
@@ -200,7 +199,6 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
         println!("No pending changes to commit.");
         return Ok(());
     }
-
     if has_feature {
         features::commit(args, session)?;
     }

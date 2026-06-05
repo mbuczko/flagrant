@@ -27,7 +27,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::{edit_in_editor, internal::stage},
+    handlers::{open_in_editor, internal::stage},
     printer::tabular::Tabular,
 };
 use flagrant_client::connection::VariantRef;
@@ -64,7 +64,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             let res = ctx.env_resource();
             let val = match args.get(2) {
                 Some(a) => a.to_string(),
-                None => edit_in_editor("")?,
+                None => open_in_editor("")?,
             };
             let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
             ctx.client.post::<_, Feature>(
@@ -189,7 +189,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
                 })
                 .unwrap_or_else(|| feature.get_default_value());
             let (_, bare) = current_fv.decompose();
-            let edited = edit_in_editor(bare)?;
+            let edited = open_in_editor(bare)?;
 
             // Type is inferred from the edited content, not the original.
             let parsed = FeatureValue::build(&edited);

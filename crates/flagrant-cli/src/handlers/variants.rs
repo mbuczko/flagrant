@@ -24,7 +24,7 @@ use flagrant_types::{
 };
 
 use crate::handlers::{
-    edit_in_editor,
+    open_in_editor,
     internal::{index, stage, variants as effective},
 };
 use crate::printer::tabular::{VariantRow, bar, variant_list};
@@ -162,7 +162,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     };
     let value = match args.get(2) {
         Some(v) => v.to_string(),
-        None => edit_in_editor("")?,
+        None => open_in_editor("")?,
     };
 
     if !(0..=100).contains(&weight) {
@@ -223,7 +223,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     };
     let raw = match args.get(2) {
         Some(v) => v.to_string(),
-        None => edit_in_editor(current_variant_value(&variant_ref, &ctx).decompose().1)?,
+        None => open_in_editor(current_variant_value(&variant_ref, &ctx).decompose().1)?,
     };
     let current = current_variant_value(&variant_ref, &ctx);
     let fv = raw

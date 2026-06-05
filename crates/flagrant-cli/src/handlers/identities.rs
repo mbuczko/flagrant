@@ -27,7 +27,7 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
-        edit_in_editor,
+        open_in_editor,
         internal::{stage, variants as effective},
     },
     printer::tabular::{DescribeWithVariant, Tabular},
@@ -275,7 +275,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 ctx.feature_patch.as_ref(),
                 current_variant_id,
             );
-            let edited = edit_in_editor(&content)?;
+            let edited = open_in_editor(&content)?;
             strip_comments(&edited)
         };
 
