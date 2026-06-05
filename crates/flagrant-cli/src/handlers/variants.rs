@@ -422,10 +422,18 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         let feature_name = ctx.feature.as_ref().unwrap().name.clone();
         if let Some(patch) = ctx.identity_patch.as_mut() {
             let before = patch.overrides.len();
-            patch.overrides.retain(|o| !(o.feature_name == feature_name && o.variant_value == val));
+            patch
+                .overrides
+                .retain(|o| !(o.feature_name == feature_name && o.variant_value == val));
             if patch.overrides.len() < before {
-                let identity = ctx.identity.as_ref().map(|i| i.value.as_str()).unwrap_or("<unknown>");
-                println!("Dropped staged override for '{val}' on identity '{identity}' (variant is being deleted).");
+                let identity = ctx
+                    .identity
+                    .as_ref()
+                    .map(|i| i.value.as_str())
+                    .unwrap_or("<unknown>");
+                println!(
+                    "Dropped staged override for '{val}' on identity '{identity}' (variant is being deleted)."
+                );
             }
         }
     }

@@ -19,10 +19,10 @@ use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue, IdentityWithTraits, TraitValue,
+    Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{
         FeaturePatch, IdentityOverridePatch, IdentityPatch, IdentityTraitPayload,
-        NewIdentityPayload, OverridePayload,
+        NewIdentityPayload,
     },
 };
 
@@ -65,7 +65,7 @@ fn describe_identity(
     identity: &IdentityWithTraits,
     patch: Option<&IdentityPatch>,
 ) {
-    let assignments = effective::fetch_all_variant_assignments(ctx, &identity.value);
+    let assignments = fetch_variant_assignments(ctx, identity);
     let display = if assignments.is_empty() {
         None
     } else {
@@ -76,7 +76,11 @@ fn describe_identity(
                     if iv.identity_id.is_some() {
                         format!("{} → {}", iv.feature_name.bright_blue(), iv.feature_value)
                     } else {
-                        format!("{} → {}", iv.feature_name.bright_blue(), "(not yet assigned)".dimmed())
+                        format!(
+                            "{} → {}",
+                            iv.feature_name.bright_blue(),
+                            "(not yet assigned)".dimmed()
+                        )
                     }
                 })
                 .collect::<Vec<_>>()
@@ -276,15 +280,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         let raw = if let Some(val) = args.get(1) {
             val.to_string()
         } else {
-            let variant_path = ctx.env_resource().subpath(format!(
-                "/features/{}/identities/{}/variant",
-                feature.id, identity.value
-            ));
-            let current_variant_id = ctx
-                .client
-                .get::<OverridePayload>(variant_path)
-                .ok()
-                .map(|p| p.variant_id);
+            let current_variant_id = fetch_variant_assignments(&ctx, identity)
+                .into_iter()
+                .find(|iv| iv.feature_id == feature.id && iv.identity_id.is_some())
+                .map(|iv| iv.variant_id);
 
             let content = build_override_editor_content(
                 feature,
@@ -376,6 +375,21 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 //
 // Helpers
 //
+
+/// Fetches all variant assignments for `identity_value` across every feature in the active environment.
+///
+/// Returns an empty vec if the identity has no assignments or the request fails.
+pub(crate) fn fetch_variant_assignments(
+    ctx: &Connection,
+    identity: &IdentityWithTraits,
+) -> Vec<IdentityVariant> {
+    let path = ctx
+        .env_resource()
+        .subpath(format!("/identities/{}/variants", identity.value));
+    ctx.client
+        .get::<Vec<IdentityVariant>>(path)
+        .unwrap_or_default()
+}
 
 fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,

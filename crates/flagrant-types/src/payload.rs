@@ -104,11 +104,6 @@ impl FeaturePatch {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct OverridePayload {
-    pub variant_id: i32,
-}
-
 /// A single staged variant override for one feature, carried inside [`IdentityPatch`].
 /// The server resolves feature name to an existing feature and value to a variant.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

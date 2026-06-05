@@ -1,9 +1,7 @@
-//! Helpers for computing the effective (committed + staged) variant state,
-//! and for fetching all variant assignments for an identity across features.
+//! Helpers for computing the effective (committed + staged) variant state.
 
-use flagrant_client::connection::Connection;
 use flagrant_types::{
-    Feature, FeatureValue, IdentityVariant,
+    Feature, FeatureValue,
     payload::{FeaturePatch, VariantPatchOp},
 };
 
@@ -110,18 +108,3 @@ pub(crate) fn effective_variants(
 }
 
 
-/// Fetches all variant assignments for `identity_value` across every feature in the active environment.
-///
-/// Used when no feature context is active to give a full picture of where the identity is assigned.
-/// Returns an empty vec if the identity has no assignments or the request fails.
-pub(crate) fn fetch_all_variant_assignments(
-    ctx: &Connection,
-    identity_value: &str,
-) -> Vec<IdentityVariant> {
-    let path = ctx
-        .env_resource()
-        .subpath(format!("/identities/{identity_value}/variants"));
-    ctx.client
-        .get::<Vec<IdentityVariant>>(path)
-        .unwrap_or_default()
-}
