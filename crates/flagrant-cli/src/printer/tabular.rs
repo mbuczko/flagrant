@@ -265,24 +265,20 @@ impl Tabular for Feature {
             .map(|feat| {
                 let tags = feat.tags.to_string();
                 let value = feat.get_default_value().to_string();
-                let state = if feat.is_enabled {
+                let state = if feat.is_archived {
+                    format!("{} archived", "●".dimmed())
+                } else if feat.is_enabled {
                     format!("{} ON", "●".green())
                 } else {
                     format!("{} OFF", "●".red())
                 };
-                let status = if feat.is_active {
-                    String::from("active")
-                } else {
-                    format!("{}", "inactive".dimmed())
-                };
-                [feat.name.clone(), status, state, value, tags]
+                [feat.name.clone(), state, value, tags]
             })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
-            .add_column_named_with_align("STATUS".into(), Layout::Fixed(10), Align::Center)
-            .add_column_named_with_align("STATE".into(), Layout::Slim, Align::Center)
+            .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(30), Align::Left)
             .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
             .width(100)
@@ -370,19 +366,25 @@ impl Tabular for Feature {
         };
 
         let pending_enabled = patch.and_then(|p| p.is_enabled);
-        let pending_active = patch.and_then(|p| p.is_active);
-
-        let state = resolve(
-            pending_enabled,
-            self.is_enabled,
-            &format!("{} ON", "●".green()),
-            &format!("{} OFF", "●".red()),
-        );
-        let status = resolve(pending_active, self.is_active, "active", "inactive");
+        let pending_archived = patch.and_then(|p| p.is_archived);
+        let status = if pending_archived.unwrap_or(self.is_archived) {
+            resolve(
+                pending_archived,
+                self.is_archived,
+                &format!("{} archived", "●".dimmed()),
+                &format!("{} active", "●".green()),
+            )
+        } else {
+            resolve(
+                pending_enabled,
+                self.is_enabled,
+                &format!("{} ON", "●".green()),
+                &format!("{} OFF", "●".red()),
+            )
+        };
 
         table.render(vec![
             &["STATUS", &status],
-            &["STATE", &state],
             &["VARIANTS", &variants],
             &["TAGS", &tags],
         ]);
@@ -391,31 +393,31 @@ impl Tabular for Feature {
 
 /// A single row for the variant listing table.
 /// All strings are pre-colored by the caller.
-/// When `state` is `None`, the STATE column is omitted entirely.
+/// When `stage` is `None`, the STATE column is omitted entirely.
 pub struct VariantRow {
     pub index: String,
     pub weight: String,
     pub value: String,
-    pub state: Option<String>,
+    pub stage: Option<String>,
 }
 
 /// Render a variant listing table, consuming the rows.
 ///
-/// If any row carries a `state`, a STATE column is added for all rows.
+/// If any row carries a `stage`, a STAGE column is added for all rows.
 pub fn variant_list(rows: Vec<VariantRow>) {
-    let with_state = rows.iter().any(|r| r.state.is_some());
+    let with_stage = rows.iter().any(|r| r.stage.is_some());
 
-    if with_state {
+    if with_stage {
         let data: Vec<[String; 4]> = rows
             .into_iter()
-            .map(|r| [r.index, r.weight, r.value, r.state.unwrap_or_default()])
+            .map(|r| [r.index, r.weight, r.value, r.stage.unwrap_or_default()])
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
             .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
             .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
-            .add_column_named_with_align("STATE".into(), Layout::Fixed(10), Align::Left)
+            .add_column_named_with_align("STAGE".into(), Layout::Fixed(10), Align::Left)
             .width(100)
             .build()
             .render(data);

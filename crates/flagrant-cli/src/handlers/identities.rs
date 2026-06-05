@@ -68,31 +68,31 @@ fn describe_identity(
     patch: Option<&IdentityPatch>,
 ) {
     if let Some(feature) = ctx.feature.as_ref() {
-        let assignment = fetch_variant_assignment(ctx, &identity.value);
+        let assignment = effective::fetch_variant_assignment(ctx, &identity.value);
         let display = match assignment.as_deref() {
             Some(v) => format!("{} → {}", feature.name.bright_blue(), v),
-            None => format!("{} → {}", feature.name.bright_blue(), "(not yet assigned)".dimmed()),
+            None => format!(
+                "{} → {}",
+                feature.name.bright_blue(),
+                "(not yet assigned)".dimmed()
+            ),
         };
         identity.describe_with_variant(patch, Some(&display));
     } else {
-        identity.describe(patch);
+        let assignments = effective::fetch_all_variant_assignments(ctx, &identity.value);
+        let display = if assignments.is_empty() {
+            None
+        } else {
+            Some(
+                assignments
+                    .iter()
+                    .map(|iv| format!("{} → {}", iv.feature_name.bright_blue(), iv.feature_value))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        };
+        identity.describe_with_variant(patch, display.as_deref());
     }
-}
-
-fn fetch_variant_assignment(ctx: &Connection, identity_value: &str) -> Option<String> {
-    let feature = ctx.feature.as_ref()?;
-    let path = ctx.env_resource().subpath(format!(
-        "/features/{}/identities/{}/variant",
-        feature.id, identity_value
-    ));
-    ctx.client.get::<OverridePayload>(path).ok().map(|payload| {
-        feature
-            .variants
-            .iter()
-            .find(|v| v.id == payload.variant_id)
-            .map(|v| v.value.to_string())
-            .unwrap_or_else(|| format!("(unknown id={})", payload.variant_id))
-    })
 }
 
 /// Create or upsert an identity with optional traits, then switch into its context.
@@ -381,6 +381,11 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     }
     Ok(())
 }
+
+//
+// Helpers
+//
+
 
 fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,

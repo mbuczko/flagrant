@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crate::errors::FlagrantError;
 use std::collections::HashMap;
 
+use chrono::Utc;
 use flagrant_types::{
     Environment, Feature, FeatureValue, Project, TagList, Variant,
     payload::{FeaturePatch, VariantPatchOp},
@@ -93,18 +94,11 @@ pub async fn create(
     description: Option<String>,
     value: FeatureValue,
     is_enabled: bool,
-    is_active: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![
-            environment.project_id,
-            name,
-            description,
-            is_active,
-            is_enabled
-        ],
+        params![environment.project_id, name, description, is_enabled],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -177,7 +171,7 @@ pub async fn get_by_name(
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    is_active: Option<bool>,
+    is_archived: Option<bool>,
     is_enabled: Option<bool>,
     pattern: Option<String>,
     tags_included: Option<SmallVec<[&str; 3]>>,
@@ -192,7 +186,7 @@ pub async fn get_all(
         conn,
         |cond_id| match cond_id {
             FetchFeaturesForEnvironment::Pattern => has_pattern,
-            FetchFeaturesForEnvironment::IsActive => is_active.is_some(),
+            FetchFeaturesForEnvironment::IsArchived => is_archived.is_some(),
             FetchFeaturesForEnvironment::IsEnabled => is_enabled.is_some(),
             FetchFeaturesForEnvironment::TagsIncluded => has_included.unwrap_or(false),
             FetchFeaturesForEnvironment::TagsExcluded => has_excluded.unwrap_or(false),
@@ -200,7 +194,7 @@ pub async fn get_all(
         params![
             environment.project_id,
             environment.id,
-            is_active,
+            is_archived,
             is_enabled,
             pattern,
             into_json_string(tags_included),
@@ -267,7 +261,7 @@ pub async fn bump_up_accumulators(
 ///
 /// Operations are applied in the following order to ensure weight constraints remain
 /// satisfiable throughout the transaction:
-/// 1. Feature-level property changes (is_enabled, is_active)
+/// 1. Feature-level property changes (is_enabled, archived_at)
 /// 2. Variant deletes (free up weight)
 /// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
 /// 4. Variant adds (consume weight)
@@ -285,8 +279,9 @@ pub async fn patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
     }
-    if let Some(active) = patch.is_active {
-        SQLFeatures::update_feature_is_active(&mut *tx, params![feature.id, active])
+    if let Some(archived) = patch.is_archived {
+        let ts = if archived { Some(Utc::now()) } else { None };
+        SQLFeatures::archive_feature(&mut *tx, params![feature.id, ts])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
     }
@@ -412,14 +407,15 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
             variant_value,
         ))
     }
-
     Feature {
         id: row.get("feature_id"),
         project_id: row.get("project_id"),
-        is_enabled: row.get("is_enabled"),
-        is_active: row.get("is_active"),
         name: row.get("name"),
         description: row.get("description"),
+        is_enabled: row.get("is_enabled"),
+        is_archived: row
+            .try_get::<Option<String>, _>("archived_at")
+            .map_or(false, |v| v.is_some()),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }

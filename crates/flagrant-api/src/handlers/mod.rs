@@ -23,13 +23,10 @@ pub fn parse_pattern(pattern: Option<String>, prefix: Option<String>) -> Option<
 }
 
 /// Parses status parameter: converts non-empty string to bool (true if "active").
-pub fn parse_status(status: Option<String>) -> Option<bool> {
-    status.filter(|s| !s.is_empty()).map(|s| s == "active")
-}
-
-/// Parses state parameter: converts non-empty string to bool (true if "on").
-pub fn parse_state(state: Option<String>) -> Option<bool> {
-    state.filter(|s| !s.is_empty()).map(|s| s == "on")
+pub fn parse_bool(status: Option<String>) -> Option<bool> {
+    status
+        .filter(|s| !s.is_empty())
+        .map(|s| s == "true" || s == "on" || s == "yes" || s == "t")
 }
 
 /// Parses tags parameter into included and excluded tag lists.

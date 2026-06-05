@@ -57,7 +57,7 @@ pub struct Feature {
     pub variants: Vec<Variant>,
     pub tags: TagList,
     pub is_enabled: bool,
-    pub is_active: bool,
+    pub is_archived: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -107,7 +107,7 @@ pub struct IdentityWithTraits {
     pub traits: Vec<IdentityTrait>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct IdentityVariant {
     pub variant_id: i32,
     pub feature_id: i32,

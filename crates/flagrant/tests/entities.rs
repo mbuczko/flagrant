@@ -30,7 +30,6 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
         Some("descriptozzo".to_owned()),
         value.clone(),
         true,
-        true,
     )
     .await
     .unwrap();
@@ -58,7 +57,6 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
         "propagation_test".to_owned(),
         Some("samle description".to_owned()),
         value.clone(),
-        true,
         true,
     )
     .await
@@ -184,7 +182,6 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             None,
             FeatureValue::Text("foo".to_owned()),
             false,
-            true,
         )
         .await;
         assert!(feature.is_err())
@@ -198,7 +195,6 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await;
     assert!(feature.is_err())
@@ -217,7 +213,6 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await
     .unwrap();
@@ -229,7 +224,6 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await
     .unwrap();
@@ -362,15 +356,9 @@ async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<
     .unwrap();
 
     // Updating v1's value to "baz" conflicts with the second variant.
-    let err = variant::update_one(
-        &mut conn,
-        &environment,
-        &v1,
-        FeatureValue::build("baz"),
-        10,
-    )
-    .await
-    .unwrap_err();
+    let err = variant::update_one(&mut conn, &environment, &v1, FeatureValue::build("baz"), 10)
+        .await
+        .unwrap_err();
 
     assert!(
         err.downcast_ref::<FlagrantError>()

@@ -83,7 +83,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                     index: idx_str.dimmed().to_string(),
                     weight: bar(e.weight, 10).dimmed().to_string(),
                     value: e.value.to_string().dimmed().to_string(),
-                    state: Some("deleted".red().to_string()),
+                    stage: Some("deleted".red().to_string()),
                 }
             } else {
                 let weight = if e.is_control {
@@ -104,14 +104,14 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                         index: idx_str.yellow().to_string(),
                         weight: bar(weight, 10).yellow().to_string(),
                         value: e.value.to_string().yellow().to_string(),
-                        state: Some(label.yellow().to_string()),
+                        stage: Some(label.yellow().to_string()),
                     }
                 } else {
                     VariantRow {
                         index: idx_str,
                         weight: bar(weight, 10),
                         value: e.value.to_string(),
-                        state: Some(String::new()),
+                        stage: None,
                     }
                 }
             }
@@ -127,7 +127,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                 .to_string(),
             weight: bar(e.weight, 10).green().to_string(),
             value: e.value.to_string().green().to_string(),
-            state: Some("added".green().to_string()),
+            stage: Some("added".green().to_string()),
         });
     }
 

@@ -72,6 +72,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             "/envs/:environment/identities/:identity",
             patch(identities::update),
         )
+        .route(
+            "/envs/:environment/identities/:identity/variants",
+            get(identities::get_variants),
+        )
         // Traits
         .route("/traits", get(traits::list))
         .route("/traits", post(traits::create))

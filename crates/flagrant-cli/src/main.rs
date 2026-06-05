@@ -131,7 +131,11 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.args("add · list · use"),
         // Features
-        Command::Feature.op("list", "filter", handlers::features::list),
+        Command::Feature.op(
+            "list",
+            "archived|enabled|tag|[pattern]",
+            handlers::features::list,
+        ),
         Command::Feature.op("add", "feature value", handlers::features::add),
         Command::Feature.op("describe", "feature", handlers::features::describe),
         Command::Feature.op("delete", "feature", handlers::features::delete),
@@ -186,15 +190,9 @@ fn main() -> anyhow::Result<()> {
         ),
         // Feature setters (only in feature context)
         Command::Set.op_in_context(
-            "state",
-            "on|off",
-            handlers::features::state,
-            has_feature_ctx,
-        ),
-        Command::Set.op_in_context(
             "status",
-            "active|inactive",
-            handlers::features::status,
+            "on|off|archived",
+            handlers::features::set_status,
             has_feature_ctx,
         ),
         Command::Set.op_in_context(
@@ -222,7 +220,7 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_override,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args("state · status · value · override · trait · identity"),
+        Command::Set.args("status · value · override · trait · identity"),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",

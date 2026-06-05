@@ -78,7 +78,7 @@ pub struct IdentityTraitPayload {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
-    pub is_active: Option<bool>,
+    pub is_archived: Option<bool>,
     pub variants: Vec<VariantPatchOp>,
 }
 
@@ -100,7 +100,7 @@ impl From<Feature> for NewFeaturePayload {
 
 impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none() && self.is_active.is_none() && self.variants.is_empty()
+        self.is_enabled.is_none() && self.is_archived.is_none() && self.variants.is_empty()
     }
 }
 

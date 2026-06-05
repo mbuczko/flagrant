@@ -61,7 +61,6 @@ pub async fn create_feature(
         Some("sample feature".to_owned()),
         FeatureValue::Text(value.to_owned()),
         true,
-        true,
     )
     .await
     .unwrap()

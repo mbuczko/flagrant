@@ -12,14 +12,18 @@ use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
+/// Query parameters for feature listing.
+///
+/// Boolean fields (`archived`, `enabled`) are parsed case-insensitively:
+/// truthy values are `"true"`, `"yes"`, `"on"`, `"t"`; anything else is falsey.
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeatureQueryParams {
     /// Filter by name prefix
     prefix: Option<String>,
-    /// Filter by active status: "active" or "inactive"
-    status: Option<String>,
-    /// Filter by enabled state: "on" or "off"
-    state: Option<String>,
+    /// Filter archived: "true" or "false"
+    archived: Option<String>,
+    /// Filter enabled: "true" or "false"
+    enabled: Option<String>,
     /// Comma-separated tags; prefix with `-` to exclude (e.g. "prod,-beta")
     tags: Option<String>,
     /// SQL LIKE pattern applied to feature names
@@ -77,7 +81,6 @@ pub async fn create(
         payload.description,
         payload.value,
         payload.is_enabled,
-        false,
     )
     .await?;
 
@@ -183,8 +186,8 @@ pub async fn list(
     let features = feature::get_all(
         &mut conn,
         &env,
-        super::parse_status(params.status),
-        super::parse_state(params.state),
+        super::parse_bool(params.archived),
+        super::parse_bool(params.enabled),
         super::parse_pattern(params.pattern, params.prefix),
         tags_included,
         tags_excluded,

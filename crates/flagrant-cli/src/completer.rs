@@ -54,8 +54,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    "state" => filter_by_prefix(&["on", "off"], prefix),
-                    "status" => filter_by_prefix(&["active", "inactive"], prefix),
+                    "status" => filter_by_prefix(&["on", "off", "archived"], prefix),
                     "trait" if arg_n == 2 && !prefix.contains(':') => {
                         let ctx = self.session.context.read().unwrap();
                         let res = ctx.project.as_base_resource();
@@ -124,7 +123,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 })
                                 .collect::<Vec<_>>()
                         }
-                        None => filter_by_prefix(&["tag", "state", "status"], prefix),
+                        None => filter_by_prefix(&["tag", "enabled", "archived"], prefix),
                         _ => vec![],
                     },
                     _ => vec![],

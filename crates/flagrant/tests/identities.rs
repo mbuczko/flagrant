@@ -92,7 +92,6 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         Some("descriptozzo".to_owned()),
         FeatureValue::build("foo"),
         true,
-        true,
     )
     .await
     .unwrap();
@@ -193,7 +192,6 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         "featuriozzo".to_owned(),
         None,
         FeatureValue::build("foo"),
-        true,
         true,
     )
     .await
@@ -351,7 +349,6 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
         None,
         FeatureValue::build("control_value"),
         true,
-        true,
     )
     .await
     .unwrap();
@@ -413,7 +410,6 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
         "override_feature2".to_owned(),
         None,
         FeatureValue::build("default"),
-        true,
         true,
     )
     .await

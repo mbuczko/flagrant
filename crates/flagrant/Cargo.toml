@@ -22,10 +22,7 @@ serde_valid = {workspace = true}
 anyhow = {workspace = true}
 thiserror = {workspace = true}
 smallvec = {workspace = true}
-
-# semver = "1.0.14"
-# rust-embed = "6.4.1"
-# lazy_static = "1.4.0"
+chrono = {workspace = true}
 
 [dev-dependencies]
 rand = "0.8.5"

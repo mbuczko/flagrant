@@ -8,7 +8,7 @@ use flagrant::{
     models::{environment, identity, project},
 };
 use flagrant_types::{
-    IdentityWithTraits,
+    IdentityVariant, IdentityWithTraits,
     payload::{IdentityPatch, NewIdentityPayload, OverridePayload},
 };
 use serde::Deserialize;
@@ -195,6 +195,31 @@ pub async fn set_override(
     let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
     identity::override_variant(&mut conn, &env, &identity, feature_id, payload.variant_id).await?;
     Ok(Json(()))
+}
+
+/// Returns all variant assignments for an identity within a given environment.
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/envs/{environment}/identities/{identity}/variants",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("identity" = String, Path, description = "Identity value")
+    ),
+    responses(
+        (status = 200, description = "Variant assignments for this identity", body = Vec<IdentityVariant>)
+    ),
+    tag = "identities"
+)]
+pub async fn get_variants(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
+) -> Result<Json<Vec<IdentityVariant>>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
+    let variants = identity::get_identity_variants(&mut conn, &env, &identity).await?;
+    Ok(Json(variants))
 }
 
 /// Deletes an identity and all its trait associations and variant assignments.

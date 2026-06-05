@@ -3,18 +3,18 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler       | Description                                          |
-//! |----------------------|---------------|------------------------------------------------------|
-//! | `FEATURE list`       | [`list`]      | List features in the current environment.            |
-//! | `FEATURE add`        | [`add`]       | Create a new feature with a default value.           |
-//! | `FEATURE use`        | [`r#use`]     | Switch into a feature context.                       |
-//! | `FEATURE describe`   | [`describe`]  | Print details of a feature.                          |
-//! | `FEATURE delete`     | [`delete`]    | Delete a feature.                                    |
-//! | `SET state`          | [`state`]     | Stage a feature state change (`on` / `off`).         |
-//! | `SET status`         | [`status`]    | Stage a feature status change (`active`/`inactive`). |
-//! | `SET value`          | [`set_value`] | Stage a default value change.                        |
-//! | `COMMIT`             | [`commit`]    | Send all staged changes to the API.                  |
-//! | `DISCARD`            | [`discard`]   | Drop all staged changes for the current feature.     |
+//! | Command              | Handler          | Description                                      |
+//! |----------------------|------------------|--------------------------------------------------|
+//! | `FEATURE list`       | [`list`]         | List features in the current environment.        |
+//! | `FEATURE add`        | [`add`]          | Create a new feature with a default value.       |
+//! | `FEATURE use`        | [`r#use`]        | Switch into a feature context.                   |
+//! | `FEATURE describe`   | [`describe`]     | Print details of a feature.                      |
+//! | `FEATURE delete`     | [`delete`]       | Delete a feature.                                |
+//! | `SET state`          | [`state`]        | Stage a feature state change (`on` / `off`).     |
+//! | `SET archived`       | [`set_archived`] | Stage a feature archivisation (`yes` / `no`).    |
+//! | `SET value`          | [`set_value`]    | Stage a default value change.                    |
+//! | `COMMIT`             | [`commit`]       | Send all staged changes to the API.              |
+//! | `DISCARD`            | [`discard`]      | Drop all staged changes for the current feature. |
 
 use std::{collections::BTreeSet, ops::Deref};
 
@@ -136,40 +136,26 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 
 /// Stage a feature state change.
 ///
-/// Expected args: `on` or `off`
-pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// Expected args: `on`, `off` and `archived`
+pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let enabled = args
         .get(1)
         .map(|arg| matches!(arg.to_lowercase().as_str(), "on"));
-
-    if ctx.feature.is_some()
-        && let Some(enabled) = enabled
-    {
-        ctx.get_or_init_pending().is_enabled = Some(enabled);
-        println!("Staged: state = {}", if enabled { "on" } else { "off" });
-        return Ok(());
-    }
-    bail!("Not enough arguments provided")
-}
-
-/// Stage a feature status change.
-///
-/// Expected args: `active` or `inactive`
-pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-    let active = args
+    let archived = args
         .get(1)
-        .map(|arg| matches!(arg.to_lowercase().as_str(), "active"));
+        .map(|arg| matches!(arg.to_lowercase().as_str(), "archived"));
 
-    if ctx.feature.is_some()
-        && let Some(active) = active
-    {
-        ctx.get_or_init_pending().is_active = Some(active);
-        println!(
-            "Staged: status = {}",
-            if active { "active" } else { "inactive" }
-        );
+    if ctx.feature.is_some() {
+        if archived.unwrap_or_default() {
+            ctx.get_or_init_pending().is_archived = Some(true);
+            ctx.get_or_init_pending().is_enabled = Some(false);
+            println!("Staged: status = ARCHIVED");
+        } else if let Some(enabled) = enabled {
+            ctx.get_or_init_pending().is_enabled = Some(enabled);
+            ctx.get_or_init_pending().is_archived = Some(false);
+            println!("Staged: status = {}", if enabled { "ON" } else { "OFF" });
+        }
         return Ok(());
     }
     bail!("Not enough arguments provided")
@@ -261,7 +247,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if !args.is_empty() {
         bail!(
-            "To discard a single change use `FEATURE discard <name | state | status | tags>` or `VARIANT discard <index>`."
+            "No arguments expected. To discard a single change on variant use `VARIANT discard <index>`."
         );
     }
     let mut ctx = session.context.write().unwrap();
@@ -280,8 +266,8 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);
-    let status = concat_values_for_arg("status", args);
-    let state = concat_values_for_arg("state", args);
+    let archived: String = concat_values_for_arg("archived", args);
+    let enabled = concat_values_for_arg("enabled", args);
     let pat = args[1..]
         .iter()
         .find(|a| !a.contains(":"))
@@ -291,7 +277,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Feature::list(
         ctx.client
             .get::<Vec<Feature>>(res.subpath(format!(
-                "/features?tags={tags}&status={status}&state={state}&pattern={pat}"
+                "/features?tags={tags}&archived={archived}&enabled={enabled}&pattern={pat}"
             )))?
             .as_ref(),
     );
