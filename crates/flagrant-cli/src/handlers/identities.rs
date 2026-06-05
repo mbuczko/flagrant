@@ -41,13 +41,11 @@ use crate::{
 /// If an identity argument is provided, fetches and describes that identity.
 /// Otherwise describes the identity in the current context.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
     if let Some(identity_str) = args.get(1) {
-        let ctx = session.context.read().unwrap();
         let identity = resolve_identity(&ctx, identity_str)?;
-
         describe_identity(&ctx, &identity, None);
     } else {
-        let ctx = session.context.read().unwrap();
         if let Some(identity) = &ctx.identity {
             let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
             describe_identity(&ctx, identity, patch);
@@ -67,32 +65,25 @@ fn describe_identity(
     identity: &IdentityWithTraits,
     patch: Option<&IdentityPatch>,
 ) {
-    if let Some(feature) = ctx.feature.as_ref() {
-        let assignment = effective::fetch_variant_assignment(ctx, &identity.value);
-        let display = match assignment.as_deref() {
-            Some(v) => format!("{} → {}", feature.name.bright_blue(), v),
-            None => format!(
-                "{} → {}",
-                feature.name.bright_blue(),
-                "(not yet assigned)".dimmed()
-            ),
-        };
-        identity.describe_with_variant(patch, Some(&display));
+    let assignments = effective::fetch_all_variant_assignments(ctx, &identity.value);
+    let display = if assignments.is_empty() {
+        None
     } else {
-        let assignments = effective::fetch_all_variant_assignments(ctx, &identity.value);
-        let display = if assignments.is_empty() {
-            None
-        } else {
-            Some(
-                assignments
-                    .iter()
-                    .map(|iv| format!("{} → {}", iv.feature_name.bright_blue(), iv.feature_value))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-        };
-        identity.describe_with_variant(patch, display.as_deref());
-    }
+        Some(
+            assignments
+                .iter()
+                .map(|iv| {
+                    if iv.identity_id.is_some() {
+                        format!("{} → {}", iv.feature_name.bright_blue(), iv.feature_value)
+                    } else {
+                        format!("{} → {}", iv.feature_name.bright_blue(), "(not yet assigned)".dimmed())
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    };
+    identity.describe_with_variant(patch, display.as_deref());
 }
 
 /// Create or upsert an identity with optional traits, then switch into its context.
@@ -385,7 +376,6 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 //
 // Helpers
 //
-
 
 fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,

@@ -1,10 +1,10 @@
 //! Helpers for computing the effective (committed + staged) variant state,
-//! and for fetching variant assignments for identities.
+//! and for fetching all variant assignments for an identity across features.
 
 use flagrant_client::connection::Connection;
 use flagrant_types::{
     Feature, FeatureValue, IdentityVariant,
-    payload::{FeaturePatch, OverridePayload, VariantPatchOp},
+    payload::{FeaturePatch, VariantPatchOp},
 };
 
 /// A variant as it appears after applying any staged patch ops.
@@ -109,25 +109,6 @@ pub(crate) fn effective_variants(
     result
 }
 
-/// Fetches the variant currently assigned to `identity_value` for the active feature context.
-///
-/// Returns `None` if the identity has no assignment yet, `Some(value)` if assigned.
-/// Only meaningful when a feature context is active; returns `None` early otherwise.
-pub(crate) fn fetch_variant_assignment(ctx: &Connection, identity_value: &str) -> Option<String> {
-    let feature = ctx.feature.as_ref()?;
-    let path = ctx.env_resource().subpath(format!(
-        "/features/{}/identities/{}/variant",
-        feature.id, identity_value
-    ));
-    ctx.client.get::<OverridePayload>(path).ok().map(|payload| {
-        feature
-            .variants
-            .iter()
-            .find(|v| v.id == payload.variant_id)
-            .map(|v| v.value.to_string())
-            .unwrap_or_else(|| format!("(unknown id={})", payload.variant_id))
-    })
-}
 
 /// Fetches all variant assignments for `identity_value` across every feature in the active environment.
 ///

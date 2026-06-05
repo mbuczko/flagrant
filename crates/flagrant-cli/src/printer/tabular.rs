@@ -99,7 +99,7 @@ pub trait DescribeWithVariant {
 
 impl DescribeWithVariant for IdentityWithTraits {
     fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>) {
-        let title = format!("{} (ID={})", self.value, self.id);
+        let title = format!("Identity: {} (ID={})", self.value, self.id);
 
         let ops = patch.map(|p| p.traits.as_slice()).unwrap_or_default();
 
@@ -287,7 +287,7 @@ impl Tabular for Feature {
     }
 
     fn describe(&self, patch: Option<&FeaturePatch>) {
-        let title = format!("{} (ID={})", &self.name, self.id);
+        let title = format!("Feature: {} (ID={})", &self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
