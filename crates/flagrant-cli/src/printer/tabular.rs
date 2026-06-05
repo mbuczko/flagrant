@@ -2,7 +2,7 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
     Environment, Feature, IdentityWithTraits, TraitValue,
-    payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch, TraitPatchOp},
+    payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch},
 };
 
 use crate::handlers::internal::effectives as effective;
@@ -101,64 +101,38 @@ impl DescribeWithVariant for IdentityWithTraits {
     fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>) {
         let title = format!("Identity: {} (ID={})", self.value, self.id);
 
-        let ops = patch.map(|p| p.traits.as_slice()).unwrap_or_default();
-
-        let deleted: std::collections::HashSet<&str> = ops
-            .iter()
-            .filter_map(|op| match op {
-                TraitPatchOp::Delete { name } => Some(name.as_str()),
-                _ => None,
-            })
-            .collect();
-
-        let modified: std::collections::HashMap<&str, &Option<TraitValue>> = ops
-            .iter()
-            .filter_map(|op| match op {
-                TraitPatchOp::SetValue { name, value } => Some((name.as_str(), value)),
-                _ => None,
-            })
-            .collect();
-
-        let added: Vec<(&str, &Option<TraitValue>)> = ops
-            .iter()
-            .filter_map(|op| match op {
-                TraitPatchOp::Add { name, value } => Some((name.as_str(), value)),
-                _ => None,
-            })
-            .collect();
+        let eff_traits = effective::effective_identity_traits(self, patch);
 
         let mut trait_lines: Vec<String> = Vec::new();
         let mut trait_stage: Vec<String> = Vec::new();
 
-        for t in &self.traits {
+        for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
-            if deleted.contains(t.name.as_str()) {
+            if t.is_deleted {
                 trait_lines.push(
                     format!("{}:{}", name, format_trait_value(&t.value))
                         .dimmed()
                         .to_string(),
                 );
                 trait_stage.push("deleted".red().to_string());
-            } else if let Some(new_val) = modified.get(t.name.as_str()) {
+            } else if t.value_modified {
                 trait_lines.push(
-                    format!("{}:{}", name, format_trait_value(new_val))
+                    format!("{}:{}", name, format_trait_value(&t.value))
                         .yellow()
                         .to_string(),
                 );
                 trait_stage.push("updated".yellow().to_string());
+            } else if t.is_staged_add {
+                trait_lines.push(
+                    format!("{}:{}", name, format_trait_value(&t.value))
+                        .green()
+                        .to_string(),
+                );
+                trait_stage.push("added".green().to_string());
             } else {
                 trait_lines.push(format!("{}:{}", name, format_trait_value(&t.value)));
                 trait_stage.push(String::new());
             }
-        }
-
-        for (name, value) in &added {
-            trait_lines.push(
-                format!("{}:{}", name.bright_blue(), format_trait_value(value))
-                    .green()
-                    .to_string(),
-            );
-            trait_stage.push("added".green().to_string());
         }
 
         let traits_str = if trait_lines.is_empty() {
