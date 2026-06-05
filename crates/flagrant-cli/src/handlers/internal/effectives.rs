@@ -106,5 +106,3 @@ pub(crate) fn effective_variants(
 
     result
 }
-
-

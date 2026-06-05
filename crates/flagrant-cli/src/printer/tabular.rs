@@ -5,7 +5,7 @@ use flagrant_types::{
     payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch, TraitPatchOp},
 };
 
-use crate::handlers::internal::variants as effective;
+use crate::handlers::internal::effectives as effective;
 
 pub trait Tabular {
     type Patch;

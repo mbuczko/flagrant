@@ -28,7 +28,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         open_in_editor,
-        internal::{stage, variants as effective},
+        internal::{stage, effectives as effective},
     },
     printer::tabular::{DescribeWithVariant, Tabular},
 };
