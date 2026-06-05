@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::{Decode, Encode, Sqlite, Type, encode::IsNull, sqlite::SqliteValueRef};
@@ -115,6 +116,7 @@ pub struct IdentityVariant {
     pub migrated_id: Option<i32>,
     pub feature_name: String,
     pub feature_value: FeatureValue,
+    pub pinned_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]

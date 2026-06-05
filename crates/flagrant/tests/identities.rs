@@ -439,6 +439,78 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
 }
 
 #[sqlx::test]
+async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = feature::create(
+        &mut conn,
+        &environment,
+        "pinned_feature".to_owned(),
+        None,
+        FeatureValue::build("control"),
+        true,
+    )
+    .await
+    .unwrap();
+
+    let alt_variant = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        50,
+    )
+    .await
+    .unwrap();
+
+    // Distribute 10 identities — roughly half will land on each variant
+    for n in 1..=10 {
+        let ident = identity::get_or_create_by_value(&mut conn, &project, format!("ident_{n}"))
+            .await
+            .unwrap();
+        identity::get_identity_variants(&mut conn, &environment, &ident)
+            .await
+            .unwrap();
+    }
+
+    // Distribute alice and then pin her explicitly to the alt variant
+    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+        .await
+        .unwrap();
+    identity::get_identity_variants(&mut conn, &environment, &alice)
+        .await
+        .unwrap();
+    identity::override_variant(&mut conn, &environment, &alice, feature.id, alt_variant.id)
+        .await
+        .unwrap();
+
+    // Drop alt variant weight to 0 — this migrates all non-pinned identities away from it
+    let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id)
+        .await
+        .unwrap();
+    variant::update_one(
+        &mut conn,
+        &environment,
+        &alt_variant,
+        FeatureValue::build("alt"),
+        0,
+    )
+    .await
+    .unwrap();
+
+    // alice is pinned — get_identity_variants must NOT redistribute her
+    let iv = identity::get_identity_variants(&mut conn, &environment, &alice)
+        .await
+        .unwrap();
+    let alice_iv = iv.iter().find(|iv| iv.feature_id == feature.id).unwrap();
+
+    assert_eq!(
+        alice_iv.variant_id,
+        alt_variant.id,
+        "pinned identity should remain on the pinned variant despite weight dropping to 0"
+    );
+}
+
+#[sqlx::test]
 async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
     let (project, _) = create_context(&mut conn).await;
 

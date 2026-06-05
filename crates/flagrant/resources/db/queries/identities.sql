@@ -68,10 +68,10 @@ SELECT iv.variant_id FROM identity_variants iv
 WHERE iv.identity_id = $1 AND iv.feature_id = $2 AND iv.environment_id = $3
 
 -- :name upsert_identity_variant :<> :!
--- :doc Connects identity with variant of given id
-INSERT INTO identity_variants(identity_id, environment_id, feature_id, variant_id)
-VALUES($1, $2, $3, $4)
-ON CONFLICT(identity_id, feature_id, environment_id) DO UPDATE SET variant_id = excluded.variant_id, migrated_id = NULL
+-- :doc Connects identity with variant of given id. Pass a non-NULL pinned_at to mark as an explicit override.
+INSERT INTO identity_variants(identity_id, environment_id, feature_id, variant_id, pinned_at)
+VALUES($1, $2, $3, $4, $5)
+ON CONFLICT(identity_id, feature_id, environment_id) DO UPDATE SET variant_id = excluded.variant_id, migrated_id = NULL, pinned_at = excluded.pinned_at
 
 -- :name fetch_identities :<> :*
 -- :doc Returns all identities attached to given feature
@@ -84,7 +84,7 @@ WHERE environment_id = $1 AND feature_id = $2
 WITH attached AS (
   SELECT identity_id, migrated_id, attached_at
   FROM identity_variants
-  WHERE environment_id = $1 AND ((variant_id = $2 AND migrated_id IS NULL) OR migrated_id = $2)
+  WHERE environment_id = $1 AND ((variant_id = $2 AND migrated_id IS NULL) OR migrated_id = $2) AND pinned_at IS NULL
 )
 UPDATE identity_variants SET migrated_id = $3
 WHERE environment_id = $1 AND identity_id IN (

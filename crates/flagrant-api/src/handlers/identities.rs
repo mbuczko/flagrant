@@ -154,7 +154,7 @@ pub async fn get_variants(
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
-    let variants = identity::get_identity_variants(&mut conn, &env, &identity).await?;
+    let variants = identity::list_variant_assignments(&mut conn, &env, &identity).await?;
     Ok(Json(variants))
 }
 

@@ -379,7 +379,7 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Fetches all variant assignments for `identity_value` across every feature in the active environment.
 ///
 /// Returns an empty vec if the identity has no assignments or the request fails.
-pub(crate) fn fetch_variant_assignments(
+fn fetch_variant_assignments(
     ctx: &Connection,
     identity: &IdentityWithTraits,
 ) -> Vec<IdentityVariant> {

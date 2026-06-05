@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS identity_variants (
   environment_id INTEGER NOT NULL REFERENCES environments,
   migrated_id INTEGER REFERENCES variants,
   attached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  pinned_at DATETIME,
 
   UNIQUE(identity_id, feature_id, environment_id),
 

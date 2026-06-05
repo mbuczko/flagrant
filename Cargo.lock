@@ -350,6 +350,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -756,6 +757,7 @@ dependencies = [
 name = "flagrant-types"
 version = "0.0.3"
 dependencies = [
+ "chrono",
  "regex",
  "serde",
  "serde_valid",

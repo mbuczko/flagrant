@@ -1,3 +1,4 @@
+use chrono::{NaiveDateTime, Utc};
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
     Environment, FeatureValue, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits,
@@ -235,7 +236,13 @@ pub async fn patch(
 
         SQLIdentities::upsert_identity_variant(
             &mut *tx,
-            params![identity.id, environment.id, feat.id, variant.id],
+            params![
+                identity.id,
+                environment.id,
+                feat.id,
+                variant.id,
+                Some(Utc::now())
+            ],
         )
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set variant override", e))?;
@@ -274,6 +281,16 @@ pub async fn get_variant_for_identity(
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity variant", e).into())
 }
 
+/// Returns the current variant assignments for an identity without triggering distribution.
+/// Unassigned features are included with identity_id = None.
+pub async fn list_variant_assignments(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    identity: &Identity,
+) -> anyhow::Result<Vec<IdentityVariant>> {
+    variant::get_by_identity(conn, environment, &identity.value).await
+}
+
 /// Returns enabled features variants assigned to given identity, distributing the
 /// identity across variants as needed.
 ///
@@ -288,7 +305,11 @@ pub async fn get_identity_variants(
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
     for var in variants.iter_mut() {
-        let attach_to_variant = if let Some(id) = var.migrated_id {
+        // Resolve the variant to attach to: skip pinned identities, follow a pending
+        // migration if one exists, or distribute a fresh identity for the first time.
+        let attach_to_variant = if var.pinned_at.is_some() {
+            None
+        } else if let Some(id) = var.migrated_id {
             variant::get_by_id(&mut tx, environment, id).await.ok()
         } else if var.identity_id.is_none() {
             Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
@@ -299,7 +320,13 @@ pub async fn get_identity_variants(
         if let Some(variant) = attach_to_variant {
             SQLIdentities::upsert_identity_variant(
                 &mut *tx,
-                params![identity.id, environment.id, var.feature_id, variant.id],
+                params![
+                    identity.id,
+                    environment.id,
+                    var.feature_id,
+                    variant.id,
+                    Option::<NaiveDateTime>::None
+                ],
             )
             .await
             .map_err(|e| {
@@ -344,7 +371,13 @@ pub async fn override_variant(
 ) -> anyhow::Result<()> {
     SQLIdentities::upsert_identity_variant(
         conn,
-        params![identity.id, environment.id, feature_id, variant_id],
+        params![
+            identity.id,
+            environment.id,
+            feature_id,
+            variant_id,
+            Some(Utc::now())
+        ],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
