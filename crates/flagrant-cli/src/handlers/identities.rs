@@ -27,8 +27,8 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
+        internal::{effectives as effective, stage},
         open_in_editor,
-        internal::{stage, effectives as effective},
     },
     printer::tabular::{DescribeWithVariant, Tabular},
 };
@@ -73,7 +73,17 @@ fn describe_identity(
                 .iter()
                 .map(|iv| {
                     if iv.identity_id.is_some() {
-                        format!("{} → {}", iv.feature_name.bright_blue(), iv.feature_value)
+                        let pin = if iv.pinned_at.is_some() {
+                            "(pinned)".red().to_string()
+                        } else {
+                            String::default()
+                        };
+                        format!(
+                            "{} → {} {}",
+                            iv.feature_name.bright_blue(),
+                            iv.feature_value,
+                            pin
+                        )
                     } else {
                         format!(
                             "{} → {}",
@@ -244,11 +254,10 @@ pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
     bail!("Usage: UNSET trait <name>")
 }
 
-
-/// Overrides the variant assigned to the current identity for the current feature,
-/// bypassing normal distribution.
+/// Pins the variant to current identity for the current feature, which results in
+/// bypassing normal distribution and returning always chosen feature variant.
 ///
-/// Expected args: `[value]`
+/// Expected args: `[variant-value]`
 ///
 /// When called without a value argument, opens `$EDITOR` pre-filled with all existing
 /// variants (shown as comments with weights) so the user can choose one. All comment
@@ -256,7 +265,7 @@ pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
 ///
 /// The entered value must match an existing variant exactly. To use an arbitrary value,
 /// first create a variant with `VARIANT add`.
-pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn set_pin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Gather everything under a read lock, including opening the editor if needed.
     let (feature_name, identity_value, raw) = {
         let ctx = session.context.read().unwrap();
@@ -321,6 +330,38 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     println!(
         "Staged: override '{}' → {} for feature '{}'",
         identity_value, variant_value, feature_name
+    );
+    Ok(())
+}
+
+/// Stages removal of the current identity's variant assignment for the current feature.
+///
+/// On `COMMIT` the identity is freed from its pinned (or any explicit) variant assignment
+/// and will be re-distributed on the next feature evaluation.
+pub fn unset_pin(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let feature = ctx
+        .feature
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a feature context."))?;
+    let identity = ctx
+        .identity
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in an identity context."))?;
+
+    let feature_name = feature.name.clone();
+    let identity_value = identity.value.clone();
+
+    let pending = ctx.get_or_init_identity_patch();
+    // Remove any staged pin for the same feature (unpin supersedes it).
+    pending.overrides.retain(|o| o.feature_name != feature_name);
+    // Avoid duplicate unpin entries.
+    if !pending.unpins.contains(&feature_name) {
+        pending.unpins.push(feature_name.clone());
+    }
+    println!(
+        "Staged: unpin '{}' identity from feature '{}' variant",
+        identity_value, feature_name
     );
     Ok(())
 }

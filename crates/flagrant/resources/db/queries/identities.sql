@@ -91,6 +91,10 @@ WHERE environment_id = $1 AND identity_id IN (
     SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities))
   )
 )
+-- :name delete_identity_variant_for_feature :<> :!
+-- :doc Removes a single variant assignment for given identity+feature+environment (unpin)
+DELETE FROM identity_variants WHERE identity_id = $1 AND feature_id = $2 AND environment_id = $3
+
 -- :name delete_attachments :<> :!
 -- :doc Removes attachments of all identitites to given variant. This is executed only on variant deletion.
 DELETE FROM identity_variants WHERE variant_id = $1 OR migrated_id = $1

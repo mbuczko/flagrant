@@ -98,6 +98,9 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             Some((f, i)) => (f, Some(i)),
             None => (name.deref(), None),
         };
+        if feature_name.is_empty() {
+            bail!("No feature name provided.");
+        }
         {
             let ctx = session.context.read().unwrap();
             if ctx
@@ -109,7 +112,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
                 bail!("You have uncommitted changes. Run `commit` or `discard` first.");
             }
         }
-        let feature = fetch_feature(feature_name, session)?;
+        let feature = fetch_feature(feature_name, session)
+            .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
         feature.describe(None);
         session.context.write().unwrap().feature = Some(feature);
 

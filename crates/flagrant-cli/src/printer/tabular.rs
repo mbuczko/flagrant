@@ -143,9 +143,10 @@ impl DescribeWithVariant for IdentityWithTraits {
 
         let staged_overrides: &[IdentityOverridePatch] =
             patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
+        let staged_unpins: &[String] = patch.map(|p| p.unpins.as_slice()).unwrap_or_default();
 
         let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
-        let has_staged_overrides = !staged_overrides.is_empty();
+        let has_staged_overrides = !staged_overrides.is_empty() || !staged_unpins.is_empty();
 
         if has_staged_traits || has_staged_overrides {
             let table = FancyTable::create(FancyTableOpts::default())
@@ -177,24 +178,33 @@ impl DescribeWithVariant for IdentityWithTraits {
             }
 
             if has_staged_overrides {
-                let override_lines = staged_overrides
+                let mut override_lines: Vec<String> = staged_overrides
                     .iter()
                     .map(|o| {
                         format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
                             .green()
                             .to_string()
                     })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let override_stage = staged_overrides
+                    .collect();
+                let mut override_stage: Vec<String> = staged_overrides
                     .iter()
-                    .map(|_| "staged".green().to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    .map(|_| "pinned".green().to_string())
+                    .collect();
+                for feature_name in staged_unpins {
+                    override_lines.push(
+                        format!(
+                            "{} → {}",
+                            feature_name.bright_blue(),
+                            "(not assigned)".red()
+                        )
+                        .to_string(),
+                    );
+                    override_stage.push("unpinned".red().to_string());
+                }
                 rows.push(vec![
                     "OVERRIDES".to_string(),
-                    override_lines,
-                    override_stage,
+                    override_lines.join("\n"),
+                    override_stage.join("\n"),
                 ]);
             }
 
@@ -255,7 +265,11 @@ impl Tabular for Feature {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
-            .add_column_named_with_align("VALUE".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align(
+                "DEFAULT VALUE".into(),
+                Layout::Expandable(30),
+                Align::Left,
+            )
             .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
             .width(100)
             .build()

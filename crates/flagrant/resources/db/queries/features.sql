@@ -17,6 +17,7 @@ SELECT f.feature_id, project_id, name, description, is_enabled, archived_at, GRO
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE project_id = $1 AND name = $2
+GROUP BY f.feature_id
 
 -- :name fetch_features_for_environment :|| :*
 -- :doc Returns all features for given environment, each with all its variants.

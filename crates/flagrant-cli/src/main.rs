@@ -213,12 +213,12 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Set.op_in_context(
-            "override",
+            "pin",
             "[value]",
-            handlers::identities::set_override,
+            handlers::identities::set_pin,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args("status · value · override · trait · identity"),
+        Command::Set.args("status · value · pin · trait · identity"),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",
@@ -226,7 +226,13 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::unset_trait,
             has_identity_ctx,
         ),
-        Command::Unset.args_in_context("trait", has_identity_ctx),
+        Command::Unset.op_in_context(
+            "pin",
+            "",
+            handlers::identities::unset_pin,
+            has_feature_and_identity_ctx,
+        ),
+        Command::Unset.args_in_context("trait · pin", has_identity_ctx),
         // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",

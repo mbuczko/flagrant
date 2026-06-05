@@ -116,10 +116,12 @@ pub struct IdentityOverridePatch {
 pub struct IdentityPatch {
     pub traits: Vec<TraitPatchOp>,
     pub overrides: Vec<IdentityOverridePatch>,
+    /// Feature names whose variant assignment should be deleted (identity freed for distribution).
+    pub unpins: Vec<String>,
 }
 
 impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
-        self.traits.is_empty() && self.overrides.is_empty()
+        self.traits.is_empty() && self.overrides.is_empty() && self.unpins.is_empty()
     }
 }
