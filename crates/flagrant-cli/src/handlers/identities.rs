@@ -14,23 +14,22 @@
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
 use anyhow::bail;
-use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{
-        FeaturePatch, IdentityOverridePatch, IdentityPatch, IdentityTraitPayload,
-        NewIdentityPayload,
+        FeaturePatch, IdentityOverridePatch, IdentityTraitPayload,
+        NewIdentityPayload, VariantPatchOp,
     },
 };
 
 use crate::{
     handlers::{
-        internal::{effectives as effective, stage},
+        internal::{effectives as effective, index, stage},
         open_in_editor,
     },
-    printer::tabular::{DescribeWithVariant, Tabular},
+    printer::tabular::Tabular,
 };
 
 /// Print details of an identity with its traits.
@@ -43,11 +42,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     let ctx = session.context.read().unwrap();
     if let Some(identity_str) = args.get(1) {
         let identity = resolve_identity(&ctx, identity_str)?;
-        describe_identity(&ctx, &identity, None);
+        identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
     } else {
         if let Some(identity) = &ctx.identity {
             let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
-            describe_identity(&ctx, identity, patch);
+            identity.describe(patch, &fetch_variant_assignments(&ctx, identity));
         } else {
             bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
         }
@@ -55,49 +54,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Fetches the variant currently assigned to `identity_value` for the active feature context.
-///
-/// Returns `None` if the identity has no assignment yet, `Some(value)` if assigned.
-/// Should only be called when already confirmed to be in a feature context.
-fn describe_identity(
-    ctx: &Connection,
-    identity: &IdentityWithTraits,
-    patch: Option<&IdentityPatch>,
-) {
-    let assignments = fetch_variant_assignments(ctx, identity);
-    let display = if assignments.is_empty() {
-        None
-    } else {
-        Some(
-            assignments
-                .iter()
-                .map(|iv| {
-                    if iv.identity_id.is_some() {
-                        let pin = if iv.pinned_at.is_some() {
-                            "(pinned)".red().to_string()
-                        } else {
-                            String::default()
-                        };
-                        format!(
-                            "{} → {} {}",
-                            iv.feature_name.bright_blue(),
-                            iv.feature_value,
-                            pin
-                        )
-                    } else {
-                        format!(
-                            "{} → {}",
-                            iv.feature_name.bright_blue(),
-                            "(not yet assigned)".dimmed()
-                        )
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-        )
-    };
-    identity.describe_with_variant(patch, display.as_deref());
-}
 
 /// Create or upsert an identity with optional traits, then switch into its context.
 ///
@@ -133,7 +89,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 },
             )?
         };
-        identity.describe(None);
+        identity.describe(None, &vec![]);
         session.context.write().unwrap().identity = Some(identity);
         return Ok(());
     }
@@ -206,7 +162,7 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     };
     {
         let ctx = session.context.read().unwrap();
-        describe_identity(&ctx, &identity, None);
+        identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
     }
     session.context.write().unwrap().identity = Some(identity);
     Ok(())
@@ -284,7 +240,7 @@ pub fn set_pin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
             let current_variant_id = fetch_variant_assignments(&ctx, identity)
                 .into_iter()
                 .find(|iv| iv.feature_id == feature.id && iv.identity_id.is_some())
-                .map(|iv| iv.variant_id);
+                .and_then(|iv| iv.variant_id);
 
             let content = build_override_editor_content(
                 feature,
@@ -302,23 +258,39 @@ pub fn set_pin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         bail!("No value provided.");
     }
 
-    // Validate the value matches a known variant for immediate feedback.
-    let variant_value = {
+    let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
+
+    // Check whether the value matches an existing (or pending) variant.
+    let existing_value = {
         let ctx = session.context.read().unwrap();
         let feature = ctx.feature.as_ref().unwrap();
-        let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
-        let variant = effective::effective_variants(feature, ctx.feature_patch.as_ref())
+        effective::effective_variants(feature, ctx.feature_patch.as_ref())
             .into_iter()
             .find(|v| !v.is_deleted && v.value == parsed)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No variant matches value '{raw}'. Use `VARIANT add` to create a new variant first."
-                )
-            })?;
-        variant.value.to_string()
+            .map(|v| v.value.to_string())
     };
 
-    // Stage the override — replaces any existing override for this feature.
+    let variant_value = match existing_value {
+        Some(v) => v,
+        None => {
+            // No matching variant — stage a new one with 0% weight.
+            let mut ctx = session.context.write().unwrap();
+            ctx.get_or_init_pending()
+                .variants
+                .push(VariantPatchOp::Add {
+                    value: parsed.clone(),
+                    weight: 0,
+                });
+            index::rebuild(&mut ctx);
+            println!(
+                "No variant with value '{}' found. Staged new variant with 0% weight (run DISCARD to undo).",
+                parsed
+            );
+            parsed.to_string()
+        }
+    };
+
+    // Stage the pin — replaces any existing override for this feature.
     let mut ctx = session.context.write().unwrap();
     let pending = ctx.get_or_init_identity_patch();
 
@@ -384,14 +356,14 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .env_resource()
         .subpath(format!("/identities/{identity}"));
 
-    match ctx.client.patch::<_, IdentityWithTraits>(path, patch) {
-        Ok(updated) => {
-            describe_identity(&ctx, &updated, None);
-            ctx.identity_patch = None;
-            ctx.identity = Some(updated);
-        }
-        Err(err) => eprintln!("Commit failed: {err}"),
-    }
+    let updated = ctx
+        .client
+        .patch::<_, IdentityWithTraits>(path, patch)
+        .map_err(|err| anyhow::anyhow!("Identity commit failed: {err}"))?;
+
+    updated.describe(None, &fetch_variant_assignments(&ctx, &updated));
+    ctx.identity_patch = None;
+    ctx.identity = Some(updated);
     Ok(())
 }
 

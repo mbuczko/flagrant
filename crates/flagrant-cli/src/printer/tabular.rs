@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Environment, Feature, IdentityWithTraits, TraitValue,
+    Environment, Feature, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch},
 };
 
@@ -9,15 +9,18 @@ use crate::handlers::internal::effectives as effective;
 
 pub trait Tabular {
     type Patch;
+    type Context;
+
+    fn describe(&self, patch: Option<&Self::Patch>, ctx: &Self::Context);
 
     fn list(rows: &[Self])
     where
         Self: Sized;
-    fn describe(&self, patch: Option<&Self::Patch>);
 }
 
 impl Tabular for Environment {
     type Patch = ();
+    type Context = ();
 
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
@@ -38,7 +41,7 @@ impl Tabular for Environment {
             .build()
             .render(rows);
     }
-    fn describe(&self, _patch: Option<&()>) {
+    fn describe(&self, _patch: Option<&()>, _ctx: &()) {
         let desc_str = self.description.as_deref().unwrap_or("");
         let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
@@ -60,6 +63,7 @@ impl Tabular for Environment {
 
 impl Tabular for IdentityWithTraits {
     type Patch = IdentityPatch;
+    type Context = Vec<IdentityVariant>;
 
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
@@ -83,24 +87,39 @@ impl Tabular for IdentityWithTraits {
             .render(rows);
     }
 
-    fn describe(&self, patch: Option<&IdentityPatch>) {
-        self.describe_with_variant(patch, None);
-    }
-}
+    fn describe(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
+        let assigned_variant: Option<String> = if ctx.is_empty() {
+            None
+        } else {
+            Some(
+                ctx.iter()
+                    .map(|iv| {
+                        if iv.identity_id.is_some() {
+                            let pin = if iv.pinned_at.is_some() {
+                                "(pinned)".red().to_string()
+                            } else {
+                                String::default()
+                            };
+                            format!(
+                                "{} → {} {}",
+                                iv.feature_name.bright_blue(),
+                                iv.feature_value.as_ref().map(|v| v.to_string()).unwrap_or_default(),
+                                pin
+                            )
+                        } else {
+                            format!(
+                                "{} → {}",
+                                iv.feature_name.bright_blue(),
+                                "(not yet assigned)".dimmed()
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        };
 
-/// Extension trait for describing an identity with a committed variant assignment.
-pub trait DescribeWithVariant {
-    /// Like [`Tabular::describe`] but also renders a VARIANT row showing the current assignment.
-    ///
-    /// - `assigned_variant = None` — identity not yet assigned to any variant.
-    /// - `assigned_variant = Some(value)` — assigned to the variant with this value.
-    fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>);
-}
-
-impl DescribeWithVariant for IdentityWithTraits {
-    fn describe_with_variant(&self, patch: Option<&IdentityPatch>, assigned_variant: Option<&str>) {
         let title = format!("Identity: {} (ID={})", self.value, self.id);
-
         let eff_traits = effective::effective_identity_traits(self, patch);
 
         let mut trait_lines: Vec<String> = Vec::new();
@@ -141,14 +160,14 @@ impl DescribeWithVariant for IdentityWithTraits {
             trait_lines.join("\n")
         };
 
-        let staged_overrides: &[IdentityOverridePatch] =
+        let staged_pins: &[IdentityOverridePatch] =
             patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
         let staged_unpins: &[String] = patch.map(|p| p.unpins.as_slice()).unwrap_or_default();
 
         let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
-        let has_staged_overrides = !staged_overrides.is_empty() || !staged_unpins.is_empty();
+        let has_staged_pins = !staged_pins.is_empty() || !staged_unpins.is_empty();
 
-        if has_staged_traits || has_staged_overrides {
+        if has_staged_traits || has_staged_pins {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
                 .add_column(
@@ -177,19 +196,20 @@ impl DescribeWithVariant for IdentityWithTraits {
                 ]);
             }
 
-            if has_staged_overrides {
-                let mut override_lines: Vec<String> = staged_overrides
-                    .iter()
-                    .map(|o| {
-                        format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
-                            .green()
-                            .to_string()
-                    })
-                    .collect();
-                let mut override_stage: Vec<String> = staged_overrides
-                    .iter()
-                    .map(|_| "pinned".green().to_string())
-                    .collect();
+            if has_staged_pins {
+                let (mut override_lines, mut override_stage): (Vec<String>, Vec<String>) =
+                    staged_pins
+                        .iter()
+                        .map(|o| {
+                            (
+                                format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
+                                    .green()
+                                    .to_string(),
+                                "pinned".green().to_string(),
+                            )
+                        })
+                        .unzip();
+
                 for feature_name in staged_unpins {
                     override_lines.push(
                         format!(
@@ -208,11 +228,7 @@ impl DescribeWithVariant for IdentityWithTraits {
                 ]);
             }
 
-            table.render(
-                rows.iter()
-                    .map(|r| r.iter().map(|s| s.as_str()).collect::<Vec<_>>())
-                    .collect::<Vec<_>>(),
-            );
+            table.render(rows);
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
@@ -232,18 +248,14 @@ impl DescribeWithVariant for IdentityWithTraits {
             if let Some(value) = assigned_variant {
                 rows.push(vec!["VARIANTS".to_string(), value.to_string()]);
             }
-
-            table.render(
-                rows.iter()
-                    .map(|r| r.iter().map(|s| s.as_str()).collect::<Vec<_>>())
-                    .collect::<Vec<_>>(),
-            );
+            table.render(rows);
         }
     }
 }
 
 impl Tabular for Feature {
     type Patch = FeaturePatch;
+    type Context = ();
 
     fn list(selfs: &[Self]) {
         let rows = selfs
@@ -276,7 +288,7 @@ impl Tabular for Feature {
             .render(rows)
     }
 
-    fn describe(&self, patch: Option<&FeaturePatch>) {
+    fn describe(&self, patch: Option<&FeaturePatch>, _ctx: &()) {
         let title = format!("Feature: {} (ID={})", &self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())

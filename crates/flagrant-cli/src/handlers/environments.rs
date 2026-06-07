@@ -32,7 +32,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        env.describe(None);
+        env.describe(None, &());
         return Ok(());
     }
     bail!("No environment name provided.")

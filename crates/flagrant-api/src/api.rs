@@ -36,10 +36,14 @@ pub async fn get_features(
     let variants = identity::get_identity_variants(&mut conn, &env, &identity)
         .await?
         .into_iter()
-        .map(|v| FeatureResponse {
-            feature_id: v.feature_id,
-            name: v.feature_name,
-            value: v.feature_value,
+        // get_identity_variants always distributes, so feature_value should always be Some.
+        // filter_map drops any entries where distribution unexpectedly produced None.
+        .filter_map(|v| {
+            Some(FeatureResponse {
+                feature_id: v.feature_id,
+                name: v.feature_name,
+                value: v.feature_value?,
+            })
         })
         .collect::<Vec<_>>();
 

@@ -110,12 +110,12 @@ pub struct IdentityWithTraits {
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct IdentityVariant {
-    pub variant_id: i32,
+    pub variant_id: Option<i32>,
     pub feature_id: i32,
     pub identity_id: Option<i32>,
     pub migrated_id: Option<i32>,
     pub feature_name: String,
-    pub feature_value: FeatureValue,
+    pub feature_value: Option<FeatureValue>,
     pub pinned_at: Option<NaiveDateTime>,
 }
 

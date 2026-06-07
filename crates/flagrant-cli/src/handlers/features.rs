@@ -78,7 +78,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             )?
         };
 
-        feature.describe(None);
+        feature.describe(None, &());
         session.context.write().unwrap().feature = Some(feature);
         return Ok(());
     }
@@ -114,7 +114,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
         let feature = fetch_feature(feature_name, session)
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
-        feature.describe(None);
+        feature.describe(None, &());
         session.context.write().unwrap().feature = Some(feature);
 
         if let Some(identity_str) = identity_str {
@@ -133,11 +133,11 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// describes the feature in the current context, overlaying any pending staged changes.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_feature(name, session)?.describe(None);
+        fetch_feature(name, session)?.describe(None, &());
     } else {
         let ctx = session.context.read().unwrap();
         if let Some(feature) = &ctx.feature {
-            feature.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()));
+            feature.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &());
         } else {
             bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
         }
@@ -240,14 +240,14 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .env_resource()
         .subpath(format!("/features/{feature_id}"));
 
-    match ctx.client.patch::<_, Feature>(path, patch) {
-        Ok(updated) => {
-            updated.describe(None);
-            ctx.feature_patch = None;
-            ctx.feature = Some(updated);
-        }
-        Err(err) => eprintln!("Commit failed: {err}"),
-    }
+    let updated = ctx
+        .client
+        .patch::<_, Feature>(path, patch)
+        .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
+
+    updated.describe(None, &());
+    ctx.feature_patch = None;
+    ctx.feature = Some(updated);
     Ok(())
 }
 

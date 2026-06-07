@@ -337,8 +337,8 @@ pub async fn get_identity_variants(
                 FlagrantError::QueryFailed("Could not attach identity to given variant", e)
             })?;
 
-            var.variant_id = variant.id;
-            var.feature_value = variant.value;
+            var.variant_id = Some(variant.id);
+            var.feature_value = Some(variant.value);
         }
     }
 

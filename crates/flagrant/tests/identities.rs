@@ -396,7 +396,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
     let alice_variant = iv.iter().find(|iv| iv.feature_id == feature.id).unwrap();
     assert_eq!(
         alice_variant.feature_value,
-        FeatureValue::build("alt_value"),
+        Some(FeatureValue::build("alt_value")),
         "get_identity_variants should return the overridden value"
     );
 }
@@ -505,7 +505,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
 
     assert_eq!(
         alice_iv.variant_id,
-        alt_variant.id,
+        Some(alt_variant.id),
         "pinned identity should remain on the pinned variant despite weight dropping to 0"
     );
 }
@@ -612,4 +612,81 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
         .unwrap();
     assert_eq!(updated.traits.len(), 1);
     assert_eq!(updated.traits[0].name, "tier");
+}
+
+/// Regression test: when an identity is pinned to a non-control variant,
+/// `list_variant_assignments` must return the pinned variant's value and id —
+/// not the control variant's values.
+///
+/// The original `fetch_variants_for_identity` query used `GROUP BY f.feature_id`
+/// with two `max()` aggregates while leaving `v.value` and `v.variant_id`
+/// unaggregated. SQLite picks unaggregated columns from an arbitrary row in the
+/// group, which may be the control variant rather than the pinned one, making
+/// `IDENTITY describe` show the control value as if nothing changed.
+#[sqlx::test]
+async fn list_variant_assignments_returns_pinned_variant_value(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+
+    // Feature with a control value and a 0%-weight non-control variant.
+    let feature = feature::create(
+        &mut conn,
+        &environment,
+        "pin_display_feature".to_owned(),
+        None,
+        FeatureValue::build("control_value"),
+        true,
+    )
+    .await
+    .unwrap();
+
+    let zero_pct_variant = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("pinned_value"),
+        0,
+    )
+    .await
+    .unwrap();
+
+    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+        .await
+        .unwrap();
+
+    identity::override_variant(&mut conn, &environment, &alice, feature.id, zero_pct_variant.id)
+        .await
+        .unwrap();
+
+    // list_variant_assignments is what IDENTITY describe calls — it must surface the
+    // pinned variant's value, not fall back to the control variant.
+    let assignments = identity::list_variant_assignments(&mut conn, &environment, &alice)
+        .await
+        .unwrap();
+
+    let feat_iv = assignments
+        .iter()
+        .find(|iv| iv.feature_id == feature.id)
+        .expect("feature should appear in variant assignments");
+
+    assert_eq!(
+        feat_iv.identity_id,
+        Some(alice.id),
+        "identity_id must be set for a pinned identity"
+    );
+    assert!(
+        feat_iv.pinned_at.is_some(),
+        "pinned_at must be set after an explicit override"
+    );
+    assert_eq!(
+        feat_iv.feature_value,
+        Some(FeatureValue::build("pinned_value")),
+        "feature_value must reflect the pinned variant, not the control"
+    );
+    assert_eq!(
+        feat_iv.variant_id,
+        Some(zero_pct_variant.id),
+        "variant_id must point to the pinned variant"
+    );
 }
