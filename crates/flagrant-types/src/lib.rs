@@ -128,28 +128,34 @@ pub struct Segment {
     pub name: String,
     #[validate(max_length = 2048)]
     pub description: Option<String>,
-    pub entries: Vec<SegmentEntry>,
+    pub groups: Vec<SegmentGroupChain>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
-pub struct SegmentEntry {
-    pub driver: SegmentDriver,
-    pub joiner: SegmentJoiner,
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentGroupChain {
+    pub head: SegmentGroup,
+    pub tail: Vec<ConnectedGroup>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentGroup {
+    pub entries: SegmentEntries,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub enum SegmentDriver {
-    Identity(Identity),
-    Environment(i32),
+pub enum ConnectedGroup {
+    And(SegmentGroup),
+    AndNot(SegmentGroup),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub enum SegmentJoiner {
-    And,
-    AndNot,
+pub enum SegmentEntries {
+    Identities(Vec<Identity>),
+    Environments(Vec<i32>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
 pub enum FeatureValue {
     Text(String),
     Json(String),
