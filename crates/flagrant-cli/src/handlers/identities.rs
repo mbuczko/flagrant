@@ -174,23 +174,23 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
 ///
 /// The value is auto-typed (bool → i32 → f32 → str).
 pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(arg) = args.get(1) {
-        if let Some((name, value)) = arg.split_once(':') {
-            let mut ctx = session.context.write().unwrap();
-            if let Some(identity) = &ctx.identity {
-                let trait_exists = identity.traits.iter().any(|t| t.name == name);
-                let trait_value = TraitValue::build(value);
+    if let Some(arg) = args.get(1)
+        && let Some((name, value)) = arg.split_once(':')
+    {
+        let mut ctx = session.context.write().unwrap();
+        if let Some(identity) = &ctx.identity {
+            let trait_exists = identity.traits.iter().any(|t| t.name == name);
+            let trait_value = TraitValue::build(value);
 
-                stage::stage_trait(
-                    ctx.get_or_init_identity_patch(),
-                    trait_exists,
-                    name.to_string(),
-                    trait_value,
-                );
-                return Ok(());
-            }
-            bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
+            stage::stage_trait(
+                ctx.get_or_init_identity_patch(),
+                trait_exists,
+                name.to_string(),
+                trait_value,
+            );
+            return Ok(());
         }
+        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
     }
     bail!("Usage: SET trait <name:value>")
 }
@@ -421,9 +421,8 @@ fn build_override_editor_content(
 ) -> String {
     let variants = effective::effective_variants(feature, patch);
     let mut content = String::new();
-    let mut idx = 1;
 
-    for e in variants.iter().filter(|e| !e.is_control && !e.is_deleted) {
+    for (idx, e) in (1..).zip(variants.iter().filter(|e| !e.is_control && !e.is_deleted)) {
         let staged = if e.value_modified || e.is_staged_add {
             " (staged)"
         } else {
@@ -438,7 +437,6 @@ fn build_override_editor_content(
             "# variant {} ({}%){}{}\n{}\n\n",
             idx, e.weight, staged, current, e.value
         ));
-        idx += 1;
     }
 
     for e in variants.iter().filter(|e| e.is_control && !e.is_deleted) {

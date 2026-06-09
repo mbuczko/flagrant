@@ -103,7 +103,10 @@ impl Tabular for IdentityWithTraits {
                             format!(
                                 "{} → {} {}",
                                 iv.feature_name.bright_blue(),
-                                iv.feature_value.as_ref().map(|v| v.to_string()).unwrap_or_default(),
+                                iv.feature_value
+                                    .as_ref()
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_default(),
                                 pin
                             )
                         } else {
@@ -289,7 +292,7 @@ impl Tabular for Feature {
     }
 
     fn describe(&self, patch: Option<&FeaturePatch>, _ctx: &()) {
-        let title = format!("Feature: {} (ID={})", &self.name, self.id);
+        let title = format!("Feature: {} (ID={})", self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
@@ -308,7 +311,7 @@ impl Tabular for Feature {
 
         // Compute the adjusted control weight when there are pending ops that affect non-control
         // variants, mirroring the auto-adjustment done on the backend.
-        let has_ops = patch.map_or(false, |p| !p.variants.is_empty());
+        let has_ops = patch.is_some_and(|p| !p.variants.is_empty());
         let non_control_total: u32 = eff
             .iter()
             .filter(|e| !e.is_control && !e.is_deleted)

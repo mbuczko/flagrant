@@ -45,7 +45,7 @@ pub async fn get_by_prefix(
 pub async fn delete(conn: &mut SqliteConnection, trait_id: i32) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
 
-    if let Ok(_) = get_by_id(&mut *tx, trait_id).await {
+    if get_by_id(&mut tx, trait_id).await.is_ok() {
         SQLTraits::delete_trait_entries(&mut *tx, params![trait_id]).await?;
         SQLTraits::delete_trait(&mut *tx, params![trait_id]).await?;
 

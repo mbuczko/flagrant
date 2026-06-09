@@ -186,7 +186,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let feature = ctx.feature.as_ref().unwrap();
     if feature.variants.iter().any(|v| v.value == fv)
-        || ctx.feature_patch.as_ref().map_or(false, |p| {
+        || ctx.feature_patch.as_ref().is_some_and(|p| {
             p.variants
                 .iter()
                 .any(|op| matches!(op, VariantPatchOp::Add { value, .. } if *value == fv))
@@ -233,7 +233,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let feature = ctx.feature.as_ref().unwrap();
     let duplicate = feature.variants.iter().any(|v| {
         v.value == fv && !matches!(&variant_ref, VariantRef::Committed(id) if *id == v.id)
-    }) || ctx.feature_patch.as_ref().map_or(false, |p| {
+    }) || ctx.feature_patch.as_ref().is_some_and(|p| {
         p.variants.iter().enumerate().any(|(i, op)| match op {
             VariantPatchOp::Add { value, .. } => {
                 *value == fv && !matches!(&variant_ref, VariantRef::Staged(pos) if *pos == i)
@@ -530,14 +530,14 @@ where
                 ctx.feature
                     .as_ref()
                     .and_then(|f| f.variants.iter().find(|v| v.id == *id))
-                    .map(|v| extract_committed(v))
+                    .map(extract_committed)
                     .unwrap_or_default()
             })
         }
         VariantRef::Staged(pos) => ctx
             .feature_patch
             .as_ref()
-            .and_then(|p| p.variants.iter().filter_map(|op| extract_add(op)).nth(*pos))
+            .and_then(|p| p.variants.iter().filter_map(extract_add).nth(*pos))
             .unwrap_or_default(),
     }
 }

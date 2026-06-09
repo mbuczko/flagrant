@@ -222,7 +222,7 @@ pub async fn get_all(
     let mut result: Vec<Feature> = Vec::new();
     let mut id_to_idx: HashMap<i32, usize> = HashMap::new();
 
-    print!("ROWS: {}", rows.iter().count());
+    print!("ROWS: {}", rows.len());
 
     for (feature, variant) in rows {
         if let Some(&idx) = id_to_idx.get(&feature.id) {
@@ -415,7 +415,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         is_enabled: row.get("is_enabled"),
         is_archived: row
             .try_get::<Option<String>, _>("archived_at")
-            .map_or(false, |v| v.is_some()),
+            .is_ok_and(|v| v.is_some()),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }

@@ -66,13 +66,13 @@ pub async fn create(
     })
     .await
     .map_err(|e| -> anyhow::Error {
-        if let sqlx::Error::Database(db_err) = &e {
-            if db_err.is_unique_violation() {
-                return FlagrantError::BadRequest(
-                    "A variant with this value already exists for this feature",
-                )
-                .into();
-            }
+        if let sqlx::Error::Database(db_err) = &e
+            && db_err.is_unique_violation()
+        {
+            return FlagrantError::BadRequest(
+                "A variant with this value already exists for this feature",
+            )
+            .into();
         }
         FlagrantError::QueryFailed("Could not create a variant", e).into()
     })?;
@@ -106,13 +106,13 @@ async fn update(
         })
         .await
         .map_err(|e| -> anyhow::Error {
-            if let sqlx::Error::Database(db_err) = &e {
-                if db_err.is_unique_violation() {
-                    return FlagrantError::BadRequest(
-                        "A variant with this value already exists for this feature",
-                    )
-                    .into();
-                }
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_unique_violation()
+            {
+                return FlagrantError::BadRequest(
+                    "A variant with this value already exists for this feature",
+                )
+                .into();
             }
             FlagrantError::QueryFailed("Could not update variant value", e).into()
         })?;

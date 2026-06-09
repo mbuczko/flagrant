@@ -151,9 +151,9 @@ pub async fn create(
     trait_payloads: Vec<IdentityTraitPayload>,
 ) -> anyhow::Result<IdentityWithTraits> {
     let mut tx = conn.begin().await?;
-    let identity = get_or_create_by_value(&mut *tx, project, identity).await?;
+    let identity = get_or_create_by_value(&mut tx, project, identity).await?;
 
-    attach_traits(&mut *tx, &identity, &trait_payloads).await?;
+    attach_traits(&mut tx, &identity, &trait_payloads).await?;
     tx.commit().await?;
 
     let traits = load_traits(conn, identity.id).await?;
@@ -174,7 +174,7 @@ pub async fn update_traits(
     let mut tx = conn.begin().await?;
 
     SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
-    attach_traits(&mut *tx, &identity, &trait_payloads).await?;
+    attach_traits(&mut tx, &identity, &trait_payloads).await?;
 
     tx.commit().await?;
     get_by_value_with_traits(conn, project, identity.value).await
@@ -194,7 +194,7 @@ pub async fn patch(
     for op in patch.traits {
         match op {
             TraitPatchOp::Add { name, value } | TraitPatchOp::SetValue { name, value } => {
-                let trait_rec = upsert(&mut *tx, identity.project_id, name).await?;
+                let trait_rec = upsert(&mut tx, identity.project_id, name).await?;
                 SQLIdentities::upsert_identity_trait(
                     &mut *tx,
                     params![identity.id, trait_rec.id, value],
@@ -216,13 +216,13 @@ pub async fn patch(
     }
 
     for ovr in patch.overrides {
-        let feat = feature::get_by_name(&mut *tx, environment, ovr.feature_name).await?;
+        let feat = feature::get_by_name(&mut tx, environment, ovr.feature_name).await?;
         let fv: FeatureValue = ovr
             .variant_value
             .parse()
             .unwrap_or_else(|_| FeatureValue::build(&ovr.variant_value));
 
-        let variant = variant::get_by_value(&mut *tx, environment, feat.id, &fv)
+        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv)
             .await?
             .ok_or(FlagrantError::BadRequest(
                 "No variant with given value found for this feature",
@@ -243,7 +243,7 @@ pub async fn patch(
     }
 
     for feature_name in patch.unpins {
-        let feat = feature::get_by_name(&mut *tx, environment, feature_name).await?;
+        let feat = feature::get_by_name(&mut tx, environment, feature_name).await?;
         SQLIdentities::delete_identity_variant_for_feature(
             &mut *tx,
             params![identity.id, feat.id, environment.id],
