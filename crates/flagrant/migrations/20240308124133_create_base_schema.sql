@@ -74,12 +74,12 @@ CREATE TABLE IF NOT EXISTS traits (
 
 CREATE TABLE IF NOT EXISTS identities (
   identity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_id INTEGER NOT NULL REFERENCES projects,
+  environment_id INTEGER NOT NULL REFERENCES environments,
   identity TEXT NOT NULL CHECK(LENGTH(identity) <= 255),
   updated_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  UNIQUE(project_id, identity)
+  UNIQUE(environment_id, identity)
 );
 
 CREATE TABLE IF NOT EXISTS identity_traits (

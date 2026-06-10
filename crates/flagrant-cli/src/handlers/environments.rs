@@ -68,6 +68,9 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         {
             bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
         }
+        if ctx.has_identity_pending() {
+            bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
+        }
         let res = ctx.project.as_base_resource();
         let response = ctx
             .client
@@ -77,6 +80,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             println!("Switching environment → {}", env.name.bold());
             let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
             ctx.environment = env;
+            ctx.identity = None;
+            ctx.identity_patch = None;
             drop(ctx);
 
             if let Some(name) = feature_name {

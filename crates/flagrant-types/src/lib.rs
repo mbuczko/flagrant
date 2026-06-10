@@ -76,7 +76,7 @@ pub struct Identity {
     pub id: i32,
     pub value: String,
     #[serde(skip)]
-    pub project_id: i32,
+    pub environment_id: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]

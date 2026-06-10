@@ -59,10 +59,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
             delete(variants::delete),
         )
         // Identities
-        .route("/identities", get(identities::list))
-        .route("/identities", post(identities::create))
-        .route("/identities/:identity", get(identities::fetch))
-        .route("/identities/:identity", delete(identities::delete))
+        .route("/envs/:environment/identities", get(identities::list))
+        .route("/envs/:environment/identities", post(identities::create))
+        .route("/envs/:environment/identities/:identity", get(identities::fetch))
+        .route("/envs/:environment/identities/:identity", delete(identities::delete))
         .route(
             "/envs/:environment/identities/:identity",
             patch(identities::update),

@@ -30,19 +30,20 @@ impl AutoCompleter for ArgCompleter<'_> {
             "IDENTITY" => {
                 let op: &str = &args[1];
                 let ctx = self.session.context.read().unwrap();
-                let res = ctx.project.as_base_resource();
+                let project_res = ctx.project.as_base_resource();
+                let env_res = ctx.env_resource();
 
                 Ok(match op {
                     "add" if arg_n >= 3 && !prefix.contains(':') => ctx
                         .client
-                        .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
+                        .get::<Vec<Trait>>(project_res.subpath(format!("/traits?prefix={prefix}")))?
                         .into_iter()
                         .map(|t| format!("{}:", t.name))
                         .collect::<Vec<_>>(),
                     "delete" | "describe" | "use" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<IdentityWithTraits>>(
-                            res.subpath(format!("/identities?prefix={prefix}")),
+                            env_res.subpath(format!("/identities?prefix={prefix}")),
                         )?
                         .into_iter()
                         .map(|c| c.value)
@@ -96,8 +97,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
                             ctx.client
                                 .get::<Vec<IdentityWithTraits>>(
-                                    ctx.project
-                                        .as_base_resource()
+                                    ctx.env_resource()
                                         .subpath(format!("/identities?prefix={identity_prefix}")),
                                 )?
                                 .into_iter()

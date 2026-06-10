@@ -22,9 +22,10 @@ pub(crate) struct IdentityQueryParams {
 /// Lists up to 10 identities with their traits, optionally filtered by a pattern.
 #[utoipa::path(
     get,
-    path = "/projects/{project}/identities",
+    path = "/projects/{project}/envs/{environment}/identities",
     params(
         ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         IdentityQueryParams
     ),
     responses(
@@ -34,13 +35,14 @@ pub(crate) struct IdentityQueryParams {
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path(project_name): Path<String>,
+    Path((project_name, env_name)): Path<(String, String)>,
     Query(params): Query<IdentityQueryParams>,
 ) -> Result<Json<Vec<IdentityWithTraits>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identities = identity::list(
         &mut conn,
-        &project,
+        &env,
         super::parse_pattern(params.pattern, params.prefix),
     )
     .await?;
@@ -51,9 +53,10 @@ pub async fn list(
 /// Fetches a single identity with its traits.
 #[utoipa::path(
     get,
-    path = "/projects/{project}/identities/{identity}",
+    path = "/projects/{project}/envs/{environment}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("identity" = String, Path, description = "Identity value")
     ),
     responses(
@@ -64,10 +67,11 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, identity_value)): Path<(String, String)>,
+    Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let identity = identity::get_by_value_with_traits(&mut conn, &project, identity_value).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_by_value_with_traits(&mut conn, &env, identity_value).await?;
 
     Ok(Json(identity))
 }
@@ -75,9 +79,10 @@ pub async fn fetch(
 /// Creates a new identity with optional traits. Traits are auto-created if they don't exist yet.
 #[utoipa::path(
     post,
-    path = "/projects/{project}/identities",
+    path = "/projects/{project}/envs/{environment}/identities",
     params(
-        ("project" = String, Path, description = "Project name")
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name")
     ),
     request_body = NewIdentityPayload,
     responses(
@@ -87,13 +92,14 @@ pub async fn fetch(
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path(project_name): Path<String>,
+    Path((project_name, env_name)): Path<(String, String)>,
     Json(payload): Json<NewIdentityPayload>,
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identity = identity::create(
         &mut conn,
-        &project,
+        &env,
         payload.identity,
         payload.traits.unwrap_or_default(),
     )
@@ -126,8 +132,8 @@ pub async fn update(
 ) -> Result<Json<IdentityWithTraits>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
-    let identity = identity::patch(&mut conn, &project, &env, identity, patch).await?;
+    let identity = identity::get_by_value(&mut conn, &env, identity_value).await?;
+    let identity = identity::patch(&mut conn, &env, identity, patch).await?;
 
     Ok(Json(identity))
 }
@@ -153,7 +159,7 @@ pub async fn get_variants(
 ) -> Result<Json<Vec<IdentityVariant>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
+    let identity = identity::get_by_value(&mut conn, &env, identity_value).await?;
     let variants = identity::list_variant_assignments(&mut conn, &env, &identity).await?;
     Ok(Json(variants))
 }
@@ -161,9 +167,10 @@ pub async fn get_variants(
 /// Deletes an identity and all its trait associations and variant assignments.
 #[utoipa::path(
     delete,
-    path = "/projects/{project}/identities/{identity}",
+    path = "/projects/{project}/envs/{environment}/identities/{identity}",
     params(
         ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("identity" = String, Path, description = "Identity value")
     ),
     responses(
@@ -174,10 +181,11 @@ pub async fn get_variants(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, identity_value)): Path<(String, String)>,
+    Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let identity = identity::get_by_value(&mut conn, &project, identity_value).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_by_value(&mut conn, &env, identity_value).await?;
 
     identity::delete(&mut conn, identity).await?;
     Ok(Json(()))

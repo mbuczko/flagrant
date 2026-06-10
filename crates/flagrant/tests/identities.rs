@@ -4,7 +4,7 @@ use flagrant::models::{
     project, traits, variant,
 };
 use flagrant_types::{
-    Environment, Feature, FeatureValue, Project, TraitValue, Variant, payload::IdentityTraitPayload,
+    Environment, Feature, FeatureValue, TraitValue, Variant, payload::IdentityTraitPayload,
 };
 use hugsqlx::params;
 use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
@@ -44,14 +44,13 @@ async fn migrations_count_for_feature_variant(
 
 async fn idents_count_for_feature_variant(
     conn: &mut PoolConnection<Sqlite>,
-    project: &Project,
     environment: &Environment,
     feature: &Feature,
     variant: &Variant,
 ) -> usize {
     // Redistribute idents and attach to variants first
     for n in 1..=10 {
-        let ident = identity::get_or_create_by_value(conn, project, format!("identity_{n}"))
+        let ident = identity::get_or_create_by_value(conn, environment, format!("identity_{n}"))
             .await
             .unwrap();
         identity::get_identity_variants(conn, environment, &ident)
@@ -84,7 +83,7 @@ async fn idents_count_for_feature_variant(
 /// whenever they should be redistributed to another variant on the next hit.
 #[sqlx::test]
 async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -98,7 +97,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
-        let ident = identity::get_or_create_by_value(&mut conn, &project, format!("identity_{n}"))
+        let ident = identity::get_or_create_by_value(&mut conn, &environment, format!("identity_{n}"))
             .await
             .unwrap();
         identity::get_identity_variants(&mut conn, &environment, &ident)
@@ -185,7 +184,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -208,7 +207,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &project, &environment, &feature, &variant)
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
             .await,
         5
     );
@@ -224,7 +223,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &project, &environment, &feature, &variant)
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
             .await,
         8
     );
@@ -244,7 +243,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &project, &environment, &feature, &variant)
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
             .await,
         1
     );
@@ -266,9 +265,9 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn create_identity_without_traits(mut conn: PoolConnection<Sqlite>) {
-    let (project, _) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
 
-    let created = identity::create(&mut conn, &project, "user_alice".to_owned(), vec![])
+    let created = identity::create(&mut conn, &environment, "user_alice".to_owned(), vec![])
         .await
         .unwrap();
 
@@ -278,7 +277,7 @@ async fn create_identity_without_traits(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
-    let (project, _) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
 
     let trait_payloads = vec![
         IdentityTraitPayload {
@@ -290,7 +289,7 @@ async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
             value: Some(TraitValue::Int(30)),
         },
     ];
-    let created = identity::create(&mut conn, &project, "user_bob".to_owned(), trait_payloads)
+    let created = identity::create(&mut conn, &environment, "user_bob".to_owned(), trait_payloads)
         .await
         .unwrap();
 
@@ -304,18 +303,18 @@ async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
-    let (project, _) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
 
     let initial_traits = vec![IdentityTraitPayload {
         name: "country".to_owned(),
         value: Some(TraitValue::Str("pl".to_owned())),
     }];
-    let created = identity::create(&mut conn, &project, "user_carol".to_owned(), initial_traits)
+    let created = identity::create(&mut conn, &environment, "user_carol".to_owned(), initial_traits)
         .await
         .unwrap();
     assert_eq!(created.traits.len(), 1);
 
-    let stored = identity::get_by_value(&mut conn, &project, created.value)
+    let stored = identity::get_by_value(&mut conn, &environment, created.value)
         .await
         .unwrap();
     let new_traits = vec![
@@ -328,7 +327,7 @@ async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
             value: Some(TraitValue::Bool(true)),
         },
     ];
-    let updated = identity::update_traits(&mut conn, &project, stored, new_traits)
+    let updated = identity::update_traits(&mut conn, &environment, stored, new_traits)
         .await
         .unwrap();
 
@@ -341,7 +340,7 @@ async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnection<Sqlite>) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -364,7 +363,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
     .unwrap();
 
     // Distribute identity naturally first (lands on whichever variant the distributor picks)
-    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+    let alice = identity::get_or_create_by_value(&mut conn, &environment, "alice".to_owned())
         .await
         .unwrap();
     identity::get_identity_variants(&mut conn, &environment, &alice)
@@ -403,7 +402,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
 
 #[sqlx::test]
 async fn override_variant_works_without_prior_distribution(mut conn: PoolConnection<Sqlite>) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -426,7 +425,7 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
     .unwrap();
 
     // Override without any prior distribution (no identity_variants row yet)
-    let bob = identity::get_or_create_by_value(&mut conn, &project, "bob".to_owned())
+    let bob = identity::get_or_create_by_value(&mut conn, &environment, "bob".to_owned())
         .await
         .unwrap();
     identity::override_variant(&mut conn, &environment, &bob, feature.id, variant.id)
@@ -440,7 +439,7 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
 
 #[sqlx::test]
 async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnection<Sqlite>) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -464,7 +463,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
 
     // Distribute 10 identities — roughly half will land on each variant
     for n in 1..=10 {
-        let ident = identity::get_or_create_by_value(&mut conn, &project, format!("ident_{n}"))
+        let ident = identity::get_or_create_by_value(&mut conn, &environment, format!("ident_{n}"))
             .await
             .unwrap();
         identity::get_identity_variants(&mut conn, &environment, &ident)
@@ -473,7 +472,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
     }
 
     // Distribute alice and then pin her explicitly to the alt variant
-    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+    let alice = identity::get_or_create_by_value(&mut conn, &environment, "alice".to_owned())
         .await
         .unwrap();
     identity::get_identity_variants(&mut conn, &environment, &alice)
@@ -512,43 +511,44 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
 
 #[sqlx::test]
 async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
-    let (project, _) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
 
-    let created = identity::create(&mut conn, &project, "user_dave".to_owned(), vec![])
+    let created = identity::create(&mut conn, &environment, "user_dave".to_owned(), vec![])
         .await
         .unwrap();
     let identity = created.value;
-    let stored = identity::get_by_value(&mut conn, &project, identity.clone())
+    let stored = identity::get_by_value(&mut conn, &environment, identity.clone())
         .await
         .unwrap();
     identity::delete(&mut conn, stored).await.unwrap();
 
     assert!(
-        identity::get_by_value(&mut conn, &project, identity)
+        identity::get_by_value(&mut conn, &environment, identity)
             .await
             .is_err()
     );
 }
 
 #[sqlx::test]
-async fn identities_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
-    let (project_a, _) = create_context(&mut conn).await;
+async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) {
+    let (_project_a, env_a) = create_context(&mut conn).await;
     let project_b = project::create(&mut conn, "second_project".to_owned())
         .await
         .unwrap();
+    let env_b = crate::common::create_environment(&mut conn, &project_b).await;
 
-    identity::create(&mut conn, &project_a, "alice".to_owned(), vec![])
+    identity::create(&mut conn, &env_a, "alice".to_owned(), vec![])
         .await
         .unwrap();
-    identity::create(&mut conn, &project_a, "bob".to_owned(), vec![])
+    identity::create(&mut conn, &env_a, "bob".to_owned(), vec![])
         .await
         .unwrap();
-    identity::create(&mut conn, &project_b, "carol".to_owned(), vec![])
+    identity::create(&mut conn, &env_b, "carol".to_owned(), vec![])
         .await
         .unwrap();
 
-    let a_identities = identity::list(&mut conn, &project_a, None).await.unwrap();
-    let b_identities = identity::list(&mut conn, &project_b, None).await.unwrap();
+    let a_identities = identity::list(&mut conn, &env_a, None).await.unwrap();
+    let b_identities = identity::list(&mut conn, &env_b, None).await.unwrap();
 
     assert_eq!(a_identities.len(), 2);
     assert_eq!(b_identities.len(), 1);
@@ -557,6 +557,15 @@ async fn identities_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
     assert!(a_values.contains(&"alice"));
     assert!(a_values.contains(&"bob"));
     assert_eq!(b_identities[0].value, "carol");
+
+    // Same identity value in a different environment is independent
+    identity::create(&mut conn, &env_b, "alice".to_owned(), vec![])
+        .await
+        .unwrap();
+    let b_identities = identity::list(&mut conn, &env_b, None).await.unwrap();
+    assert_eq!(b_identities.len(), 2);
+    let a_identities = identity::list(&mut conn, &env_a, None).await.unwrap();
+    assert_eq!(a_identities.len(), 2, "env_a should still have only 2 identities");
 }
 
 #[sqlx::test]
@@ -585,7 +594,7 @@ async fn traits_are_scoped_to_project(mut conn: PoolConnection<Sqlite>) {
 
 #[sqlx::test]
 async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqlite>) {
-    let (project, _) = create_context(&mut conn).await;
+    let (project, environment) = create_context(&mut conn).await;
 
     let trait_payloads = vec![
         IdentityTraitPayload {
@@ -597,7 +606,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
             value: Some(TraitValue::Str("free".to_owned())),
         },
     ];
-    let created = identity::create(&mut conn, &project, "user_eve".to_owned(), trait_payloads)
+    let created = identity::create(&mut conn, &environment, "user_eve".to_owned(), trait_payloads)
         .await
         .unwrap();
     assert_eq!(created.traits.len(), 2);
@@ -607,7 +616,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
 
     traits::delete(&mut conn, country_trait.id).await.unwrap();
 
-    let updated = identity::get_by_value_with_traits(&mut conn, &project, created.value)
+    let updated = identity::get_by_value_with_traits(&mut conn, &environment, created.value)
         .await
         .unwrap();
     assert_eq!(updated.traits.len(), 1);
@@ -627,7 +636,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
 async fn list_variant_assignments_returns_pinned_variant_value(
     mut conn: PoolConnection<Sqlite>,
 ) {
-    let (project, environment) = create_context(&mut conn).await;
+    let (_, environment) = create_context(&mut conn).await;
 
     // Feature with a control value and a 0%-weight non-control variant.
     let feature = feature::create(
@@ -651,7 +660,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(
     .await
     .unwrap();
 
-    let alice = identity::get_or_create_by_value(&mut conn, &project, "alice".to_owned())
+    let alice = identity::get_or_create_by_value(&mut conn, &environment, "alice".to_owned())
         .await
         .unwrap();
 

@@ -14,7 +14,7 @@
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
 use anyhow::bail;
-use flagrant_client::connection::{Connection, Resource};
+use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
@@ -43,13 +43,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     if let Some(identity_str) = args.get(1) {
         let identity = resolve_identity(&ctx, identity_str)?;
         identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+    } else if let Some(identity) = &ctx.identity {
+        let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
+        identity.describe(patch, &fetch_variant_assignments(&ctx, identity));
     } else {
-        if let Some(identity) = &ctx.identity {
-            let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
-            identity.describe(patch, &fetch_variant_assignments(&ctx, identity));
-        } else {
-            bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
-        }
+        bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
     }
     Ok(())
 }
@@ -76,9 +74,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
         let identity = {
             let ctx = session.context.read().unwrap();
-            let res = ctx.project.as_base_resource();
             ctx.client.post::<_, IdentityWithTraits>(
-                res.subpath("/identities"),
+                ctx.env_resource().subpath("/identities"),
                 NewIdentityPayload {
                     identity: identity_str.to_string(),
                     traits: if trait_payloads.is_empty() {
@@ -101,14 +98,13 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Expected args: `[pattern]`
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    let res = ctx.project.as_base_resource();
     let pattern = args
         .get(1)
         .map(|a| format!("?pattern={a}"))
         .unwrap_or_default();
     let identities = ctx
         .client
-        .get::<Vec<IdentityWithTraits>>(res.subpath(format!("/identities{pattern}")))?;
+        .get::<Vec<IdentityWithTraits>>(ctx.env_resource().subpath(format!("/identities{pattern}")))?;
 
     IdentityWithTraits::list(&identities);
     Ok(())
@@ -120,10 +116,9 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
         let ctx = session.context.read().unwrap();
-        let res = ctx.project.as_base_resource();
         let identity = resolve_identity(&ctx, identity_str)?;
         ctx.client
-            .delete(res.subpath(format!("/identities/{}", identity.value)))?;
+            .delete(ctx.env_resource().subpath(format!("/identities/{}", identity.value)))?;
 
         println!("Identity removed.");
         return Ok(());
@@ -400,9 +395,8 @@ fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,
     identity_str: &str,
 ) -> anyhow::Result<IdentityWithTraits> {
-    let res = ctx.project.as_base_resource();
     ctx.client
-        .get::<IdentityWithTraits>(res.subpath(format!("/identities/{identity_str}")))
+        .get::<IdentityWithTraits>(ctx.env_resource().subpath(format!("/identities/{identity_str}")))
 }
 
 fn strip_comments(text: &str) -> String {

@@ -1,22 +1,22 @@
 -- :name fetch_identity_by_id :<> :1
 -- :doc Fetches a single identity by id
-SELECT identity_id, identity, project_id FROM identities WHERE project_id = $1 AND identity_id = $2
+SELECT identity_id, identity, environment_id FROM identities WHERE environment_id = $1 AND identity_id = $2
 
 -- :name fetch_identity_by_value :<> :1
--- :doc Fetches a single identity by project and value
-SELECT identity_id, identity, project_id FROM identities WHERE project_id = $1 AND identity = lower($2)
+-- :doc Fetches a single identity by environment and value
+SELECT identity_id, identity, environment_id FROM identities WHERE environment_id = $1 AND identity = lower($2)
 
 -- :name fetch_identities_with_traits :<> :*
 -- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
 SELECT i.identity_id, i.identity, t.trait_id, t.name AS trait_name, it.value AS trait_value
 FROM (
-    SELECT project_id, identity_id, identity FROM identities
-    WHERE  project_id = $1 and identity LIKE $2
+    SELECT identity_id, identity FROM identities
+    WHERE  environment_id = $2 and identity LIKE $3
     ORDER BY identity
     LIMIT 10
 ) i
 LEFT JOIN identity_traits it USING(identity_id)
-LEFT JOIN traits t ON t.trait_id = it.trait_id AND t.project_id = i.project_id
+LEFT JOIN traits t ON t.trait_id = it.trait_id AND t.project_id = $1
 ORDER BY i.identity, t.name
 
 -- :name fetch_identity_traits :<> :*
@@ -52,11 +52,11 @@ DELETE FROM identity_variants WHERE identity_id = $1
 DELETE FROM identities WHERE identity_id = $1
 
 -- :name upsert_identity :<> :1
--- :doc Connects identity with variant of given id
-INSERT INTO identities(project_id, identity)
+-- :doc Creates or updates an identity scoped to the given environment
+INSERT INTO identities(environment_id, identity)
 VALUES($1, lower($2))
-ON CONFLICT (project_id, identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-RETURNING identity_id, identity, project_id
+ON CONFLICT (environment_id, identity) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+RETURNING identity_id, identity, environment_id
 
 -- :name fetch_identity_variant_for_feature :<> :?
 -- :doc Returns variant_id assigned to identity for given feature+environment
@@ -73,7 +73,7 @@ ON CONFLICT(identity_id, feature_id, environment_id) DO UPDATE SET variant_id = 
 -- :doc Returns all identities attached to given feature
 SELECT iv.identity_id, iv.feature_id, iv.variant_id, iv.environment_id, iv.migrated_id, i.identity
 FROM identity_variants iv JOIN identities i USING(identity_id)
-WHERE environment_id = $1 AND feature_id = $2
+WHERE iv.environment_id = $1 AND iv.feature_id = $2
 
 -- :name migrate_identities :<> :!
 -- :doc Migrates given percent of identities attached to one variant into the other variant
@@ -88,7 +88,7 @@ WHERE environment_id = $1 AND identity_id IN (
   ORDER BY migrated_id DESC, attached_at
   LIMIT (
     -- round division up
-    SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities))
+    SELECT MAX(0, (SELECT CAST((COUNT(*) * $4 + 99) / 100.0 AS INTEGER) FROM identities WHERE environment_id = $1))
   )
 )
 -- :name delete_identity_variant_for_feature :<> :!

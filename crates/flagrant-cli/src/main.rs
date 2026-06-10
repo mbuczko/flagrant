@@ -218,7 +218,7 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_pin,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args("status · value · pin · trait · identity"),
+        Command::Set.args("status · value · pin · trait"),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",
