@@ -230,6 +230,7 @@ pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Res
     ctx.variant_index.clear();
     ctx.identity = None;
     ctx.identity_patch = None;
+    ctx.segment = None;
     println!("Context reset.");
     Ok(())
 }

@@ -1,6 +1,6 @@
 use anyhow::bail;
 use flagrant_types::{
-    Environment, Feature, FeatureResponse, IdentityWithTraits, Project,
+    Environment, Feature, FeatureResponse, IdentityWithTraits, Project, Segment,
     payload::{FeaturePatch, IdentityPatch},
 };
 
@@ -32,6 +32,8 @@ pub struct Connection {
     pub identity: Option<IdentityWithTraits>,
     /// Staged patch for the current identity.
     pub identity_patch: Option<IdentityPatch>,
+    /// Segment currently in context - mutually exclusive with identity context.
+    pub segment: Option<Segment>,
 }
 
 impl Connection {
@@ -88,6 +90,7 @@ impl Connection {
                 variant_index: Vec::new(),
                 identity: None,
                 identity_patch: None,
+                segment: None,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
@@ -104,7 +107,8 @@ impl Connection {
     }
 
     pub fn get_or_init_identity_patch(&mut self) -> &mut IdentityPatch {
-        self.identity_patch.get_or_insert_with(IdentityPatch::default)
+        self.identity_patch
+            .get_or_insert_with(IdentityPatch::default)
     }
 
     pub fn discard_identity_pending(&mut self) {
@@ -112,11 +116,18 @@ impl Connection {
     }
 
     pub fn has_identity_pending(&self) -> bool {
-        self.identity_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
+        self.identity_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
     }
 
     pub fn env_resource(&self) -> BaseResource<'_> {
         BaseResource::Environment(&self.project.name, &self.environment.name)
+    }
+
+    pub fn project_resource(&self) -> BaseResource<'_> {
+        BaseResource::Project(&self.project.name)
     }
 
     #[cfg(feature = "blocking")]
@@ -137,4 +148,3 @@ impl Resource for Project {
         BaseResource::Project(&self.name)
     }
 }
-

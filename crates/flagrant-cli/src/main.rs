@@ -65,12 +65,17 @@ fn prompter(session: &Session<Connection>) -> String {
         Some(id) => format!(" @ {}", id.value),
         _ => String::default(),
     };
+    let seg = match &ctx.segment {
+        Some(s) => format!(" [{}]", s.name),
+        None => String::default(),
+    };
     format!(
-        "{}/{}{}{}\x1b[0m › ",
+        "{}/{}{}{}{}\x1b[0m › ",
         ctx.project.name,
         ctx.environment.name.purple(),
         feat.green(),
-        id.cyan()
+        id.cyan(),
+        seg.yellow()
     )
 }
 
@@ -78,15 +83,24 @@ fn has_feature_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().feature.is_some()
 }
 fn has_identity_ctx(session: &Session<Connection>) -> bool {
-    session.context.read().unwrap().identity.is_some()
+    let ctx = session.context.read().unwrap();
+    // Identity context is mutually exclusive with segment context.
+    ctx.identity.is_some() && ctx.segment.is_none()
 }
 fn has_feature_and_identity_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
-    ctx.feature.is_some() && ctx.identity.is_some()
+    ctx.feature.is_some() && ctx.identity.is_some() && ctx.segment.is_none()
+}
+fn has_feature_or_identity_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    (ctx.feature.is_some() || ctx.identity.is_some()) && ctx.segment.is_none()
+}
+fn has_segment_ctx(session: &Session<Connection>) -> bool {
+    session.context.read().unwrap().segment.is_some()
 }
 fn has_any_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
-    ctx.feature.is_some() || ctx.identity.is_some()
+    ctx.feature.is_some() || ctx.identity.is_some() || ctx.segment.is_some()
 }
 fn has_pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
@@ -218,7 +232,7 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_pin,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args("status · value · pin · trait"),
+        Command::Set.args_in_context("status · value · pin · trait", has_feature_or_identity_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",
@@ -233,6 +247,37 @@ fn main() -> anyhow::Result<()> {
             has_feature_and_identity_ctx,
         ),
         Command::Unset.args_in_context("trait · pin", has_identity_ctx),
+        // Segments
+        Command::Segment.op("add", "name [description]", handlers::segments::add),
+        Command::Segment.op("list", "", handlers::segments::list),
+        Command::Segment.op("describe", "[name]", handlers::segments::describe),
+        Command::Segment.op("delete", "name", handlers::segments::delete),
+        Command::Segment.op("use", "name", handlers::segments::r#use),
+        Command::Segment.args("add · delete · describe · list · use"),
+        // Groups (only in segment context)
+        Command::Group.op_in_context(
+            "add",
+            "[--and|--and-not] [description]",
+            handlers::groups::add,
+            has_segment_ctx,
+        ),
+        Command::Group.op_in_context("list", "", handlers::groups::list, has_segment_ctx),
+        Command::Group.op_in_context("delete", "label", handlers::groups::delete, has_segment_ctx),
+        Command::Group.args_in_context("add · list · delete", has_segment_ctx),
+        // Rules (only in segment context)
+        Command::Rule.op_in_context(
+            "add",
+            "group-label driver comparator value",
+            handlers::rules::add,
+            has_segment_ctx,
+        ),
+        Command::Rule.op_in_context(
+            "delete",
+            "group-label rule-index",
+            handlers::rules::delete,
+            has_segment_ctx,
+        ),
+        Command::Rule.args_in_context("add · delete", has_segment_ctx),
         // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",

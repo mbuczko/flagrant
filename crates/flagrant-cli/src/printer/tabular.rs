@@ -1,7 +1,8 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Environment, Feature, IdentityVariant, IdentityWithTraits, TraitValue,
+    Comparator, Environment, Feature, GroupConnector, IdentityVariant, IdentityWithTraits,
+    Segment, SegmentDriver, TraitValue,
     payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch},
 };
 
@@ -463,6 +464,119 @@ pub fn bar(weight: u8, width: u16) -> String {
         bar.push(' ');
     }
     format!("{0: <3}% {1: <10}", weight, bar)
+}
+
+impl Tabular for Segment {
+    type Patch = ();
+    type Context = ();
+
+    fn list(selfs: &[Self]) {
+        let rows: Vec<_> = selfs
+            .iter()
+            .map(|seg| {
+                [
+                    seg.name.clone(),
+                    seg.description.clone().unwrap_or_default(),
+                    format!("{} group(s)", seg.groups.len()),
+                ]
+            })
+            .collect();
+
+        FancyTable::create(FancyTableOpts::default())
+            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
+            .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(50), Align::Left)
+            .add_column_named_with_align("GROUPS".into(), Layout::Fixed(12), Align::Left)
+            .width(100)
+            .build()
+            .render(rows);
+    }
+
+    fn describe(&self, _patch: Option<&()>, _ctx: &()) {
+        let desc_str = self.description.as_deref().unwrap_or("");
+        let title = format!("Segment: {} (ID={})", self.name, self.id);
+
+        let mut group_lines: Vec<String> = Vec::new();
+        for group in &self.groups {
+            let connector_str = match &group.connector {
+                None => String::new(),
+                Some(GroupConnector::And) => format!("{}\n", "AND".bright_cyan()),
+                Some(GroupConnector::AndNot) => format!("{}\n", "AND NOT".bright_cyan()),
+            };
+            let desc = group
+                .description
+                .as_deref()
+                .map(|d| format!(" {}", d.dimmed()))
+                .unwrap_or_default();
+
+            let rules_str = if group.rules.is_empty() {
+                "  (no rules)".dimmed().to_string()
+            } else {
+                group
+                    .rules
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        let driver = format_driver(&r.driver);
+                        let comparator = format_comparator(&r.comparator);
+                        format!(
+                            "  {}. {} {} {}",
+                            i + 1,
+                            driver.bright_blue(),
+                            comparator.dimmed(),
+                            r.value.green()
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+
+            group_lines.push(format!(
+                "{}[{}]{}\n{}",
+                connector_str,
+                group.label.yellow(),
+                desc,
+                rules_str
+            ));
+        }
+
+        let groups_str = group_lines.join("\n");
+
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(13), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 1)
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+
+        let mut rows: Vec<Vec<String>> = vec![vec!["DESCRIPTION".to_string(), desc_str.to_string()]];
+        if !groups_str.is_empty() {
+            rows.push(vec!["RULES".to_string(), groups_str]);
+        }
+        table.render(rows);
+    }
+}
+
+fn format_driver(driver: &SegmentDriver) -> String {
+    match driver {
+        SegmentDriver::Identity => "identity".to_string(),
+        SegmentDriver::Trait(name) => format!("trait:{name}"),
+        SegmentDriver::Environment => "environment".to_string(),
+    }
+}
+
+fn format_comparator(comparator: &Comparator) -> &'static str {
+    match comparator {
+        Comparator::ExactlyMatches => "exactly-matches",
+        Comparator::DoesNotMatch => "does-not-match",
+        Comparator::Contains => "contains",
+        Comparator::DoesNotContain => "does-not-contain",
+        Comparator::GreaterThan => "greater-than",
+        Comparator::GreaterEqualThan => "greater-equal-than",
+        Comparator::LowerThan => "lower-than",
+        Comparator::LowerEqualThan => "lower-equal-than",
+        Comparator::In => "in",
+        Comparator::NotIn => "not-in",
+    }
 }
 
 fn format_trait_value(value: &Option<TraitValue>) -> String {

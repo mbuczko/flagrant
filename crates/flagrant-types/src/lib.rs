@@ -119,39 +119,177 @@ pub struct IdentityVariant {
     pub pinned_at: Option<NaiveDateTime>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SegmentDriver {
+    /// Match against the identity value string (e.g. email, user ID).
+    Identity,
+    /// Match against a named identity trait. The `String` is the trait name.
+    Trait(String),
+    /// Match against the environment name.
+    Environment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Comparator {
+    ExactlyMatches,
+    DoesNotMatch,
+    Contains,
+    DoesNotContain,
+    GreaterThan,
+    GreaterEqualThan,
+    LowerThan,
+    LowerEqualThan,
+    /// Value must be a JSON array string, e.g. `["a","b"]`.
+    In,
+    /// Value must be a JSON array string.
+    NotIn,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentRule {
+    #[sqlx(rename = "rule_id")]
+    pub id: i32,
+    pub driver: SegmentDriver,
+    pub comparator: Comparator,
+    /// For `In`/`NotIn` comparators this is a JSON array string; otherwise a plain value.
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupConnector {
+    And,
+    AndNot,
+}
+
+impl sqlx::Type<Sqlite> for SegmentDriver {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for SegmentDriver {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::Identity => "identity".to_string(),
+            Self::Trait(name) => format!("trait:{name}"),
+            Self::Environment => "environment".to_string(),
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for SegmentDriver {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "identity" => Ok(Self::Identity),
+            "environment" => Ok(Self::Environment),
+            _ if s.starts_with("trait:") => Ok(Self::Trait(s[6..].to_string())),
+            _ => Err(format!("Unknown segment driver: {s}").into()),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for Comparator {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for Comparator {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::ExactlyMatches => "exactly_matches",
+            Self::DoesNotMatch => "does_not_match",
+            Self::Contains => "contains",
+            Self::DoesNotContain => "does_not_contain",
+            Self::GreaterThan => "greater_than",
+            Self::GreaterEqualThan => "greater_equal_than",
+            Self::LowerThan => "lower_than",
+            Self::LowerEqualThan => "lower_equal_than",
+            Self::In => "in",
+            Self::NotIn => "not_in",
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for Comparator {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "exactly_matches" => Ok(Self::ExactlyMatches),
+            "does_not_match" => Ok(Self::DoesNotMatch),
+            "contains" => Ok(Self::Contains),
+            "does_not_contain" => Ok(Self::DoesNotContain),
+            "greater_than" => Ok(Self::GreaterThan),
+            "greater_equal_than" => Ok(Self::GreaterEqualThan),
+            "lower_than" => Ok(Self::LowerThan),
+            "lower_equal_than" => Ok(Self::LowerEqualThan),
+            "in" => Ok(Self::In),
+            "not_in" => Ok(Self::NotIn),
+            _ => Err(format!("Unknown comparator: {s}").into()),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for GroupConnector {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for GroupConnector {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::And => "and",
+            Self::AndNot => "and_not",
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for GroupConnector {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "and" => Ok(Self::And),
+            "and_not" => Ok(Self::AndNot),
+            _ => Err(format!("Unknown group connector: {s}").into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentGroup {
+    #[sqlx(rename = "group_id")]
+    pub id: i32,
+    /// Stable auto-generated label (e.g. "group-1"). Never reassigned after deletion.
+    pub label: String,
+    pub description: Option<String>,
+    /// `None` for the first (head) group; `Some` for all subsequent groups.
+    pub connector: Option<GroupConnector>,
+    pub rules: Vec<SegmentRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
 pub struct Segment {
     #[sqlx(rename = "segment_id")]
     pub id: i32,
+    pub project_id: i32,
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
     #[validate(max_length = 255)]
     pub name: String,
     #[validate(max_length = 2048)]
     pub description: Option<String>,
-    pub groups: Vec<SegmentGroupChain>,
-}
-
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
-pub struct SegmentGroupChain {
-    pub head: SegmentGroup,
-    pub tail: Vec<ConnectedGroup>,
-}
-
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
-pub struct SegmentGroup {
-    pub entries: SegmentEntries,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub enum ConnectedGroup {
-    And(SegmentGroup),
-    AndNot(SegmentGroup),
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub enum SegmentEntries {
-    Identities(Vec<Identity>),
-    Environments(Vec<i32>),
+    /// Groups ordered by position; first group has `connector = None`.
+    pub groups: Vec<SegmentGroup>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]

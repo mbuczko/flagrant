@@ -6,7 +6,7 @@ use sqlx::{Pool, Sqlite};
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 
-use crate::handlers::{environments, features, identities, projects, traits, variants};
+use crate::handlers::{environments, features, identities, projects, segments, traits, variants};
 use crate::openapi::ApiDoc;
 use crate::{api, handlers::tags};
 
@@ -61,8 +61,14 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Identities
         .route("/envs/:environment/identities", get(identities::list))
         .route("/envs/:environment/identities", post(identities::create))
-        .route("/envs/:environment/identities/:identity", get(identities::fetch))
-        .route("/envs/:environment/identities/:identity", delete(identities::delete))
+        .route(
+            "/envs/:environment/identities/:identity",
+            get(identities::fetch),
+        )
+        .route(
+            "/envs/:environment/identities/:identity",
+            delete(identities::delete),
+        )
         .route(
             "/envs/:environment/identities/:identity",
             patch(identities::update),
@@ -74,7 +80,26 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Traits
         .route("/traits", get(traits::list))
         .route("/traits", post(traits::create))
-        .route("/traits/:trait_id", delete(traits::delete));
+        .route("/traits/:trait_id", delete(traits::delete))
+        // Segments
+        .route("/segments", get(segments::list))
+        .route("/segments", post(segments::create))
+        .route("/segments/:segment_id", get(segments::fetch))
+        .route("/segments/:segment_id", put(segments::update))
+        .route("/segments/:segment_id", delete(segments::delete))
+        .route("/segments/:segment_id/groups", post(segments::add_group))
+        .route(
+            "/segments/:segment_id/groups/:group_id",
+            delete(segments::delete_group),
+        )
+        .route(
+            "/segments/:segment_id/groups/:group_id/rules",
+            post(segments::add_rule),
+        )
+        .route(
+            "/segments/:segment_id/groups/:group_id/rules/:rule_id",
+            delete(segments::delete_rule),
+        );
 
     Router::new()
         .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))

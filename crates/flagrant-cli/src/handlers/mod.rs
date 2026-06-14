@@ -1,7 +1,10 @@
 pub mod environments;
 pub mod features;
+pub mod groups;
 pub mod identities;
 pub mod projects;
+pub mod rules;
+pub mod segments;
 pub mod variants;
 
 pub(crate) mod internal;

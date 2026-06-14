@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Environment, Feature, FeatureValue, Project, TraitValue};
+use crate::{Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, SegmentDriver, TraitValue};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
@@ -124,4 +124,24 @@ impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
         self.traits.is_empty() && self.overrides.is_empty() && self.unpins.is_empty()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewSegmentPayload {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewGroupPayload {
+    pub description: Option<String>,
+    /// Required for all groups except the first (head) group of a segment.
+    pub connector: Option<GroupConnector>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewRulePayload {
+    pub driver: SegmentDriver,
+    pub comparator: Comparator,
+    pub value: String,
 }
