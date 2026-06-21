@@ -32,7 +32,7 @@ use utoipa::OpenApi;
         crate::handlers::traits::delete,
         crate::handlers::segments::list,
         crate::handlers::segments::create,
-        crate::handlers::segments::fetch,
+        crate::handlers::segments::fetch_by_id_or_name,
         crate::handlers::segments::update,
         crate::handlers::segments::delete,
         crate::handlers::segments::add_group,

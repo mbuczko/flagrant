@@ -4,11 +4,43 @@ use axum::{
 };
 use flagrant::models::{project, segment};
 use flagrant_types::{
-    Segment, SegmentGroup, SegmentRule,
+    Project, Segment, SegmentGroup, SegmentRule,
     payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload},
 };
+use serde::Deserialize;
+use sqlx::SqliteConnection;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
+
+#[derive(Debug)]
+pub(crate) enum SegmentId {
+    Id(i32),
+    Name(String),
+}
+
+impl<'de> Deserialize<'de> for SegmentId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.parse::<i32>() {
+            Ok(id) => Ok(SegmentId::Id(id)),
+            Err(_) => Ok(SegmentId::Name(s)),
+        }
+    }
+}
+
+async fn resolve_segment(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    segment_id: SegmentId,
+) -> anyhow::Result<Segment> {
+    match segment_id {
+        SegmentId::Id(id) => segment::get_by_id(conn, project, id).await,
+        SegmentId::Name(name) => segment::get_by_name(conn, project, name).await,
+    }
+}
 
 /// Lists all segments for the given project.
 #[utoipa::path(
@@ -60,19 +92,19 @@ pub async fn create(
     path = "/projects/{project}/segments/{segment_id}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID")
+        ("segment_id" = String, Path, description = "Segment ID or name")
     ),
     responses(
         (status = 200, description = "Segment details", body = Segment)
     ),
     tag = "segments"
 )]
-pub async fn fetch(
+pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, i32)>,
+    Path((project_name, segment_id)): Path<(String, SegmentId)>,
 ) -> Result<Json<Segment>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = segment::get_by_id(&mut conn, &project, segment_id).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     Ok(Json(seg))
 }
 
@@ -82,7 +114,7 @@ pub async fn fetch(
     path = "/projects/{project}/segments/{segment_id}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID")
+        ("segment_id" = String, Path, description = "Segment ID or name")
     ),
     request_body = NewSegmentPayload,
     responses(
@@ -92,11 +124,11 @@ pub async fn fetch(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, i32)>,
+    Path((project_name, segment_id)): Path<(String, SegmentId)>,
     Json(payload): Json<NewSegmentPayload>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = segment::get_by_id(&mut conn, &project, segment_id).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::update(&mut conn, &seg, payload.name, payload.description).await?;
     Ok(Json(()))
 }
@@ -107,7 +139,7 @@ pub async fn update(
     path = "/projects/{project}/segments/{segment_id}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID")
+        ("segment_id" = String, Path, description = "Segment ID or name")
     ),
     responses(
         (status = 200, description = "Segment deleted")
@@ -116,10 +148,10 @@ pub async fn update(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, i32)>,
+    Path((project_name, segment_id)): Path<(String, SegmentId)>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = segment::get_by_id(&mut conn, &project, segment_id).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::delete(&mut conn, &seg).await?;
     Ok(Json(()))
 }
@@ -133,7 +165,7 @@ pub async fn delete(
     path = "/projects/{project}/segments/{segment_id}/groups",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID")
+        ("segment_id" = String, Path, description = "Segment ID or name")
     ),
     request_body = NewGroupPayload,
     responses(
@@ -143,11 +175,11 @@ pub async fn delete(
 )]
 pub async fn add_group(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, i32)>,
+    Path((project_name, segment_id)): Path<(String, SegmentId)>,
     Json(payload): Json<NewGroupPayload>,
 ) -> Result<Json<SegmentGroup>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = segment::get_by_id(&mut conn, &project, segment_id).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     let group = segment::add_group(&mut conn, &seg, payload.description, payload.connector).await?;
     Ok(Json(group))
 }
@@ -158,7 +190,7 @@ pub async fn add_group(
     path = "/projects/{project}/segments/{segment_id}/groups/{group_id}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID"),
+        ("segment_id" = String, Path, description = "Segment ID or name"),
         ("group_id" = i32, Path, description = "Group ID")
     ),
     responses(
@@ -168,10 +200,10 @@ pub async fn add_group(
 )]
 pub async fn delete_group(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id, group_id)): Path<(String, i32, i32)>,
+    Path((project_name, segment_id, group_id)): Path<(String, SegmentId, i32)>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = segment::get_by_id(&mut conn, &project, segment_id).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::delete_group(&mut conn, &seg, group_id).await?;
     Ok(Json(()))
 }
@@ -182,7 +214,7 @@ pub async fn delete_group(
     path = "/projects/{project}/segments/{segment_id}/groups/{group_id}/rules",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID"),
+        ("segment_id" = String, Path, description = "Segment ID or name"),
         ("group_id" = i32, Path, description = "Group ID")
     ),
     request_body = NewRulePayload,
@@ -193,7 +225,7 @@ pub async fn delete_group(
 )]
 pub async fn add_rule(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, _segment_id, group_id)): Path<(String, i32, i32)>,
+    Path((project_name, _segment_id, group_id)): Path<(String, SegmentId, i32)>,
     Json(payload): Json<NewRulePayload>,
 ) -> Result<Json<SegmentRule>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
@@ -207,7 +239,7 @@ pub async fn add_rule(
     path = "/projects/{project}/segments/{segment_id}/groups/{group_id}/rules/{rule_id}",
     params(
         ("project" = String, Path, description = "Project name"),
-        ("segment_id" = i32, Path, description = "Segment ID"),
+        ("segment_id" = String, Path, description = "Segment ID or name"),
         ("group_id" = i32, Path, description = "Group ID"),
         ("rule_id" = i32, Path, description = "Rule ID")
     ),
@@ -218,7 +250,7 @@ pub async fn add_rule(
 )]
 pub async fn delete_rule(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, _segment_id, _group_id, rule_id)): Path<(String, i32, i32, i32)>,
+    Path((project_name, _segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
 ) -> Result<Json<()>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
     segment::delete_rule(&mut conn, rule_id).await?;

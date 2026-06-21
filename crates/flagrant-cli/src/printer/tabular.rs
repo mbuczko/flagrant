@@ -1,8 +1,8 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
 use flagrant_types::{
-    Comparator, Environment, Feature, GroupConnector, IdentityVariant, IdentityWithTraits,
-    Segment, SegmentDriver, TraitValue,
+    Comparator, Environment, Feature, GroupConnector, IdentityVariant, IdentityWithTraits, Segment,
+    SegmentDriver, TraitValue,
     payload::{FeaturePatch, IdentityOverridePatch, IdentityPatch},
 };
 
@@ -179,7 +179,7 @@ impl Tabular for IdentityWithTraits {
                     Layout::Expandable(100),
                     Align::Left,
                     Overflow::Truncate,
-                    10,
+                    11,
                 )
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
@@ -209,7 +209,7 @@ impl Tabular for IdentityWithTraits {
                                 format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
                                     .green()
                                     .to_string(),
-                                "pinned".green().to_string(),
+                                "pinning".green().to_string(),
                             )
                         })
                         .unzip();
@@ -223,7 +223,7 @@ impl Tabular for IdentityWithTraits {
                         )
                         .to_string(),
                     );
-                    override_stage.push("unpinned".red().to_string());
+                    override_stage.push("unpinning".red().to_string());
                 }
                 rows.push(vec![
                     "OVERRIDES".to_string(),
@@ -543,12 +543,19 @@ impl Tabular for Segment {
 
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(13), Align::Right, Overflow::Truncate, 1)
-            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                1,
+            )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let mut rows: Vec<Vec<String>> = vec![vec!["DESCRIPTION".to_string(), desc_str.to_string()]];
+        let mut rows: Vec<Vec<String>> =
+            vec![vec!["DESCRIPTION".to_string(), desc_str.to_string()]];
         if !groups_str.is_empty() {
             rows.push(vec!["RULES".to_string(), groups_str]);
         }

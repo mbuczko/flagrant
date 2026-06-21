@@ -97,9 +97,10 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
 
     // Create identities by requesting a feature on their behalf
     for n in 1..=10 {
-        let ident = identity::get_or_create_by_value(&mut conn, &environment, format!("identity_{n}"))
-            .await
-            .unwrap();
+        let ident =
+            identity::get_or_create_by_value(&mut conn, &environment, format!("identity_{n}"))
+                .await
+                .unwrap();
         identity::get_identity_variants(&mut conn, &environment, &ident)
             .await
             .unwrap();
@@ -207,8 +208,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
-            .await,
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant).await,
         5
     );
 
@@ -223,8 +223,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
-            .await,
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant).await,
         8
     );
 
@@ -243,8 +242,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
     .unwrap();
 
     assert_eq!(
-        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant)
-            .await,
+        idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant).await,
         1
     );
 
@@ -289,9 +287,14 @@ async fn create_identity_with_traits(mut conn: PoolConnection<Sqlite>) {
             value: Some(TraitValue::Int(30)),
         },
     ];
-    let created = identity::create(&mut conn, &environment, "user_bob".to_owned(), trait_payloads)
-        .await
-        .unwrap();
+    let created = identity::create(
+        &mut conn,
+        &environment,
+        "user_bob".to_owned(),
+        trait_payloads,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(created.value, "user_bob");
     assert_eq!(created.traits.len(), 2);
@@ -309,9 +312,14 @@ async fn update_identity_traits(mut conn: PoolConnection<Sqlite>) {
         name: "country".to_owned(),
         value: Some(TraitValue::Str("pl".to_owned())),
     }];
-    let created = identity::create(&mut conn, &environment, "user_carol".to_owned(), initial_traits)
-        .await
-        .unwrap();
+    let created = identity::create(
+        &mut conn,
+        &environment,
+        "user_carol".to_owned(),
+        initial_traits,
+    )
+    .await
+    .unwrap();
     assert_eq!(created.traits.len(), 1);
 
     let stored = identity::get_by_value(&mut conn, &environment, created.value)
@@ -490,7 +498,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         &mut conn,
         &environment,
         &alt_variant,
-        FeatureValue::build("alt"),
+        FeatureValue::build("alter"),
         0,
     )
     .await
@@ -565,7 +573,11 @@ async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) 
     let b_identities = identity::list(&mut conn, &env_b, None).await.unwrap();
     assert_eq!(b_identities.len(), 2);
     let a_identities = identity::list(&mut conn, &env_a, None).await.unwrap();
-    assert_eq!(a_identities.len(), 2, "env_a should still have only 2 identities");
+    assert_eq!(
+        a_identities.len(),
+        2,
+        "env_a should still have only 2 identities"
+    );
 }
 
 #[sqlx::test]
@@ -606,9 +618,14 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
             value: Some(TraitValue::Str("free".to_owned())),
         },
     ];
-    let created = identity::create(&mut conn, &environment, "user_eve".to_owned(), trait_payloads)
-        .await
-        .unwrap();
+    let created = identity::create(
+        &mut conn,
+        &environment,
+        "user_eve".to_owned(),
+        trait_payloads,
+    )
+    .await
+    .unwrap();
     assert_eq!(created.traits.len(), 2);
 
     let all_traits = traits::get_all(&mut conn, project.id).await.unwrap();
@@ -633,9 +650,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
 /// group, which may be the control variant rather than the pinned one, making
 /// `IDENTITY describe` show the control value as if nothing changed.
 #[sqlx::test]
-async fn list_variant_assignments_returns_pinned_variant_value(
-    mut conn: PoolConnection<Sqlite>,
-) {
+async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
 
     // Feature with a control value and a 0%-weight non-control variant.
@@ -664,9 +679,15 @@ async fn list_variant_assignments_returns_pinned_variant_value(
         .await
         .unwrap();
 
-    identity::override_variant(&mut conn, &environment, &alice, feature.id, zero_pct_variant.id)
-        .await
-        .unwrap();
+    identity::override_variant(
+        &mut conn,
+        &environment,
+        &alice,
+        feature.id,
+        zero_pct_variant.id,
+    )
+    .await
+    .unwrap();
 
     // list_variant_assignments is what IDENTITY describe calls — it must surface the
     // pinned variant's value, not fall back to the control variant.
