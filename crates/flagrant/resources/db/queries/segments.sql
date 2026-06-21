@@ -22,6 +22,13 @@ FROM segments
 WHERE project_id = $1
 ORDER BY name
 
+-- :name fetch_segments_by_pattern :<> :*
+-- :doc Returns segments for the given project with names matching a LIKE pattern
+SELECT segment_id, project_id, name, description
+FROM segments
+WHERE project_id = $1 AND name LIKE $2
+ORDER BY name
+
 -- :name update_segment :<> :!
 -- :doc Updates segment name and description
 UPDATE segments SET name = $2, description = $3 WHERE segment_id = $1

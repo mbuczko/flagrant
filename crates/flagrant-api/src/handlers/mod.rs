@@ -16,7 +16,7 @@ type TagsTuple<'a> = (
 
 /// Parses pattern parameter: wraps non-empty string with SQL wildcards.
 pub fn parse_pattern(pattern: Option<String>, prefix: Option<String>) -> Option<String> {
-    match (pattern, prefix) {
+    match (pattern.filter(|s| !s.is_empty()), prefix.filter(|s| !s.is_empty())) {
         (Some(p), _) => Some(format!("%{p}%")),
         (_, Some(p)) => Some(format!("{p}%")),
         _ => None,

@@ -92,10 +92,15 @@ pub async fn get_by_name(
 pub async fn get_all(
     conn: &mut SqliteConnection,
     project: &Project,
+    pattern: Option<String>,
 ) -> anyhow::Result<Vec<Segment>> {
-    let rows = SQLSegments::fetch_segments::<_, SegmentRow>(&mut *conn, params![project.id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not list segments", e))?;
+    let rows = match pattern {
+        Some(pat) => {
+            SQLSegments::fetch_segments_by_pattern::<_, SegmentRow>(&mut *conn, params![project.id, pat]).await
+        }
+        None => SQLSegments::fetch_segments::<_, SegmentRow>(&mut *conn, params![project.id]).await,
+    }
+    .map_err(|e| FlagrantError::QueryFailed("Could not list segments", e))?;
 
     load_all_segments(&mut *conn, rows).await
 }

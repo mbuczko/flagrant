@@ -8,7 +8,8 @@ use crate::printer::tabular::Tabular;
 fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Segment> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project_resource();
-    ctx.client.get::<Segment>(res.subpath(format!("/segments/{name}")))
+    ctx.client
+        .get::<Segment>(res.subpath(format!("/segments/{name}")))
 }
 
 /// Create a new segment and enter its context.
@@ -34,12 +35,19 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// List all segments in the current project.
-pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// List all segments in the current project, optionally filtered by a name substring.
+///
+/// An optional bare string argument is treated as a substring filter (e.g. `SEGMENT list seg`).
+pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project_resource();
-    let segments = ctx.client.get::<Vec<Segment>>(res.subpath("/segments"))?;
-    Segment::list(&segments);
+    let pat = args.get(1).map(std::ops::Deref::deref).unwrap_or("");
+
+    Segment::list(
+        ctx.client
+            .get::<Vec<Segment>>(res.subpath(format!("/segments?pattern={pat}")))?
+            .as_ref(),
+    );
     Ok(())
 }
 
@@ -71,7 +79,8 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     {
         let ctx = session.context.read().unwrap();
         let res = ctx.project_resource();
-        ctx.client.delete(res.subpath(format!("/segments/{}", segment.id)))?;
+        ctx.client
+            .delete(res.subpath(format!("/segments/{}", segment.id)))?;
     }
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.as_ref().map(|s| s.id) == Some(segment.id) {

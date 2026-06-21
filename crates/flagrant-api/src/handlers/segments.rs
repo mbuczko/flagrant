@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::Path,
+    extract::{Path, Query},
 };
 use flagrant::models::{project, segment};
 use flagrant_types::{
@@ -9,8 +9,15 @@ use flagrant_types::{
 };
 use serde::Deserialize;
 use sqlx::SqliteConnection;
+use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct SegmentQueryParams {
+    prefix: Option<String>,
+    pattern: Option<String>,
+}
 
 #[derive(Debug)]
 pub(crate) enum SegmentId {
@@ -47,7 +54,8 @@ async fn resolve_segment(
     get,
     path = "/projects/{project}/segments",
     params(
-        ("project" = String, Path, description = "Project name")
+        ("project" = String, Path, description = "Project name"),
+        SegmentQueryParams
     ),
     responses(
         (status = 200, description = "List of segments", body = Vec<Segment>)
@@ -56,10 +64,16 @@ async fn resolve_segment(
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
+    Query(params): Query<SegmentQueryParams>,
     Path(project_name): Path<String>,
 ) -> Result<Json<Vec<Segment>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
-    let segments = segment::get_all(&mut conn, &project).await?;
+    let segments = segment::get_all(
+        &mut conn,
+        &project,
+        super::parse_pattern(params.pattern, params.prefix),
+    )
+    .await?;
     Ok(Json(segments))
 }
 

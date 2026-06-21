@@ -1,6 +1,6 @@
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, completer::AutoCompleter, session::Session};
-use flagrant_types::{Environment, Feature, IdentityWithTraits, Tag, Trait};
+use flagrant_types::{Environment, Feature, IdentityWithTraits, Segment, Tag, Trait};
 
 pub struct ArgCompleter<'a> {
     pub session: &'a Session<Connection>,
@@ -148,6 +148,27 @@ impl AutoCompleter for ArgCompleter<'_> {
                         None => filter_by_prefix(&["tag", "enabled", "archived"], prefix),
                         _ => vec![],
                     },
+                    _ => vec![],
+                })
+            }
+            "SEGMENT" if arg_n >= 2 => {
+                let ctx = self.session.context.read().unwrap();
+                let res = ctx.project_resource();
+                let op: &str = &args[1];
+
+                Ok(match op {
+                    "use" | "describe" | "delete" if arg_n == 2 => ctx
+                        .client
+                        .get::<Vec<Segment>>(res.subpath(format!("/segments?prefix={prefix}")))?
+                        .into_iter()
+                        .map(|s| s.name)
+                        .collect::<Vec<_>>(),
+                    "list" if arg_n == 2 => ctx
+                        .client
+                        .get::<Vec<Segment>>(res.subpath(format!("/segments?pattern={prefix}")))?
+                        .into_iter()
+                        .map(|s| s.name)
+                        .collect::<Vec<_>>(),
                     _ => vec![],
                 })
             }
