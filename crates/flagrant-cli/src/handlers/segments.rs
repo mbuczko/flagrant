@@ -82,6 +82,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         ctx.client
             .delete(res.subpath(format!("/segments/{}", segment.id)))?;
     }
+
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.as_ref().map(|s| s.id) == Some(segment.id) {
         ctx.segment = None;
@@ -99,9 +100,11 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     };
     let segment = fetch_segment(name, session)?;
     segment.describe(None, &());
-    let mut ctx = session.context.write().unwrap();
+
+    let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
     ctx.identity = None;
     ctx.identity_patch = None;
     ctx.segment = Some(segment);
+
     Ok(())
 }

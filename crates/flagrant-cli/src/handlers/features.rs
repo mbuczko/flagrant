@@ -27,7 +27,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::{identities, open_in_editor, internal::stage},
+    handlers::{identities, internal::stage, open_in_editor},
     printer::tabular::Tabular,
 };
 use flagrant_client::connection::VariantRef;
@@ -273,7 +273,7 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// Accepts optional filter arguments of the form `tag:a,b`, `status:active`,
 /// and `state:on`, plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
+    let ctx: std::sync::RwLockReadGuard<'_, Connection> = session.context.read().unwrap();
     let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);

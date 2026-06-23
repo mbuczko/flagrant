@@ -151,9 +151,12 @@ pub async fn add_group(
         .unwrap_or(0);
     let label = format!("group-{}", max_label_num + 1);
 
-    // First group always has no connector, regardless of what was passed.
-    let effective_connector: Option<GroupConnector> =
-        if existing.is_empty() { None } else { connector };
+    // First group always has no connector; subsequent groups default to AND if unspecified.
+    let effective_connector: Option<GroupConnector> = if existing.is_empty() {
+        None
+    } else {
+        Some(connector.unwrap_or(GroupConnector::And))
+    };
 
     let row = SQLSegments::add_group::<_, GroupRow>(
         &mut *conn,

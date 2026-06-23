@@ -497,46 +497,63 @@ impl Tabular for Segment {
 
         let mut group_lines: Vec<String> = Vec::new();
         for group in &self.groups {
-            let connector_str = match &group.connector {
-                None => String::new(),
-                Some(GroupConnector::And) => format!("{}\n", "AND".bright_cyan()),
-                Some(GroupConnector::AndNot) => format!("{}\n", "AND NOT".bright_cyan()),
-            };
-            let desc = group
+            // Connector separator between groups
+            if let Some(connector) = &group.connector {
+                let sym = match connector {
+                    GroupConnector::And => "⊕ AND",
+                    GroupConnector::AndNot => "⊖ AND NOT",
+                };
+                group_lines.push(format!("\n {}\n", sym.bright_cyan()));
+            }
+
+            // Group header: ╭─ group-label ─ description
+            let desc_part = group
                 .description
                 .as_deref()
-                .map(|d| format!(" {}", d.dimmed()))
+                .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
                 .unwrap_or_default();
+            group_lines.push(format!(
+                "{} {}{}",
+                "╭─".dimmed(),
+                group.label.yellow(),
+                desc_part,
+            ));
 
-            let rules_str = if group.rules.is_empty() {
-                "  (no rules)".dimmed().to_string()
+            // Rules (column-aligned)
+            if group.rules.is_empty() {
+                group_lines.push(format!("{}  {}", "│".dimmed(), "(no rules)".dimmed()));
             } else {
-                group
+                let max_driver = group
                     .rules
                     .iter()
-                    .enumerate()
-                    .map(|(i, r)| {
-                        let driver = format_driver(&r.driver);
-                        let comparator = format_comparator(&r.comparator);
-                        format!(
-                            "  {}. {} {} {}",
-                            i + 1,
-                            driver.bright_blue(),
-                            comparator.dimmed(),
-                            r.value.green()
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            };
+                    .map(|r| format_driver(&r.driver).len())
+                    .max()
+                    .unwrap_or(0);
+                let max_cmp = group
+                    .rules
+                    .iter()
+                    .map(|r| format_comparator(&r.comparator).len())
+                    .max()
+                    .unwrap_or(0);
 
-            group_lines.push(format!(
-                "{}[{}]{}\n{}",
-                connector_str,
-                group.label.yellow(),
-                desc,
-                rules_str
-            ));
+                for (i, r) in group.rules.iter().enumerate() {
+                    let driver = format_driver(&r.driver);
+                    let cmp = format_comparator(&r.comparator);
+                    group_lines.push(format!(
+                        "{}  {}  {:<dw$}  {:<cw$}  {}",
+                        "│".dimmed(),
+                        (i + 1).to_string().dimmed(),
+                        driver.bright_blue(),
+                        cmp.dimmed(),
+                        r.value.green(),
+                        dw = max_driver,
+                        cw = max_cmp,
+                    ));
+                }
+            }
+
+            // Closing rounded corner
+            group_lines.push("╰───".dimmed().to_string());
         }
 
         let groups_str = group_lines.join("\n");
@@ -548,18 +565,31 @@ impl Tabular for Segment {
                 Layout::Expandable(120),
                 Align::Left,
                 Overflow::Truncate,
-                1,
+                20,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();
 
-        let mut rows: Vec<Vec<String>> =
-            vec![vec!["DESCRIPTION".to_string(), desc_str.to_string()]];
-        if !groups_str.is_empty() {
-            rows.push(vec!["RULES".to_string(), groups_str]);
-        }
+        let rows: Vec<Vec<String>> = vec![
+            vec!["DESCRIPTION".to_string(), desc_str.to_string()],
+            vec!["RULES".to_string(), groups_str],
+        ];
         table.render(rows);
+
+        // Hints printed below the table
+        if self.groups.is_empty() {
+            println!("{}", "(no groups — use GROUP add to create one)".dimmed());
+        } else {
+            println!();
+            println!(
+                "  {}",
+                "RULE add <group-label> <driver> <comparator> <value>".dimmed()
+            );
+            println!("  {}", "RULE delete <group-label> <rule-index>".dimmed());
+            println!("  {}", "GROUP add [--and|--and-not] [description]".dimmed());
+            println!("  {}", "GROUP delete <label>".dimmed());
+        }
     }
 }
 
