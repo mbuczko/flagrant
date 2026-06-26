@@ -143,7 +143,13 @@ pub async fn update(
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    segment::update(&mut conn, &seg, &payload.name, payload.description.as_deref()).await?;
+    segment::update(
+        &mut conn,
+        &seg,
+        &payload.name,
+        payload.description.as_deref(),
+    )
+    .await?;
     Ok(Json(()))
 }
 
@@ -255,7 +261,14 @@ pub async fn add_rule(
     Json(payload): Json<NewRulePayload>,
 ) -> Result<Json<SegmentRule>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
-    let rule = segment::add_rule(&mut conn, group_id, payload.driver, payload.comparator, payload.value).await?;
+    let rule = segment::add_rule(
+        &mut conn,
+        group_id,
+        payload.driver,
+        payload.comparator,
+        payload.value,
+    )
+    .await?;
     Ok(Json(rule))
 }
 

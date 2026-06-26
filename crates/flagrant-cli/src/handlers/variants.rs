@@ -24,8 +24,8 @@ use flagrant_types::{
 };
 
 use crate::handlers::{
+    internal::{effectives as effective, index, stage},
     open_in_editor,
-    internal::{index, stage, effectives as effective},
 };
 use crate::printer::tabular::{VariantRow, bar, variant_list};
 

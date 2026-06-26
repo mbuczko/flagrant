@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, SegmentDriver, TraitValue};
+use crate::{
+    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, SegmentDriver,
+    TraitValue,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {

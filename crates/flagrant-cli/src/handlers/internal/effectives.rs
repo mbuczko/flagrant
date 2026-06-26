@@ -288,8 +288,8 @@ pub(crate) fn effective_segment(
                 })
                 .collect();
 
-            if !is_deleted {
-                if let Some(staged) = staged_rules_by_label.get(g.label.as_str()) {
+            if !is_deleted
+                && let Some(staged) = staged_rules_by_label.get(g.label.as_str()) {
                     for op in staged {
                         if let SegmentPatchOp::AddRule {
                             driver,
@@ -308,7 +308,6 @@ pub(crate) fn effective_segment(
                         }
                     }
                 }
-            }
 
             EffectiveGroup {
                 label: g.label.clone(),

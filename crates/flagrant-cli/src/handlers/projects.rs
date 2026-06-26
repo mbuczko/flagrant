@@ -1,6 +1,9 @@
 use anyhow::bail;
 use flagrant_client::http::HttpClient;
-use flagrant_types::{Environment, Project, payload::{ProjectCreatedResponse, NewProjectPayload}};
+use flagrant_types::{
+    Environment, Project,
+    payload::{NewProjectPayload, ProjectCreatedResponse},
+};
 
 pub fn list_projects(client: &HttpClient) -> anyhow::Result<Vec<Project>> {
     match client.get::<Vec<Project>>("/projects/".into()) {

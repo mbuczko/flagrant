@@ -3,45 +3,6 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Comparator, SegmentDriver, payload::SegmentPatchOp};
 
-fn parse_driver(s: &str) -> anyhow::Result<SegmentDriver> {
-    match s {
-        "identity" => Ok(SegmentDriver::Identity),
-        "environment" => Ok(SegmentDriver::Environment),
-        _ if s.starts_with("trait:") => {
-            let name = s.trim_start_matches("trait:");
-            if name.is_empty() {
-                bail!("Trait name cannot be empty. Use: trait:<name>");
-            }
-            Ok(SegmentDriver::Trait(name.to_string()))
-        }
-        _ => bail!(
-            "Unknown driver '{}'. Expected: identity, environment, trait:<name>",
-            s
-        ),
-    }
-}
-
-fn parse_comparator(s: &str) -> anyhow::Result<Comparator> {
-    match s {
-        "exactly-matches" | "exactly_matches" => Ok(Comparator::ExactlyMatches),
-        "does-not-match" | "does_not_match" => Ok(Comparator::DoesNotMatch),
-        "contains" => Ok(Comparator::Contains),
-        "does-not-contain" | "does_not_contain" => Ok(Comparator::DoesNotContain),
-        "greater-than" | "greater_than" => Ok(Comparator::GreaterThan),
-        "greater-equal-than" | "greater_equal_than" => Ok(Comparator::GreaterEqualThan),
-        "lower-than" | "lower_than" => Ok(Comparator::LowerThan),
-        "lower-equal-than" | "lower_equal_than" => Ok(Comparator::LowerEqualThan),
-        "in" => Ok(Comparator::In),
-        "not-in" | "not_in" => Ok(Comparator::NotIn),
-        _ => bail!(
-            "Unknown comparator '{}'. Expected: exactly-matches, does-not-match, contains, \
-             does-not-contain, greater-than, greater-equal-than, lower-than, lower-equal-than, \
-             in, not-in",
-            s
-        ),
-    }
-}
-
 /// Stage a rule addition on a group in the current segment.
 ///
 /// Expected args: `<group-label> <driver> <comparator> <value>`
@@ -126,4 +87,43 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     println!("Staged: delete rule #{index} from [{}]", label);
     Ok(())
+}
+
+fn parse_driver(s: &str) -> anyhow::Result<SegmentDriver> {
+    match s {
+        "identity" => Ok(SegmentDriver::Identity),
+        "environment" => Ok(SegmentDriver::Environment),
+        _ if s.starts_with("trait:") => {
+            let name = s.trim_start_matches("trait:");
+            if name.is_empty() {
+                bail!("Trait name cannot be empty. Use: trait:<name>");
+            }
+            Ok(SegmentDriver::Trait(name.to_string()))
+        }
+        _ => bail!(
+            "Unknown driver '{}'. Expected: identity, environment, trait:<name>",
+            s
+        ),
+    }
+}
+
+fn parse_comparator(s: &str) -> anyhow::Result<Comparator> {
+    match s {
+        "exactly-matches" | "exactly_matches" => Ok(Comparator::ExactlyMatches),
+        "does-not-match" | "does_not_match" => Ok(Comparator::DoesNotMatch),
+        "contains" => Ok(Comparator::Contains),
+        "does-not-contain" | "does_not_contain" => Ok(Comparator::DoesNotContain),
+        "greater-than" | "greater_than" => Ok(Comparator::GreaterThan),
+        "greater-equal-than" | "greater_equal_than" => Ok(Comparator::GreaterEqualThan),
+        "lower-than" | "lower_than" => Ok(Comparator::LowerThan),
+        "lower-equal-than" | "lower_equal_than" => Ok(Comparator::LowerEqualThan),
+        "in" => Ok(Comparator::In),
+        "not-in" | "not_in" => Ok(Comparator::NotIn),
+        _ => bail!(
+            "Unknown comparator '{}'. Expected: exactly-matches, does-not-match, contains, \
+             does-not-contain, greater-than, greater-equal-than, lower-than, lower-equal-than, \
+             in, not-in",
+            s
+        ),
+    }
 }

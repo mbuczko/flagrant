@@ -55,4 +55,3 @@ pub(crate) fn rebuild(ctx: &mut Connection) {
     }
     ctx.variant_index = index;
 }
-

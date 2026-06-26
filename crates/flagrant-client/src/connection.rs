@@ -106,7 +106,10 @@ impl Connection {
     }
 
     pub fn has_feature_pending(&self) -> bool {
-        self.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
+        self.feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
     }
 
     pub fn discard_pending(&mut self) {
@@ -138,7 +141,10 @@ impl Connection {
     }
 
     pub fn has_segment_pending(&self) -> bool {
-        self.segment_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
+        self.segment_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
     }
 
     pub fn env_resource(&self) -> BaseResource<'_> {

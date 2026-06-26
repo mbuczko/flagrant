@@ -5,34 +5,6 @@ use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
 use crate::printer::tabular::Tabular;
 
-fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
-    let ctx = session.context.read().unwrap();
-    ctx.segment
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))
-}
-
-/// Predict the label the server will assign to the next new group.
-///
-/// The server computes `group-{MAX(N)+1}` from groups in the DB at the time of insertion.
-/// We simulate that by tracking committed groups and already-staged AddGroup ops.
-fn predict_next_label(segment: &Segment, staged_ops: &[SegmentPatchOp]) -> String {
-    let mut max_n: u32 = segment
-        .groups
-        .iter()
-        .filter_map(|g| g.label.strip_prefix("group-"))
-        .filter_map(|n| n.parse::<u32>().ok())
-        .max()
-        .unwrap_or(0);
-
-    for op in staged_ops {
-        if let SegmentPatchOp::AddGroup { .. } = op {
-            max_n += 1;
-        }
-    }
-    format!("group-{}", max_n + 1)
-}
-
 /// Stage a group addition for the current segment.
 ///
 /// Expected args: `[--and|--and-not] [description]`
@@ -40,7 +12,10 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let segment = segment_from_ctx(session)?;
 
     let (connector, description) = match args.get(1).map(|a| a.as_ref()) {
-        Some("--and") => (Some(GroupConnector::And), args.get(2).map(|d| d.to_string())),
+        Some("--and") => (
+            Some(GroupConnector::And),
+            args.get(2).map(|d| d.to_string()),
+        ),
         Some("--and-not") => (
             Some(GroupConnector::AndNot),
             args.get(2).map(|d| d.to_string()),
@@ -67,7 +42,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     ctx.get_or_init_segment_patch()
         .ops
-        .push(SegmentPatchOp::AddGroup { connector, description });
+        .push(SegmentPatchOp::AddGroup {
+            connector,
+            description,
+        });
+
     println!("Staged: add [{}]{connector_hint}", predicted_label);
     Ok(())
 }
@@ -81,10 +60,9 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .client
             .get::<Segment>(res.subpath(format!("/segments/{}", segment.id)))?;
         fresh.describe(None, &());
-    } else {
-        bail!("Not in a segment context.");
+        return Ok(());
     }
-    Ok(())
+    bail!("Not in a segment context.");
 }
 
 /// Stage a group deletion for the current segment.
@@ -103,7 +81,38 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let mut ctx = session.context.write().unwrap();
     ctx.get_or_init_segment_patch()
         .ops
-        .push(SegmentPatchOp::DeleteGroup { label: label.to_string() });
+        .push(SegmentPatchOp::DeleteGroup {
+            label: label.to_string(),
+        });
+
     println!("Staged: delete [{}]", label);
     Ok(())
+}
+
+fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
+    let ctx = session.context.read().unwrap();
+    ctx.segment
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))
+}
+
+/// Predict the label the server will assign to the next new group.
+///
+/// The server computes `group-{MAX(N)+1}` from groups in the DB at the time of insertion.
+/// We simulate that by tracking committed groups and already-staged AddGroup ops.
+fn predict_next_label(segment: &Segment, staged_ops: &[SegmentPatchOp]) -> String {
+    let mut max_n: u32 = segment
+        .groups
+        .iter()
+        .filter_map(|g| g.label.strip_prefix("group-"))
+        .filter_map(|n| n.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+
+    for op in staged_ops {
+        if let SegmentPatchOp::AddGroup { .. } = op {
+            max_n += 1;
+        }
+    }
+    format!("group-{}", max_n + 1)
 }

@@ -97,7 +97,11 @@ pub async fn get_all(
 ) -> anyhow::Result<Vec<Segment>> {
     let rows = match pattern {
         Some(pat) => {
-            SQLSegments::fetch_segments_by_pattern::<_, SegmentRow>(&mut *conn, params![project.id, pat]).await
+            SQLSegments::fetch_segments_by_pattern::<_, SegmentRow>(
+                &mut *conn,
+                params![project.id, pat],
+            )
+            .await
         }
         None => SQLSegments::fetch_segments::<_, SegmentRow>(&mut *conn, params![project.id]).await,
     }
@@ -233,7 +237,10 @@ pub async fn patch(
                 update(conn, &segment, &segment.name, description.as_deref()).await?;
                 segment.description = description;
             }
-            SegmentPatchOp::AddGroup { connector, description } => {
+            SegmentPatchOp::AddGroup {
+                connector,
+                description,
+            } => {
                 let group = add_group(conn, &segment, description, connector).await?;
                 segment.groups.push(group);
             }
@@ -250,7 +257,12 @@ pub async fn patch(
                     head.connector = None;
                 }
             }
-            SegmentPatchOp::AddRule { group_label, driver, comparator, value } => {
+            SegmentPatchOp::AddRule {
+                group_label,
+                driver,
+                comparator,
+                value,
+            } => {
                 let group_id = segment
                     .groups
                     .iter()

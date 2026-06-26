@@ -138,9 +138,7 @@ pub async fn list(
             )
             .await
         }
-        None => {
-            SQLEnvironments::fetch_environments_for_project(conn, params![project.id]).await
-        }
+        None => SQLEnvironments::fetch_environments_for_project(conn, params![project.id]).await,
     }
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of environments", e))?;
 

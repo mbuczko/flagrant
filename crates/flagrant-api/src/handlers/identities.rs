@@ -138,7 +138,6 @@ pub async fn update(
     Ok(Json(identity))
 }
 
-
 /// Returns all variant assignments for an identity within a given environment.
 #[utoipa::path(
     get,
