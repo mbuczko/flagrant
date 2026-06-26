@@ -51,7 +51,7 @@ pub(crate) fn remove_from_groups(groups: &mut [SegmentGroup], rule_id: i32) {
 }
 
 /// Groups `RuleRow`s by `group_id` into a map consumed by the segment loading helpers.
-pub(crate) fn collect(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
+pub(crate) fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
     let mut map: HashMap<i32, Vec<SegmentRule>> = HashMap::new();
     for row in rows {
         map.entry(row.group_id).or_default().push(SegmentRule {

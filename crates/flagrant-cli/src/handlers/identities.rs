@@ -364,12 +364,14 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     updated.describe(None, &fetch_variant_assignments(&ctx, &updated));
     ctx.identity_patch = None;
     ctx.identity = Some(updated);
+
     Ok(())
 }
 
 /// Drop all staged trait changes for the current identity.
 pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
+
     if ctx.has_identity_pending() {
         ctx.discard_identity_pending();
         println!("Pending changes discarded.");

@@ -7,7 +7,7 @@ use flagrant_types::{
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Acquire, SqliteConnection};
 
-use super::rule::{self, RuleRow, collect};
+use super::rule::{self, RuleRow, collect_rules};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -245,8 +245,10 @@ pub async fn patch(
                     .find(|g| g.label == label)
                     .map(|g| g.id)
                     .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
+
                 delete_group(conn, &segment, group_id).await?;
                 segment.groups.retain(|g| g.label != label);
+
                 if let Some(head) = segment.groups.first_mut() {
                     head.connector = None;
                 }
@@ -263,9 +265,10 @@ pub async fn patch(
                     .find(|g| g.label == group_label)
                     .map(|g| g.id)
                     .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
-                let r = rule::add(conn, group_id, driver, comparator, value).await?;
+                let sr = rule::add(conn, group_id, driver, comparator, value).await?;
+
                 if let Some(g) = segment.groups.iter_mut().find(|g| g.label == group_label) {
-                    g.rules.push(r);
+                    g.rules.push(sr);
                 }
             }
             SegmentPatchOp::DeleteRule { rule_id } => {
@@ -314,7 +317,7 @@ async fn load_segment(conn: &mut SqliteConnection, row: SegmentRow) -> anyhow::R
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
 
-    let mut rules = collect(rule_rows);
+    let mut rules = collect_rules(rule_rows);
     let groups = group_rows
         .into_iter()
         .map(|g| {
@@ -359,7 +362,7 @@ async fn load_all_segments(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
 
-    let rules = collect(rule_rows);
+    let rules = collect_rules(rule_rows);
     let mut groups = collect_groups(group_rows, rules);
 
     Ok(rows
