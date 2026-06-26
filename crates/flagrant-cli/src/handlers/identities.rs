@@ -19,8 +19,8 @@ use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{
-        FeaturePatch, IdentityOverridePatch, IdentityTraitPayload,
-        NewIdentityPayload, VariantPatchOp,
+        FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
+        VariantPatchOp,
     },
 };
 
@@ -52,7 +52,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-
 /// Create or upsert an identity with optional traits, then switch into its context.
 ///
 /// Expected args: `<identity> [trait:value ...]`
@@ -61,6 +60,12 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// auto-typed (bool → i32 → f32 → str).
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
+        {
+            let ctx = session.context.read().unwrap();
+            if ctx.has_identity_pending() {
+                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+            }
+        }
         let trait_payloads: Vec<IdentityTraitPayload> = args[2..]
             .iter()
             .filter_map(|arg| {
@@ -102,9 +107,9 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .get(1)
         .map(|a| format!("?pattern={a}"))
         .unwrap_or_default();
-    let identities = ctx
-        .client
-        .get::<Vec<IdentityWithTraits>>(ctx.env_resource().subpath(format!("/identities{pattern}")))?;
+    let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
+        ctx.env_resource().subpath(format!("/identities{pattern}")),
+    )?;
 
     IdentityWithTraits::list(&identities);
     Ok(())
@@ -117,8 +122,10 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if let Some(identity_str) = args.get(1) {
         let ctx = session.context.read().unwrap();
         let identity = resolve_identity(&ctx, identity_str)?;
-        ctx.client
-            .delete(ctx.env_resource().subpath(format!("/identities/{}", identity.value)))?;
+        ctx.client.delete(
+            ctx.env_resource()
+                .subpath(format!("/identities/{}", identity.value)),
+        )?;
 
         println!("Identity removed.");
         return Ok(());
@@ -145,21 +152,19 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// Shared entry point used by both `IDENTITY use` and the `FEATURE use feature@identity`
 /// shortcut. Fails if there are uncommitted staged trait changes.
 pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
-    {
-        let ctx = session.context.read().unwrap();
-        if ctx.has_identity_pending() {
-            bail!("You have uncommitted trait changes. Run `COMMIT` or `DISCARD` first.");
-        }
+    let ctx = session.context.read().unwrap();
+    if ctx.has_identity_pending() {
+        bail!("You have uncommitted trait changes. Run `COMMIT` or `DISCARD` first.");
     }
-    let identity = {
-        let ctx = session.context.read().unwrap();
-        resolve_identity(&ctx, identity_str)?
-    };
-    {
-        let ctx = session.context.read().unwrap();
-        identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
-    }
-    session.context.write().unwrap().identity = Some(identity);
+
+    let identity = resolve_identity(&ctx, identity_str)?;
+    identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+    drop(ctx);
+
+    let mut ctx = session.context.write().unwrap();
+    ctx.identity = Some(identity);
+    ctx.segment = None;
+
     Ok(())
 }
 
@@ -395,8 +400,10 @@ fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,
     identity_str: &str,
 ) -> anyhow::Result<IdentityWithTraits> {
-    ctx.client
-        .get::<IdentityWithTraits>(ctx.env_resource().subpath(format!("/identities/{identity_str}")))
+    ctx.client.get::<IdentityWithTraits>(
+        ctx.env_resource()
+            .subpath(format!("/identities/{identity_str}")),
+    )
 }
 
 fn strip_comments(text: &str) -> String {

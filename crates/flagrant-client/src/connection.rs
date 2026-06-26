@@ -1,7 +1,7 @@
 use anyhow::bail;
 use flagrant_types::{
     Environment, Feature, FeatureResponse, IdentityWithTraits, Project, Segment,
-    payload::{FeaturePatch, IdentityPatch},
+    payload::{FeaturePatch, IdentityPatch, SegmentPatch},
 };
 
 use crate::{
@@ -34,6 +34,8 @@ pub struct Connection {
     pub identity_patch: Option<IdentityPatch>,
     /// Segment currently in context - mutually exclusive with identity context.
     pub segment: Option<Segment>,
+    /// Staged patch for the current segment.
+    pub segment_patch: Option<SegmentPatch>,
 }
 
 impl Connection {
@@ -91,6 +93,7 @@ impl Connection {
                 identity: None,
                 identity_patch: None,
                 segment: None,
+                segment_patch: None,
             }),
             (Some(_), None) => bail!("No environment of given id found."),
             (None, Some(_)) => bail!("No project of given id found."),
@@ -100,6 +103,10 @@ impl Connection {
 
     pub fn get_or_init_pending(&mut self) -> &mut FeaturePatch {
         self.feature_patch.get_or_insert_with(FeaturePatch::default)
+    }
+
+    pub fn has_feature_pending(&self) -> bool {
+        self.feature_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
     }
 
     pub fn discard_pending(&mut self) {
@@ -120,6 +127,18 @@ impl Connection {
             .as_ref()
             .map(|p| !p.is_empty())
             .unwrap_or(false)
+    }
+
+    pub fn get_or_init_segment_patch(&mut self) -> &mut SegmentPatch {
+        self.segment_patch.get_or_insert_with(SegmentPatch::default)
+    }
+
+    pub fn discard_segment_patch(&mut self) {
+        self.segment_patch = None;
+    }
+
+    pub fn has_segment_pending(&self) -> bool {
+        self.segment_patch.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
     }
 
     pub fn env_resource(&self) -> BaseResource<'_> {

@@ -5,7 +5,7 @@ use axum::{
 use flagrant::models::{project, segment};
 use flagrant_types::{
     Project, Segment, SegmentGroup, SegmentRule,
-    payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload},
+    payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentPatch},
 };
 use serde::Deserialize;
 use sqlx::SqliteConnection;
@@ -143,7 +143,7 @@ pub async fn update(
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    segment::update(&mut conn, &seg, payload.name, payload.description).await?;
+    segment::update(&mut conn, &seg, &payload.name, payload.description.as_deref()).await?;
     Ok(Json(()))
 }
 
@@ -168,6 +168,18 @@ pub async fn delete(
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::delete(&mut conn, &seg).await?;
     Ok(Json(()))
+}
+
+/// Applies a batch of staged operations to a segment.
+pub async fn patch_segment(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, segment_id)): Path<(String, SegmentId)>,
+    Json(payload): Json<SegmentPatch>,
+) -> Result<Json<Segment>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
+    let updated = segment::patch(&mut conn, &project, seg, payload).await?;
+    Ok(Json(updated))
 }
 
 /// Adds a group to a segment.

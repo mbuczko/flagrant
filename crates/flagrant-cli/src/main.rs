@@ -65,7 +65,9 @@ fn prompter(session: &Session<Connection>) -> String {
         Some(id) => format!(" @ {}", id.value),
         _ => String::default(),
     };
+    let dirty_segment = ctx.has_segment_pending();
     let seg = match &ctx.segment {
+        Some(s) if dirty_segment => format!(" [{}*]", s.name),
         Some(s) => format!(" [{}]", s.name),
         None => String::default(),
     };
@@ -111,6 +113,7 @@ fn has_pending_ctx(session: &Session<Connection>) -> bool {
             .map(|p| !p.is_empty())
             .unwrap_or(false))
         || (ctx.identity.is_some() && ctx.has_identity_pending())
+        || (ctx.segment.is_some() && ctx.has_segment_pending())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -233,6 +236,20 @@ fn main() -> anyhow::Result<()> {
             has_feature_and_identity_ctx,
         ),
         Command::Set.args_in_context("status · value · pin · trait", has_feature_or_identity_ctx),
+        // Segment setters (only in segment context)
+        Command::Set.op_in_context(
+            "name",
+            "value",
+            handlers::segments::set_name,
+            has_segment_ctx,
+        ),
+        Command::Set.op_in_context(
+            "description",
+            "value",
+            handlers::segments::set_description,
+            has_segment_ctx,
+        ),
+        Command::Set.args_in_context("name · description", has_segment_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",

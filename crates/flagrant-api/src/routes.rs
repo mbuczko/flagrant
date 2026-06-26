@@ -86,6 +86,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route("/segments", post(segments::create))
         .route("/segments/:segment_id", get(segments::fetch_by_id_or_name))
         .route("/segments/:segment_id", put(segments::update))
+        .route("/segments/:segment_id", patch(segments::patch_segment))
         .route("/segments/:segment_id", delete(segments::delete))
         .route("/segments/:segment_id/groups", post(segments::add_group))
         .route(

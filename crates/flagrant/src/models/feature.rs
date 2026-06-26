@@ -270,7 +270,7 @@ pub async fn patch(
     environment: &Environment,
     feature: &Feature,
     patch: FeaturePatch,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
 
     // Feature-level properties
@@ -351,7 +351,7 @@ pub async fn patch(
     }
 
     tx.commit().await?;
-    Ok(())
+    get_by_id(conn, environment, feature.id).await
 }
 
 /// Permanently deletes a feature and all of its variants within a single transaction.

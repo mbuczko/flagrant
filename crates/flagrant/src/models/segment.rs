@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use flagrant_types::{
     Comparator, GroupConnector, Project, Segment, SegmentDriver, SegmentGroup, SegmentRule,
+    payload::{SegmentPatch, SegmentPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Acquire, SqliteConnection};
@@ -108,8 +109,8 @@ pub async fn get_all(
 pub async fn update(
     conn: &mut SqliteConnection,
     segment: &Segment,
-    name: String,
-    description: Option<String>,
+    name: &str,
+    description: Option<&str>,
 ) -> anyhow::Result<()> {
     SQLSegments::update_segment::<_>(&mut *conn, params![segment.id, name, description])
         .await
@@ -214,6 +215,63 @@ pub async fn add_rule(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not add rule", e))?,
     )
+}
+
+pub async fn patch(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    mut segment: Segment,
+    patch: SegmentPatch,
+) -> anyhow::Result<Segment> {
+    for op in patch.ops {
+        match op {
+            SegmentPatchOp::SetName(name) => {
+                update(conn, &segment, &name, segment.description.as_deref()).await?;
+                segment.name = name;
+            }
+            SegmentPatchOp::SetDescription(description) => {
+                update(conn, &segment, &segment.name, description.as_deref()).await?;
+                segment.description = description;
+            }
+            SegmentPatchOp::AddGroup { connector, description } => {
+                let group = add_group(conn, &segment, description, connector).await?;
+                segment.groups.push(group);
+            }
+            SegmentPatchOp::DeleteGroup { label } => {
+                let group_id = segment
+                    .groups
+                    .iter()
+                    .find(|g| g.label == label)
+                    .map(|g| g.id)
+                    .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
+                delete_group(conn, &segment, group_id).await?;
+                segment.groups.retain(|g| g.label != label);
+                if let Some(head) = segment.groups.first_mut() {
+                    head.connector = None;
+                }
+            }
+            SegmentPatchOp::AddRule { group_label, driver, comparator, value } => {
+                let group_id = segment
+                    .groups
+                    .iter()
+                    .find(|g| g.label == group_label)
+                    .map(|g| g.id)
+                    .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
+                let rule = add_rule(conn, group_id, driver, comparator, value).await?;
+                if let Some(g) = segment.groups.iter_mut().find(|g| g.label == group_label) {
+                    g.rules.push(rule);
+                }
+            }
+            SegmentPatchOp::DeleteRule { rule_id } => {
+                delete_rule(conn, rule_id).await?;
+                for g in &mut segment.groups {
+                    g.rules.retain(|r| r.id != rule_id);
+                }
+            }
+        }
+    }
+
+    get_by_id(conn, project, segment.id).await
 }
 
 pub async fn delete_rule(conn: &mut SqliteConnection, rule_id: i32) -> anyhow::Result<()> {

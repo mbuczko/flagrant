@@ -1,10 +1,7 @@
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{
-    Comparator, Segment, SegmentDriver, SegmentRule,
-    payload::NewRulePayload,
-};
+use flagrant_types::{Comparator, SegmentDriver, payload::SegmentPatchOp};
 
 fn parse_driver(s: &str) -> anyhow::Result<SegmentDriver> {
     match s {
@@ -45,27 +42,18 @@ fn parse_comparator(s: &str) -> anyhow::Result<Comparator> {
     }
 }
 
-/// Add a rule to a group in the current segment.
+/// Stage a rule addition on a group in the current segment.
 ///
 /// Expected args: `<group-label> <driver> <comparator> <value>`
-///
-/// Examples:
-///   RULE add group-1 identity contains "@bitside.pl"
-///   RULE add group-2 trait:version greater-than "3"
-///   RULE add group-1 environment exactly-matches "prod"
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))?;
-
-    let label = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Missing group label. Expected: RULE add <group-label> <driver> <comparator> <value>"))?;
-    let driver_str = args
-        .get(2)
-        .ok_or_else(|| anyhow::anyhow!("Missing driver. Expected: identity, environment, trait:<name>"))?;
+    let label = args.get(1).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Missing group label. Expected: RULE add <group-label> <driver> <comparator> <value>"
+        )
+    })?;
+    let driver_str = args.get(2).ok_or_else(|| {
+        anyhow::anyhow!("Missing driver. Expected: identity, environment, trait:<name>")
+    })?;
     let comparator_str = args
         .get(3)
         .ok_or_else(|| anyhow::anyhow!("Missing comparator."))?;
@@ -73,48 +61,28 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .get(4)
         .ok_or_else(|| anyhow::anyhow!("Missing value."))?;
 
-    let group = segment
-        .groups
-        .iter()
-        .find(|g| g.label == label.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found in current segment."))?;
-
     let driver = parse_driver(driver_str)?;
     let comparator = parse_comparator(comparator_str)?;
 
-    let res = ctx.project_resource();
-    let rule = ctx.client.post::<_, SegmentRule>(
-        res.subpath(format!(
-            "/segments/{}/groups/{}/rules",
-            segment.id, group.id
-        )),
-        NewRulePayload {
+    let mut ctx = session.context.write().unwrap();
+    if ctx.segment.is_none() {
+        bail!("Not in a segment context. Use `SEGMENT use <name>` first.");
+    }
+    ctx.get_or_init_segment_patch()
+        .ops
+        .push(SegmentPatchOp::AddRule {
+            group_label: label.to_string(),
             driver,
             comparator,
             value: value.to_string(),
-        },
-    )?;
-    drop(ctx);
-
-    println!("Added rule #{} to [{}].", rule.id, label);
-
-    // Refresh segment in context.
-    let ctx = session.context.read().unwrap();
-    let segment_id = ctx.segment.as_ref().map(|s| s.id).unwrap();
-    let res = ctx.project_resource();
-    let updated = ctx
-        .client
-        .get::<Segment>(res.subpath(format!("/segments/{segment_id}")))?;
-    drop(ctx);
-    session.context.write().unwrap().segment = Some(updated);
+        });
+    println!("Staged: add rule to [{}]", label);
     Ok(())
 }
 
-/// Delete a rule from a group by 1-based index.
+/// Stage a rule deletion by 1-based index within a group.
 ///
 /// Expected args: `<group-label> <rule-index>`
-///
-/// Example: RULE delete group-1 2
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let segment = ctx
@@ -128,9 +96,9 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let index_str = args
         .get(2)
         .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
-    let index: usize = index_str
-        .parse::<usize>()
-        .map_err(|_| anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'."))?;
+    let index: usize = index_str.parse::<usize>().map_err(|_| {
+        anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
+    })?;
     if index == 0 {
         bail!("Rule index is 1-based; use 1 for the first rule.");
     }
@@ -140,7 +108,6 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-
     let rule = group.rules.get(index - 1).ok_or_else(|| {
         anyhow::anyhow!(
             "No rule at index {index} in [{}] (has {} rule(s)).",
@@ -149,23 +116,14 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         )
     })?;
 
-    let res = ctx.project_resource();
-    ctx.client.delete(res.subpath(format!(
-        "/segments/{}/groups/{}/rules/{}",
-        segment.id, group.id, rule.id
-    )))?;
+    let rule_id = rule.id;
     drop(ctx);
 
-    println!("Deleted rule #{index} from [{}].", label);
+    let mut ctx = session.context.write().unwrap();
+    ctx.get_or_init_segment_patch()
+        .ops
+        .push(SegmentPatchOp::DeleteRule { rule_id });
 
-    // Refresh segment in context.
-    let ctx = session.context.read().unwrap();
-    let segment_id = ctx.segment.as_ref().map(|s| s.id).unwrap();
-    let res = ctx.project_resource();
-    let updated = ctx
-        .client
-        .get::<Segment>(res.subpath(format!("/segments/{segment_id}")))?;
-    drop(ctx);
-    session.context.write().unwrap().segment = Some(updated);
+    println!("Staged: delete rule #{index} from [{}]", label);
     Ok(())
 }

@@ -1,7 +1,7 @@
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{GroupConnector, Segment, SegmentGroup, payload::NewGroupPayload};
+use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
 use crate::printer::tabular::Tabular;
 
@@ -12,27 +12,30 @@ fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))
 }
 
-fn refresh_segment(session: &Session<Connection>) -> anyhow::Result<Segment> {
-    let segment_id = session
-        .context
-        .read()
-        .unwrap()
-        .segment
-        .as_ref()
-        .map(|s| s.id)
-        .ok_or_else(|| anyhow::anyhow!("No segment in context."))?;
-    let ctx = session.context.read().unwrap();
-    let res = ctx.project_resource();
-    ctx.client
-        .get::<Segment>(res.subpath(format!("/segments/{segment_id}")))
+/// Predict the label the server will assign to the next new group.
+///
+/// The server computes `group-{MAX(N)+1}` from groups in the DB at the time of insertion.
+/// We simulate that by tracking committed groups and already-staged AddGroup ops.
+fn predict_next_label(segment: &Segment, staged_ops: &[SegmentPatchOp]) -> String {
+    let mut max_n: u32 = segment
+        .groups
+        .iter()
+        .filter_map(|g| g.label.strip_prefix("group-"))
+        .filter_map(|n| n.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+
+    for op in staged_ops {
+        if let SegmentPatchOp::AddGroup { .. } = op {
+            max_n += 1;
+        }
+    }
+    format!("group-{}", max_n + 1)
 }
 
-/// Add a group to the current segment.
+/// Stage a group addition for the current segment.
 ///
 /// Expected args: `[--and|--and-not] [description]`
-///
-/// First group needs no flag (connector will be ignored). Subsequent groups require
-/// `--and` or `--and-not`.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let segment = segment_from_ctx(session)?;
 
@@ -45,47 +48,46 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         other => (None, other.map(str::to_string)),
     };
 
-    let group = {
+    let predicted_label = {
         let ctx = session.context.read().unwrap();
-        let res = ctx.project_resource();
-        ctx.client.post::<_, SegmentGroup>(
-            res.subpath(format!("/segments/{}/groups", segment.id)),
-            NewGroupPayload {
-                description,
-                connector,
-            },
-        )?
+        let staged = ctx
+            .segment_patch
+            .as_ref()
+            .map(|p| p.ops.as_slice())
+            .unwrap_or_default();
+        predict_next_label(&segment, staged)
     };
-    println!(
-        "Added [{}]{}",
-        group.label,
-        group
-            .description
-            .as_deref()
-            .map(|d| format!(" — {d}"))
-            .unwrap_or_default()
-    );
 
-    // Refresh segment in context.
-    let updated = refresh_segment(session)?;
-    session.context.write().unwrap().segment = Some(updated);
+    let connector_hint = match &connector {
+        Some(GroupConnector::And) => " (AND ...)",
+        Some(GroupConnector::AndNot) => " (AND NOT ...)",
+        None => "",
+    };
+
+    let mut ctx = session.context.write().unwrap();
+    ctx.get_or_init_segment_patch()
+        .ops
+        .push(SegmentPatchOp::AddGroup { connector, description });
+    println!("Staged: add [{}]{connector_hint}", predicted_label);
     Ok(())
 }
 
-/// List groups of the current segment.
+/// List groups — shows the current committed segment state.
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let segment = segment_from_ctx(session)?;
-    // Re-fetch to get latest state.
     let ctx = session.context.read().unwrap();
-    let res = ctx.project_resource();
-    let fresh = ctx
-        .client
-        .get::<Segment>(res.subpath(format!("/segments/{}", segment.id)))?;
-    fresh.describe(None, &());
+    if let Some(segment) = &ctx.segment {
+        let res = ctx.project_resource();
+        let fresh = ctx
+            .client
+            .get::<Segment>(res.subpath(format!("/segments/{}", segment.id)))?;
+        fresh.describe(None, &());
+    } else {
+        bail!("Not in a segment context.");
+    }
     Ok(())
 }
 
-/// Delete a group from the current segment by label.
+/// Stage a group deletion for the current segment.
 ///
 /// Expected args: `<label>` (e.g. "group-1")
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -94,23 +96,14 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("No group label provided. Expected: GROUP delete <label> (e.g. group-1)");
     };
 
-    let group = segment
-        .groups
-        .iter()
-        .find(|g| g.label == label.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found in current segment."))?;
-
-    {
-        let ctx = session.context.read().unwrap();
-        let res = ctx.project_resource();
-        ctx.client.delete(
-            res.subpath(format!("/segments/{}/groups/{}", segment.id, group.id)),
-        )?;
+    if !segment.groups.iter().any(|g| g.label == label.as_ref()) {
+        bail!("Group '{label}' not found in current segment.");
     }
-    println!("Deleted group [{}].", label);
 
-    // Refresh segment.
-    let updated = refresh_segment(session)?;
-    session.context.write().unwrap().segment = Some(updated);
+    let mut ctx = session.context.write().unwrap();
+    ctx.get_or_init_segment_patch()
+        .ops
+        .push(SegmentPatchOp::DeleteGroup { label: label.to_string() });
+    println!("Staged: delete [{}]", label);
     Ok(())
 }

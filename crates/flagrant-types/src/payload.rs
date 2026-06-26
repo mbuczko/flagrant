@@ -145,3 +145,36 @@ pub struct NewRulePayload {
     pub comparator: Comparator,
     pub value: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum SegmentPatchOp {
+    SetName(String),
+    SetDescription(Option<String>),
+    AddGroup {
+        connector: Option<GroupConnector>,
+        description: Option<String>,
+    },
+    DeleteGroup {
+        label: String,
+    },
+    AddRule {
+        group_label: String,
+        driver: SegmentDriver,
+        comparator: Comparator,
+        value: String,
+    },
+    DeleteRule {
+        rule_id: i32,
+    },
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct SegmentPatch {
+    pub ops: Vec<SegmentPatchOp>,
+}
+
+impl SegmentPatch {
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
+    }
+}

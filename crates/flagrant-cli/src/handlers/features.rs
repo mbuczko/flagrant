@@ -50,13 +50,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         {
             let ctx = session.context.read().unwrap();
-            if ctx
-                .feature_patch
-                .as_ref()
-                .map(|p| !p.is_empty())
-                .unwrap_or(false)
-            {
-                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
+            if ctx.has_feature_pending() {
+                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
             }
         }
         let feature = {
@@ -103,13 +98,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         }
         {
             let ctx = session.context.read().unwrap();
-            if ctx
-                .feature_patch
-                .as_ref()
-                .map(|p| !p.is_empty())
-                .unwrap_or(false)
-            {
-                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
+            if ctx.has_feature_pending() {
+                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
             }
         }
         let feature = fetch_feature(feature_name, session)

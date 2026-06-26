@@ -253,8 +253,6 @@ pub async fn patch(
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
-    feature::patch(&mut conn, &env, &feature, patch).await?;
-
-    let updated = feature::get_by_id(&mut conn, &env, feature_id).await?;
+    let updated = feature::patch(&mut conn, &env, &feature, patch).await?;
     Ok(Json(updated))
 }

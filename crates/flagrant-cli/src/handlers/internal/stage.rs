@@ -9,7 +9,7 @@ use flagrant_types::{
     payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
 };
 
-use crate::handlers::{features, identities};
+use crate::handlers::{features, identities, segments};
 
 /// Stages a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
@@ -183,7 +183,7 @@ pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
     println!("Staged: unset {name}");
 }
 
-/// Commits all staged changes across active contexts (feature and/or identity).
+/// Commits all staged changes across active contexts (feature, identity, and/or segment).
 pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let has_feature = ctx.feature.is_some()
@@ -193,9 +193,10 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
             .map(|p| !p.is_empty())
             .unwrap_or(false);
     let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    let has_segment = ctx.segment.is_some() && ctx.has_segment_pending();
     drop(ctx);
 
-    if !has_feature && !has_identity {
+    if !has_feature && !has_identity && !has_segment {
         println!("No pending changes to commit.");
         return Ok(());
     }
@@ -204,6 +205,9 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
     }
     if has_identity {
         identities::commit(args, session)?;
+    }
+    if has_segment {
+        segments::commit(args, session)?;
     }
     Ok(())
 }
@@ -220,7 +224,7 @@ pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Res
             .as_ref()
             .map(|p| !p.is_empty())
             .unwrap_or(false);
-        if has_pending_feature || ctx.has_identity_pending() {
+        if has_pending_feature || ctx.has_identity_pending() || ctx.has_segment_pending() {
             anyhow::bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
         }
     }
@@ -231,11 +235,12 @@ pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Res
     ctx.identity = None;
     ctx.identity_patch = None;
     ctx.segment = None;
+    ctx.segment_patch = None;
     println!("Context reset.");
     Ok(())
 }
 
-/// Discards all staged changes across active contexts (feature and/or identity).
+/// Discards all staged changes across active contexts (feature, identity, and/or segment).
 pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let has_feature = ctx.feature.is_some()
@@ -245,9 +250,10 @@ pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Re
             .map(|p| !p.is_empty())
             .unwrap_or(false);
     let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    let has_segment = ctx.segment.is_some() && ctx.has_segment_pending();
     drop(ctx);
 
-    if !has_feature && !has_identity {
+    if !has_feature && !has_identity && !has_segment {
         println!("No pending changes.");
         return Ok(());
     }
@@ -257,6 +263,9 @@ pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Re
     }
     if has_identity {
         identities::discard(args, session)?;
+    }
+    if has_segment {
+        segments::discard(args, session)?;
     }
     Ok(())
 }
