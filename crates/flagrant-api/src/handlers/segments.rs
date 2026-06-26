@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{project, segment};
+use flagrant::models::{project, rule, segment};
 use flagrant_types::{
     Project, Segment, SegmentGroup, SegmentRule,
     payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentPatch},
@@ -261,14 +261,8 @@ pub async fn add_rule(
     Json(payload): Json<NewRulePayload>,
 ) -> Result<Json<SegmentRule>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
-    let rule = segment::add_rule(
-        &mut conn,
-        group_id,
-        payload.driver,
-        payload.comparator,
-        payload.value,
-    )
-    .await?;
+    let rule = rule::add(&mut conn, group_id, payload.driver, payload.comparator, payload.value)
+        .await?;
     Ok(Json(rule))
 }
 
@@ -292,6 +286,6 @@ pub async fn delete_rule(
     Path((project_name, _segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
 ) -> Result<Json<()>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
-    segment::delete_rule(&mut conn, rule_id).await?;
+    rule::delete(&mut conn, rule_id).await?;
     Ok(Json(()))
 }

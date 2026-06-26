@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use flagrant_types::{
-    Comparator, GroupConnector, Project, Segment, SegmentDriver, SegmentGroup, SegmentRule,
+    GroupConnector, Project, Segment, SegmentGroup, SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Acquire, SqliteConnection};
 
+use super::rule::{self, RuleRow, collect};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -31,15 +32,7 @@ struct GroupRow {
     description: Option<String>,
 }
 
-#[derive(sqlx::FromRow)]
-struct RuleRow {
-    rule_id: i32,
-    group_id: i32,
-    driver: SegmentDriver,
-    comparator: Comparator,
-    value: String,
-}
-
+/// Creates a new segment in the given project and returns it with an empty groups list.
 pub async fn create(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -62,6 +55,7 @@ pub async fn create(
     })
 }
 
+/// Fetches a segment by its numeric ID, including all groups and rules.
 pub async fn get_by_id(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -77,6 +71,7 @@ pub async fn get_by_id(
     load_segment(&mut *conn, row).await
 }
 
+/// Fetches a segment by name, including all groups and rules.
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -90,6 +85,7 @@ pub async fn get_by_name(
     load_segment(&mut *conn, row).await
 }
 
+/// Lists all segments for the project, optionally filtered by a name pattern.
 pub async fn get_all(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -110,6 +106,7 @@ pub async fn get_all(
     load_all_segments(&mut *conn, rows).await
 }
 
+/// Updates the name and description of an existing segment.
 pub async fn update(
     conn: &mut SqliteConnection,
     segment: &Segment,
@@ -123,6 +120,7 @@ pub async fn update(
     Ok(())
 }
 
+/// Deletes a segment and all its associated groups and rules.
 pub async fn delete(conn: &mut SqliteConnection, segment: &Segment) -> anyhow::Result<()> {
     SQLSegments::delete_segment::<_>(&mut *conn, params![segment.id])
         .await
@@ -133,6 +131,11 @@ pub async fn delete(conn: &mut SqliteConnection, segment: &Segment) -> anyhow::R
 
 // Group operations
 
+/// Adds a new group to a segment.
+///
+/// The label is computed as `group-{MAX(N)+1}` over all existing labels to ensure
+/// stable, non-reused identifiers. The first group always has no connector; subsequent
+/// groups default to `AND` if no connector is specified.
 pub async fn add_group(
     conn: &mut SqliteConnection,
     segment: &Segment,
@@ -185,6 +188,8 @@ pub async fn add_group(
     })
 }
 
+/// Deletes a group and all its rules, then clears the connector on the new head group
+/// so the remaining first group is never left with an AND/AND NOT connector.
 pub async fn delete_group(
     conn: &mut SqliteConnection,
     segment: &Segment,
@@ -205,22 +210,11 @@ pub async fn delete_group(
     Ok(())
 }
 
-// Rule operations
-
-pub async fn add_rule(
-    conn: &mut SqliteConnection,
-    group_id: i32,
-    driver: SegmentDriver,
-    comparator: Comparator,
-    value: String,
-) -> anyhow::Result<SegmentRule> {
-    Ok(
-        SQLSegments::add_rule::<_, SegmentRule>(conn, params![group_id, driver, comparator, value])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not add rule", e))?,
-    )
-}
-
+/// Applies a batch of staged operations to a segment and returns the updated segment.
+///
+/// Each op is executed immediately against the DB; the in-memory `segment` is kept in
+/// sync so that subsequent ops in the same batch (e.g. `AddRule` after `AddGroup`) can
+/// resolve labels and IDs without an extra round-trip.
 pub async fn patch(
     conn: &mut SqliteConnection,
     project: &Project,
@@ -269,41 +263,19 @@ pub async fn patch(
                     .find(|g| g.label == group_label)
                     .map(|g| g.id)
                     .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
-                let rule = add_rule(conn, group_id, driver, comparator, value).await?;
+                let r = rule::add(conn, group_id, driver, comparator, value).await?;
                 if let Some(g) = segment.groups.iter_mut().find(|g| g.label == group_label) {
-                    g.rules.push(rule);
+                    g.rules.push(r);
                 }
             }
             SegmentPatchOp::DeleteRule { rule_id } => {
-                delete_rule(conn, rule_id).await?;
-                for g in &mut segment.groups {
-                    g.rules.retain(|r| r.id != rule_id);
-                }
+                rule::delete(conn, rule_id).await?;
+                rule::remove_from_groups(&mut segment.groups, rule_id);
             }
         }
     }
 
     get_by_id(conn, project, segment.id).await
-}
-
-pub async fn delete_rule(conn: &mut SqliteConnection, rule_id: i32) -> anyhow::Result<()> {
-    SQLSegments::delete_rule::<_>(conn, params![rule_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not delete rule", e))?;
-    Ok(())
-}
-
-fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
-    let mut map: HashMap<i32, Vec<SegmentRule>> = HashMap::new();
-    for row in rows {
-        map.entry(row.group_id).or_default().push(SegmentRule {
-            id: row.rule_id,
-            driver: row.driver,
-            comparator: row.comparator,
-            value: row.value,
-        });
-    }
-    map
 }
 
 //
@@ -342,7 +314,7 @@ async fn load_segment(conn: &mut SqliteConnection, row: SegmentRow) -> anyhow::R
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
 
-    let mut rules = collect_rules(rule_rows);
+    let mut rules = collect(rule_rows);
     let groups = group_rows
         .into_iter()
         .map(|g| {
@@ -387,7 +359,7 @@ async fn load_all_segments(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
 
-    let rules = collect_rules(rule_rows);
+    let rules = collect(rule_rows);
     let mut groups = collect_groups(group_rows, rules);
 
     Ok(rows

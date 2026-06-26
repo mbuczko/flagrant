@@ -5,6 +5,7 @@
 *.db-wal
 *.db
 *.org
+*.org_archive
 TAGS
 target
 history.txt
