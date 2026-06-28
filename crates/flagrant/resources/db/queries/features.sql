@@ -59,6 +59,10 @@ UPDATE features
 SET name = $2, is_enabled = $3
 WHERE feature_id = $1
 
+-- :name update_feature_description :<> :!
+-- :doc Updates feature description
+UPDATE features SET description = $2 WHERE feature_id = $1
+
 -- :name archive_feature :<> :!
 -- :doc Updates feature archivisation timestamp. If NULL then feature is not archived.
 UPDATE features SET archived_at = $2 WHERE feature_id = $1

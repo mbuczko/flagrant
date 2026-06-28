@@ -162,6 +162,23 @@ pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
     bail!("Not enough arguments provided")
 }
 
+/// Stage a feature description change.
+///
+/// Expected args: `[description]` (omit to clear)
+pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context.");
+    }
+    ctx.get_or_init_pending().description = Some(desc.clone());
+    println!(
+        "Staged: description = {}",
+        if desc.is_empty() { "(cleared)" } else { &desc }
+    );
+    Ok(())
+}
+
 /// Stages a new value for the current feature (i.e. its control variant).
 ///
 /// Expected args: `[value]`

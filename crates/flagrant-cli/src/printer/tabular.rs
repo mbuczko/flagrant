@@ -279,7 +279,7 @@ impl Tabular for Feature {
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
+            .add_column_named_with_align("NAME".into(), Layout::Fixed(0), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
@@ -296,7 +296,7 @@ impl Tabular for Feature {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
@@ -390,8 +390,15 @@ impl Tabular for Feature {
             )
         };
 
+        let desc_str = match patch.and_then(|p| p.description.as_deref()) {
+            Some(d) if d.is_empty() => "(cleared)".yellow().to_string(),
+            Some(d) => d.yellow().to_string(),
+            None => self.description.clone(),
+        };
+
         table.render(vec![
             &["STATUS", &status],
+            &["DESCRIPTION", &desc_str],
             &["VARIANTS", &variants],
             &["TAGS", &tags],
         ]);
@@ -673,7 +680,7 @@ impl Tabular for Segment {
 
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(13), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),

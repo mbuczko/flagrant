@@ -157,6 +157,7 @@ pub async fn add_group(
         .filter_map(|n| n.parse::<i32>().ok())
         .max()
         .unwrap_or(0);
+
     let label = format!("group-{}", max_label_num + 1);
 
     // First group always has no connector; subsequent groups default to AND if unspecified.
@@ -335,8 +336,8 @@ async fn load_segment(conn: &mut SqliteConnection, row: SegmentRow) -> anyhow::R
     Ok(Segment {
         id: row.segment_id,
         project_id: row.project_id,
-        name: row.name,
         description: row.description,
+        name: row.name,
         groups,
     })
 }

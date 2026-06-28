@@ -279,6 +279,11 @@ pub async fn patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
     }
+    if let Some(description) = patch.description {
+        SQLFeatures::update_feature_description(&mut *tx, params![feature.id, description])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update feature description", e))?;
+    }
     if let Some(archived) = patch.is_archived {
         let ts = if archived { Some(Utc::now()) } else { None };
         SQLFeatures::archive_feature(&mut *tx, params![feature.id, ts])

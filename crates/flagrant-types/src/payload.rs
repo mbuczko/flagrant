@@ -82,6 +82,7 @@ pub struct IdentityTraitPayload {
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_archived: Option<bool>,
+    pub description: Option<String>,
     pub variants: Vec<VariantPatchOp>,
 }
 
@@ -103,7 +104,10 @@ impl From<Feature> for NewFeaturePayload {
 
 impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none() && self.is_archived.is_none() && self.variants.is_empty()
+        self.is_enabled.is_none()
+            && self.is_archived.is_none()
+            && self.description.is_none()
+            && self.variants.is_empty()
     }
 }
 

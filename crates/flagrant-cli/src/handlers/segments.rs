@@ -112,9 +112,13 @@ pub fn set_name(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
     }
-    ctx.get_or_init_segment_patch()
-        .ops
-        .push(SegmentPatchOp::SetName(name.to_string()));
+    let op = SegmentPatchOp::SetName(name.to_string());
+    let patch = ctx.get_or_init_segment_patch();
+    if let Some(existing) = patch.ops.iter_mut().find(|o| matches!(o, SegmentPatchOp::SetName(_))) {
+        *existing = op;
+    } else {
+        patch.ops.push(op);
+    }
     println!("Staged: name = {name}");
     Ok(())
 }
@@ -128,9 +132,13 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
     }
-    ctx.get_or_init_segment_patch()
-        .ops
-        .push(SegmentPatchOp::SetDescription(desc.clone()));
+    let op = SegmentPatchOp::SetDescription(desc.clone());
+    let patch = ctx.get_or_init_segment_patch();
+    if let Some(existing) = patch.ops.iter_mut().find(|o| matches!(o, SegmentPatchOp::SetDescription(_))) {
+        *existing = op;
+    } else {
+        patch.ops.push(op);
+    }
     println!(
         "Staged: description = {}",
         desc.as_deref().unwrap_or("(cleared)")

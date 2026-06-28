@@ -222,6 +222,12 @@ fn main() -> anyhow::Result<()> {
             handlers::features::set_value,
             has_feature_ctx,
         ),
+        Command::Set.op_in_context(
+            "description",
+            "[description]",
+            handlers::features::set_description,
+            has_feature_ctx,
+        ),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "trait",
@@ -235,7 +241,7 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_pin,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args_in_context("status · value · pin · trait", has_feature_or_identity_ctx),
+        Command::Set.args_in_context("status · value · description · pin · trait", has_feature_or_identity_ctx),
         // Segment setters (only in segment context)
         Command::Set.op_in_context(
             "name",
