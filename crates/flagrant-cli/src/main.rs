@@ -290,7 +290,7 @@ fn main() -> anyhow::Result<()> {
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
-            "group-label driver comparator value",
+            "group-label <identity|trait|environment> comparator value",
             handlers::rules::add,
             has_segment_ctx,
         ),

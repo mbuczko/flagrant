@@ -5,6 +5,7 @@ use flagrant_types::{
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
+use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
 use super::rule::{self, RuleRow, collect_rules};
@@ -46,13 +47,15 @@ pub async fn create(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not create segment", e))?;
 
-    Ok(Segment {
+    let segment = Segment {
         id: row.segment_id,
         project_id: row.project_id,
         name: row.name,
         description: row.description,
         groups: vec![],
-    })
+    };
+    segment.validate()?;
+    Ok(segment)
 }
 
 /// Fetches a segment by its numeric ID, including all groups and rules.
@@ -225,8 +228,9 @@ pub async fn patch(
     for op in patch.ops {
         match op {
             SegmentPatchOp::SetName(name) => {
-                update(conn, &segment, &name, segment.description.as_deref()).await?;
                 segment.name = name;
+                segment.validate()?;
+                update(conn, &segment, &segment.name, segment.description.as_deref()).await?;
             }
             SegmentPatchOp::SetDescription(description) => {
                 update(conn, &segment, &segment.name, description.as_deref()).await?;

@@ -726,13 +726,13 @@ impl Tabular for Segment {
 
         let rows: Vec<Vec<String>> = if has_staged {
             vec![
-                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
                 vec!["RULES".to_string(), groups_str, rules_stage_str],
+                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
             ]
         } else {
             vec![
-                vec!["DESCRIPTION".to_string(), desc_str],
                 vec!["RULES".to_string(), groups_str],
+                vec!["DESCRIPTION".to_string(), desc_str],
             ]
         };
         table.render(rows);

@@ -151,6 +151,66 @@ impl AutoCompleter for ArgCompleter<'_> {
                     _ => vec![],
                 })
             }
+            "RULE" if arg_n >= 2 => {
+                let op: &str = &args[1];
+                let ctx = self.session.context.read().unwrap();
+
+                Ok(match op {
+                    "add" if arg_n == 3 => {
+                        if let Some(trait_prefix) = prefix.strip_prefix("trait:") {
+                            let res = ctx.project.as_base_resource();
+                            ctx.client
+                                .get::<Vec<Trait>>(
+                                    res.subpath(format!("/traits?prefix={trait_prefix}")),
+                                )?
+                                .into_iter()
+                                .map(|t| format!("trait:{}", t.name))
+                                .collect()
+                        } else {
+                            filter_by_prefix(&["identity", "trait:", "environment"], prefix)
+                        }
+                    }
+                    "add" if arg_n == 4 => filter_by_prefix(
+                        &[
+                            "exactly-matches",
+                            "does-not-match",
+                            "contains",
+                            "does-not-contain",
+                            "greater-than",
+                            "greater-equal-than",
+                            "lower-than",
+                            "lower-equal-than",
+                            "in",
+                            "not-in",
+                        ],
+                        prefix,
+                    ),
+                    "add" if arg_n == 5 => match args.get(3).map(|a| a.as_ref()) {
+                        Some("identity") => {
+                            let env_res = ctx.env_resource();
+                            ctx.client
+                                .get::<Vec<IdentityWithTraits>>(
+                                    env_res.subpath(format!("/identities?prefix={prefix}")),
+                                )?
+                                .into_iter()
+                                .map(|i| i.value)
+                                .collect()
+                        }
+                        Some("environment") => {
+                            let project_res = ctx.project.as_base_resource();
+                            ctx.client
+                                .get::<Vec<Environment>>(
+                                    project_res.subpath(format!("/envs?prefix={prefix}")),
+                                )?
+                                .into_iter()
+                                .map(|e| e.name)
+                                .collect()
+                        }
+                        _ => vec![],
+                    },
+                    _ => vec![],
+                })
+            }
             "SEGMENT" if arg_n >= 2 => {
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.project_resource();
