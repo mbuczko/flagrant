@@ -6,7 +6,7 @@ use flagrant_types::{
     payload::{NewSegmentPayload, SegmentPatchOp},
 };
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::internal::stage, printer::tabular::Tabular};
 
 fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Segment> {
     let ctx = session.context.read().unwrap();
@@ -20,12 +20,7 @@ fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Se
 ///
 /// Expected args: `<name> [description]`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    {
-        let ctx = session.context.read().unwrap();
-        if ctx.has_segment_pending() {
-            bail!("You have uncommitted segment changes. Run `COMMIT` or `DISCARD` first.");
-        }
-    }
+    stage::ensure_no_pending(session)?;
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
@@ -114,7 +109,11 @@ pub fn set_name(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     }
     let op = SegmentPatchOp::SetName(name.to_string());
     let patch = ctx.get_or_init_segment_patch();
-    if let Some(existing) = patch.ops.iter_mut().find(|o| matches!(o, SegmentPatchOp::SetName(_))) {
+    if let Some(existing) = patch
+        .ops
+        .iter_mut()
+        .find(|o| matches!(o, SegmentPatchOp::SetName(_)))
+    {
         *existing = op;
     } else {
         patch.ops.push(op);
@@ -134,7 +133,11 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
     }
     let op = SegmentPatchOp::SetDescription(desc.clone());
     let patch = ctx.get_or_init_segment_patch();
-    if let Some(existing) = patch.ops.iter_mut().find(|o| matches!(o, SegmentPatchOp::SetDescription(_))) {
+    if let Some(existing) = patch
+        .ops
+        .iter_mut()
+        .find(|o| matches!(o, SegmentPatchOp::SetDescription(_)))
+    {
         *existing = op;
     } else {
         patch.ops.push(op);
@@ -188,12 +191,7 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 ///
 /// Expected args: `<name>`
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    {
-        let ctx = session.context.read().unwrap();
-        if ctx.has_segment_pending() {
-            bail!("You have uncommitted segment changes. Run `COMMIT` or `DISCARD` first.");
-        }
-    }
+    stage::ensure_no_pending(session)?;
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
@@ -201,6 +199,9 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     segment.describe(None, &());
 
     let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
+    ctx.feature = None;
+    ctx.feature_patch = None;
+    ctx.variant_index.clear();
     ctx.identity = None;
     ctx.identity_patch = None;
     ctx.segment = Some(segment);

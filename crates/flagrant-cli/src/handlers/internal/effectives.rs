@@ -288,26 +288,25 @@ pub(crate) fn effective_segment(
                 })
                 .collect();
 
-            if !is_deleted
-                && let Some(staged) = staged_rules_by_label.get(g.label.as_str()) {
-                    for op in staged {
-                        if let SegmentPatchOp::AddRule {
-                            driver,
-                            comparator,
-                            value,
-                            ..
-                        } = op
-                        {
-                            rules.push(EffectiveRule {
-                                driver: driver.clone(),
-                                comparator: comparator.clone(),
-                                value: value.clone(),
-                                is_staged_add: true,
-                                is_deleted: false,
-                            });
-                        }
+            if !is_deleted && let Some(staged) = staged_rules_by_label.get(g.label.as_str()) {
+                for op in staged {
+                    if let SegmentPatchOp::AddRule {
+                        driver,
+                        comparator,
+                        value,
+                        ..
+                    } = op
+                    {
+                        rules.push(EffectiveRule {
+                            driver: driver.clone(),
+                            comparator: comparator.clone(),
+                            value: value.clone(),
+                            is_staged_add: true,
+                            is_deleted: false,
+                        });
                     }
                 }
+            }
 
             EffectiveGroup {
                 label: g.label.clone(),

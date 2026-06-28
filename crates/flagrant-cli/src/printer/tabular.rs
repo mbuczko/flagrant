@@ -279,7 +279,7 @@ impl Tabular for Feature {
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("NAME".into(), Layout::Fixed(0), Align::Left)
+            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
@@ -295,66 +295,7 @@ impl Tabular for Feature {
     fn describe(&self, patch: Option<&FeaturePatch>, _ctx: &()) {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
-        let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
-            .add_column(
-                None,
-                Layout::Expandable(120),
-                Align::Left,
-                Overflow::Truncate,
-                10,
-            )
-            .width(100)
-            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-            .build();
 
-        let eff = effective::effective_variants(self, patch);
-
-        // Compute the adjusted control weight when there are pending ops that affect non-control
-        // variants, mirroring the auto-adjustment done on the backend.
-        let has_ops = patch.is_some_and(|p| !p.variants.is_empty());
-        let non_control_total: u32 = eff
-            .iter()
-            .filter(|e| !e.is_control && !e.is_deleted)
-            .map(|e| e.weight as u32)
-            .sum();
-
-        let total_lines = eff.len();
-        let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
-
-        for (i, e) in eff.iter().enumerate() {
-            let connector = if i + 1 == total_lines {
-                "╰╴"
-            } else {
-                "├╴"
-            };
-
-            let weight = if e.is_control && has_ops {
-                100u32.saturating_sub(non_control_total) as u8
-            } else {
-                e.weight
-            };
-            let marker = if e.is_control { "★" } else { " " };
-            let line = format!("{}{} {}{}", connector, bar(weight, 10), marker, e.value);
-
-            variant_lines.push(if e.is_deleted {
-                line.dimmed().to_string()
-            } else if e.is_staged_add {
-                line.green().to_string()
-            } else if e.value_modified
-                || e.weight_modified
-                || (e.is_control && has_ops && weight != e.weight)
-            {
-                line.yellow().to_string()
-            } else {
-                line
-            });
-        }
-
-        let variants = variant_lines.join("\n");
-
-        // Resolve a pending override against a committed bool, coloring the result string yellow
-        // when the pending value is present, otherwise returning it as-is.
         let resolve = |pending: Option<bool>, committed: bool, on: &str, off: &str| -> String {
             let (effective, is_pending) = match pending {
                 Some(v) => (v, true),
@@ -389,69 +330,139 @@ impl Tabular for Feature {
                 &format!("{} OFF", "●".red()),
             )
         };
+        let status_stage = if pending_enabled.is_some() || pending_archived.is_some() {
+            "updated".yellow().to_string()
+        } else {
+            String::new()
+        };
 
         let desc_str = match patch.and_then(|p| p.description.as_deref()) {
             Some(d) if d.is_empty() => "(cleared)".yellow().to_string(),
             Some(d) => d.yellow().to_string(),
             None => self.description.clone(),
         };
+        let desc_stage = if patch.and_then(|p| p.description.as_ref()).is_some() {
+            "updated".yellow().to_string()
+        } else {
+            String::new()
+        };
 
-        table.render(vec![
-            &["STATUS", &status],
-            &["DESCRIPTION", &desc_str],
-            &["VARIANTS", &variants],
-            &["TAGS", &tags],
-        ]);
+        let eff = effective::effective_variants(self, patch);
+        let has_ops = patch.is_some_and(|p| !p.variants.is_empty());
+        let non_control_total: u32 = eff
+            .iter()
+            .filter(|e| !e.is_control && !e.is_deleted)
+            .map(|e| e.weight as u32)
+            .sum();
+
+        let total_lines = eff.len();
+        let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
+        let mut variant_stage: Vec<String> = Vec::with_capacity(total_lines);
+
+        for (i, e) in eff.iter().enumerate() {
+            let connector = if i + 1 == total_lines {
+                "╰╴"
+            } else {
+                "├╴"
+            };
+            let weight = if e.is_control && has_ops {
+                100u32.saturating_sub(non_control_total) as u8
+            } else {
+                e.weight
+            };
+            let marker = if e.is_control { "★" } else { " " };
+            let line = format!(
+                "{}{} {}{} │ {}",
+                connector,
+                bar(weight, 10),
+                marker,
+                (i + 1).to_string().dimmed(),
+                e.value
+            );
+
+            if e.is_deleted {
+                variant_lines.push(line.dimmed().to_string());
+                variant_stage.push("deleted".red().to_string());
+            } else if e.is_staged_add {
+                variant_lines.push(line.green().to_string());
+                variant_stage.push("added".green().to_string());
+            } else if e.value_modified
+                || e.weight_modified
+                || (e.is_control && has_ops && weight != e.weight)
+            {
+                variant_lines.push(line.yellow().to_string());
+                let label = if e.value_modified || e.weight_modified {
+                    "modified"
+                } else {
+                    "adjusted"
+                };
+                variant_stage.push(label.yellow().to_string());
+            } else {
+                variant_lines.push(line);
+                variant_stage.push(String::new());
+            }
+        }
+
+        let variants = variant_lines.join("\n");
+        let variants_stage_str = variant_stage.join("\n");
+
+        let has_staged = !status_stage.is_empty()
+            || !desc_stage.is_empty()
+            || variant_stage.iter().any(|s| !s.is_empty());
+
+        let table = if has_staged {
+            FancyTable::create(FancyTableOpts::default())
+                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
+                .add_column(
+                    None,
+                    Layout::Fixed(10),
+                    Align::Left,
+                    Overflow::Truncate,
+                    variant_stage.len().max(1),
+                )
+                .width(100)
+                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .build()
+        } else {
+            FancyTable::create(FancyTableOpts::default())
+                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
+                .width(100)
+                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .build()
+        };
+
+        let rows: Vec<Vec<String>> = if has_staged {
+            vec![
+                vec!["STATUS".to_string(), status, status_stage],
+                vec!["VARIANTS".to_string(), variants, variants_stage_str],
+                vec!["TAGS".to_string(), tags, String::new()],
+                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
+            ]
+        } else {
+            vec![
+                vec!["STATUS".to_string(), status],
+                vec!["VARIANTS".to_string(), variants],
+                vec!["TAGS".to_string(), tags],
+                vec!["DESCRIPTION".to_string(), desc_str],
+            ]
+        };
+        table.render(rows);
         println!("  {} control variant\n", "★".dimmed());
     }
-}
-
-/// A single row for the variant listing table.
-/// All strings are pre-colored by the caller.
-/// When `stage` is `None`, the STATE column is omitted entirely.
-pub struct VariantRow {
-    pub index: String,
-    pub weight: String,
-    pub value: String,
-    pub stage: Option<String>,
-}
-
-/// Render a variant listing table, consuming the rows.
-///
-/// If any row carries a `stage`, a STAGE column is added for all rows.
-pub fn variant_list(rows: Vec<VariantRow>) {
-    let with_stage = rows.iter().any(|r| r.stage.is_some());
-
-    if with_stage {
-        let data: Vec<[String; 4]> = rows
-            .into_iter()
-            .map(|r| [r.index, r.weight, r.value, r.stage.unwrap_or_default()])
-            .collect();
-
-        FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
-            .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
-            .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
-            .add_column_named_with_align("STAGE".into(), Layout::Fixed(10), Align::Left)
-            .width(100)
-            .build()
-            .render(data);
-    } else {
-        let data: Vec<[String; 3]> = rows
-            .into_iter()
-            .map(|r| [r.index, r.weight, r.value])
-            .collect();
-
-        FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("#".into(), Layout::Fixed(4), Align::Left)
-            .add_column_named_with_align("WEIGHT".into(), Layout::Fixed(18), Align::Left)
-            .add_column_named_with_align("VALUE".into(), Layout::Expandable(80), Align::Left)
-            .width(100)
-            .build()
-            .render(data);
-    }
-
-    println!("  {} control variant\n", "★".dimmed());
 }
 
 pub fn bar(weight: u8, width: u16) -> String {

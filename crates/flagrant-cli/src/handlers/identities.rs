@@ -60,12 +60,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// auto-typed (bool → i32 → f32 → str).
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
-        {
-            let ctx = session.context.read().unwrap();
-            if ctx.has_identity_pending() {
-                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-            }
-        }
+        stage::ensure_no_pending(session)?;
         let trait_payloads: Vec<IdentityTraitPayload> = args[2..]
             .iter()
             .filter_map(|arg| {
@@ -152,11 +147,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// Shared entry point used by both `IDENTITY use` and the `FEATURE use feature@identity`
 /// shortcut. Fails if there are uncommitted staged trait changes.
 pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
+    stage::ensure_no_pending(session)?;
     let ctx = session.context.read().unwrap();
-    if ctx.has_identity_pending() {
-        bail!("You have uncommitted trait changes. Run `COMMIT` or `DISCARD` first.");
-    }
-
     let identity = resolve_identity(&ctx, identity_str)?;
     identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
     drop(ctx);

@@ -4,6 +4,17 @@
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
+
+/// Bail if any context has uncommitted staged changes.
+///
+/// Call this at the top of every context-switching handler (`use`, `add`) before
+/// clearing and replacing the current context.
+pub(crate) fn ensure_no_pending(session: &Session<Connection>) -> anyhow::Result<()> {
+    if session.context.read().unwrap().has_any_pending() {
+        bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+    }
+    Ok(())
+}
 use flagrant_types::{
     FeatureValue, TraitValue,
     payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},

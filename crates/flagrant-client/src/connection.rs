@@ -147,6 +147,10 @@ impl Connection {
             .unwrap_or(false)
     }
 
+    pub fn has_any_pending(&self) -> bool {
+        self.has_feature_pending() || self.has_identity_pending() || self.has_segment_pending()
+    }
+
     pub fn env_resource(&self) -> BaseResource<'_> {
         BaseResource::Environment(&self.project.name, &self.environment.name)
     }

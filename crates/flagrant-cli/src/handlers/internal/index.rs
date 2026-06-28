@@ -15,7 +15,7 @@ use flagrant_types::payload::VariantPatchOp;
 /// Resolve a 1-based display index to a [`VariantRef`].
 pub(crate) fn resolve(idx: usize, ctx: &Connection) -> anyhow::Result<VariantRef> {
     if ctx.variant_index.is_empty() {
-        bail!("Run `VARIANT list` to refresh indices.")
+        bail!("Run `FEATURE describe` to refresh indices.")
     }
     if idx == 0 || idx > ctx.variant_index.len() {
         bail!(

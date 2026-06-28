@@ -4,7 +4,6 @@
 //!
 //! | Command            | Handler    | Description                                      |
 //! |--------------------|------------|--------------------------------------------------|
-//! | `VARIANT list`     | [`list`]   | Print variants and rebuild the positional index. |
 //! | `VARIANT add`      | [`add`]    | Stage a new variant addition.                    |
 //! | `VARIANT value`    | [`value`]  | Stage a value change for an existing variant.    |
 //! | `VARIANT weight`   | [`weight`] | Stage a weight change for an existing variant.   |
@@ -15,7 +14,6 @@
 //! only sent to the API when the user runs `COMMIT`.
 
 use anyhow::bail;
-use colored::Colorize;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
@@ -24,125 +22,9 @@ use flagrant_types::{
 };
 
 use crate::handlers::{
-    internal::{effectives as effective, index, stage},
+    internal::{index, stage},
     open_in_editor,
 };
-use crate::printer::tabular::{VariantRow, bar, variant_list};
-
-/// List variants for the current feature, overlaying any pending staged changes.
-///
-/// Committed variants are shown first (sorted ascending by id), followed by staged
-/// additions. Modified, deleted, and auto-adjusted rows are colour-coded. Also
-/// rebuilds the positional variant index used by other commands.
-pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-
-    let feature = ctx
-        .feature
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("No feature name provided."))?;
-    let ops: &[VariantPatchOp] = ctx
-        .feature_patch
-        .as_ref()
-        .map(|p| p.variants.as_slice())
-        .unwrap_or_default();
-
-    // Pre-compute adjusted control weight once; it is constant across all variants in the loop.
-    let adjusted_control_weight: Option<u8> = if !ops.is_empty() {
-        let non_control_total = total_non_control_weight(
-            feature,
-            ctx.feature_patch.as_ref(),
-            &VariantRef::Staged(usize::MAX),
-            0,
-        );
-        let adjusted = 100u32.saturating_sub(non_control_total) as u8;
-        feature
-            .variants
-            .iter()
-            .find(|v| v.is_control())
-            .and_then(|c| (adjusted != c.weight).then_some(adjusted))
-    } else {
-        None
-    };
-
-    let eff = effective::effective_variants(feature, ctx.feature_patch.as_ref());
-
-    let mut rows: Vec<VariantRow> = eff
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| !e.is_staged_add)
-        .map(|(i, e)| {
-            let idx_str = if e.is_control {
-                format!("{}★", i + 1)
-            } else {
-                (i + 1).to_string()
-            };
-
-            if e.is_deleted {
-                VariantRow {
-                    index: idx_str.dimmed().to_string(),
-                    weight: bar(e.weight, 10).dimmed().to_string(),
-                    value: e.value.to_string().dimmed().to_string(),
-                    stage: Some("deleted".red().to_string()),
-                }
-            } else {
-                let weight = if e.is_control {
-                    adjusted_control_weight.unwrap_or(e.weight)
-                } else {
-                    e.weight
-                };
-                let is_modified = e.value_modified
-                    || e.weight_modified
-                    || (e.is_control && adjusted_control_weight.is_some());
-                let label = if e.value_modified || e.weight_modified {
-                    "modified"
-                } else {
-                    "adjusted"
-                };
-                if is_modified {
-                    VariantRow {
-                        index: idx_str.yellow().to_string(),
-                        weight: bar(weight, 10).yellow().to_string(),
-                        value: e.value.to_string().yellow().to_string(),
-                        stage: Some(label.yellow().to_string()),
-                    }
-                } else {
-                    VariantRow {
-                        index: idx_str,
-                        weight: bar(weight, 10),
-                        value: e.value.to_string(),
-                        stage: None,
-                    }
-                }
-            }
-        })
-        .collect();
-
-    let committed_count = eff.iter().filter(|e| !e.is_staged_add).count();
-    for (staged_pos, e) in eff.iter().filter(|e| e.is_staged_add).enumerate() {
-        rows.push(VariantRow {
-            index: (committed_count + staged_pos + 1)
-                .to_string()
-                .green()
-                .to_string(),
-            weight: bar(e.weight, 10).green().to_string(),
-            value: e.value.to_string().green().to_string(),
-            stage: Some("added".green().to_string()),
-        });
-    }
-
-    variant_list(rows);
-
-    let staged_adds_count = eff.iter().filter(|e| e.is_staged_add).count();
-    ctx.variant_index = eff
-        .iter()
-        .filter(|e| !e.is_staged_add)
-        .filter_map(|e| e.id.map(VariantRef::Committed))
-        .chain((0..staged_adds_count).map(VariantRef::Staged))
-        .collect();
-
-    Ok(())
-}
 
 /// Stage a new variant addition with a given weight and value.
 ///

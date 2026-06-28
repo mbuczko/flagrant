@@ -27,7 +27,11 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::{identities, internal::stage, open_in_editor},
+    handlers::{
+        identities,
+        internal::{index, stage},
+        open_in_editor,
+    },
     printer::tabular::Tabular,
 };
 use flagrant_client::connection::VariantRef;
@@ -48,12 +52,7 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        {
-            let ctx = session.context.read().unwrap();
-            if ctx.has_feature_pending() {
-                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-            }
-        }
+        stage::ensure_no_pending(session)?;
         let feature = {
             let ctx = session.context.read().unwrap();
             let res = ctx.env_resource();
@@ -74,7 +73,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         };
 
         feature.describe(None, &());
-        session.context.write().unwrap().feature = Some(feature);
+        let mut ctx = session.context.write().unwrap();
+        ctx.feature = Some(feature);
+        index::rebuild(&mut ctx);
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -96,16 +97,15 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         if feature_name.is_empty() {
             bail!("No feature name provided.");
         }
-        {
-            let ctx = session.context.read().unwrap();
-            if ctx.has_feature_pending() {
-                bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-            }
-        }
+        stage::ensure_no_pending(session)?;
         let feature = fetch_feature(feature_name, session)
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
         feature.describe(None, &());
-        session.context.write().unwrap().feature = Some(feature);
+        {
+            let mut ctx = session.context.write().unwrap();
+            ctx.feature = Some(feature);
+            index::rebuild(&mut ctx);
+        }
 
         if let Some(identity_str) = identity_str {
             identities::switch_to(identity_str, session)?;
@@ -125,12 +125,16 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     if let Some(name) = args.get(1) {
         fetch_feature(name, session)?.describe(None, &());
     } else {
-        let ctx = session.context.read().unwrap();
-        if let Some(feature) = &ctx.feature {
-            feature.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &());
-        } else {
-            bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
+        {
+            let ctx = session.context.read().unwrap();
+            match ctx.feature.as_ref() {
+                Some(f) => f.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &()),
+                None => bail!(
+                    "Not in a feature context. Set the context with: \"FEATURE use\" command."
+                ),
+            }
         }
+        index::rebuild(&mut session.context.write().unwrap());
     }
     Ok(())
 }

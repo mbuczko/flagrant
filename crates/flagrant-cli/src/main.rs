@@ -174,7 +174,6 @@ fn main() -> anyhow::Result<()> {
         Command::Identity.op("use", "identity", handlers::identities::r#use),
         Command::Identity.args("add · delete · describe · list · use"),
         // Variants
-        Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
         Command::Variant.op_in_context(
             "add",
             "weight value",
@@ -205,10 +204,8 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::weight,
             has_feature_ctx,
         ),
-        Command::Variant.args_in_context(
-            "list · add · delete · discard · weight · value",
-            has_feature_ctx,
-        ),
+        Command::Variant
+            .args_in_context("add · delete · discard · weight · value", has_feature_ctx),
         // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "status",
@@ -241,7 +238,10 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::set_pin,
             has_feature_and_identity_ctx,
         ),
-        Command::Set.args_in_context("status · value · description · pin · trait", has_feature_or_identity_ctx),
+        Command::Set.args_in_context(
+            "status · value · description · pin · trait",
+            has_feature_or_identity_ctx,
+        ),
         // Segment setters (only in segment context)
         Command::Set.op_in_context(
             "name",
