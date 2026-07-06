@@ -137,21 +137,21 @@ impl Tabular for IdentityWithTraits {
                         .dimmed()
                         .to_string(),
                 );
-                trait_stage.push("deleted".red().to_string());
+                trait_stage.push("- deleted".red().to_string());
             } else if t.value_modified {
                 trait_lines.push(
                     format!("{}:{}", name, format_trait_value(&t.value))
                         .yellow()
                         .to_string(),
                 );
-                trait_stage.push("updated".yellow().to_string());
+                trait_stage.push("▪ updated".yellow().to_string());
             } else if t.is_staged_add {
                 trait_lines.push(
                     format!("{}:{}", name, format_trait_value(&t.value))
                         .green()
                         .to_string(),
                 );
-                trait_stage.push("added".green().to_string());
+                trait_stage.push("+ added".green().to_string());
             } else {
                 trait_lines.push(format!("{}:{}", name, format_trait_value(&t.value)));
                 trait_stage.push(String::new());
@@ -382,19 +382,19 @@ impl Tabular for Feature {
 
             if e.is_deleted {
                 variant_lines.push(line.dimmed().to_string());
-                variant_stage.push("deleted".red().to_string());
+                variant_stage.push("- deleted".red().to_string());
             } else if e.is_staged_add {
                 variant_lines.push(line.green().to_string());
-                variant_stage.push("added".green().to_string());
+                variant_stage.push("+ added".green().to_string());
             } else if e.value_modified
                 || e.weight_modified
                 || (e.is_control && has_ops && weight != e.weight)
             {
                 variant_lines.push(line.yellow().to_string());
                 let label = if e.value_modified || e.weight_modified {
-                    "modified"
+                    "▪ modified"
                 } else {
-                    "adjusted"
+                    "▪ adjusted"
                 };
                 variant_stage.push(label.yellow().to_string());
             } else {
@@ -585,9 +585,9 @@ impl Tabular for Segment {
                 .unwrap_or_default();
             group_lines.push(format!("{frame} {label_colored}{desc_part}"));
             group_stage.push(if group.is_deleted {
-                "deleted".red().to_string()
+                "- deleted".red().to_string()
             } else if group.is_staged_add {
-                "added".green().to_string()
+                "+ added".green().to_string()
             } else {
                 String::new()
             });
@@ -631,7 +631,7 @@ impl Tabular for Segment {
                                 r.value.dimmed().to_string(),
                                 // Only tag individually deleted rules; group header already says "deleted"
                                 if r.is_deleted {
-                                    "deleted".red().to_string()
+                                    "- deleted".red().to_string()
                                 } else {
                                     String::new()
                                 },
@@ -643,7 +643,7 @@ impl Tabular for Segment {
                                 driver.bright_blue().to_string(),
                                 cmp.dimmed().to_string(),
                                 r.value.green().to_string(),
-                                "added".green().to_string(),
+                                "+ added".green().to_string(),
                             )
                         } else {
                             (
@@ -742,6 +742,258 @@ impl Tabular for Segment {
         if !has_visible {
             println!("{}", "(no groups — use GROUP add to create one)".dimmed());
         }
+    }
+}
+
+/// Renders a single group in a two-row FancyTable (`JOINER` + `GROUP`),
+/// matching the style of `FEATURE describe` / `SEGMENT describe`.
+pub(crate) fn print_group(group: &effective::EffectiveGroup) {
+    let title = format!("Group: {}", group.label);
+
+    // ── JOINER row ────────────────────────────────────────────────────────────
+    let joiner_str = match &group.connector {
+        None => "(first group)".dimmed().to_string(),
+        Some(GroupConnector::And) => {
+            let s = "⊕ AND";
+            if group.is_staged_add {
+                s.green().to_string()
+            } else if group.is_deleted {
+                s.dimmed().to_string()
+            } else {
+                s.bright_cyan().to_string()
+            }
+        }
+        Some(GroupConnector::AndNot) => {
+            let s = "⊖ AND NOT";
+            if group.is_staged_add {
+                s.green().to_string()
+            } else if group.is_deleted {
+                s.dimmed().to_string()
+            } else {
+                s.bright_cyan().to_string()
+            }
+        }
+    };
+    let joiner_stage = if group.is_staged_add {
+        "+ added".green().to_string()
+    } else if group.is_deleted {
+        "- deleted".red().to_string()
+    } else {
+        String::new()
+    };
+
+    // ── GROUP box + parallel stage column ─────────────────────────────────────
+    let mut group_lines: Vec<String> = Vec::new();
+    let mut group_stage: Vec<String> = Vec::new();
+
+    let (frame, label_colored) = if group.is_deleted {
+        (
+            "╭─".red().dimmed().to_string(),
+            group.label.red().dimmed().to_string(),
+        )
+    } else if group.is_staged_add {
+        ("╭─".green().to_string(), group.label.green().to_string())
+    } else {
+        ("╭─".dimmed().to_string(), group.label.yellow().to_string())
+    };
+    let desc_part = group
+        .description
+        .as_deref()
+        .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
+        .unwrap_or_default();
+    group_lines.push(format!("{frame} {label_colored}{desc_part}"));
+    group_stage.push(if group.is_deleted {
+        "- deleted".red().to_string()
+    } else if group.is_staged_add {
+        "+ added".green().to_string()
+    } else {
+        String::new()
+    });
+
+    let visible_rules: Vec<_> = group.rules.iter().collect();
+    if visible_rules.is_empty() {
+        let pipe = if group.is_deleted {
+            "│".red().dimmed().to_string()
+        } else if group.is_staged_add {
+            "│".green().to_string()
+        } else {
+            "│".dimmed().to_string()
+        };
+        group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
+        group_stage.push(String::new());
+    } else {
+        let max_driver = visible_rules
+            .iter()
+            .map(|r| format_driver(&r.driver).len())
+            .max()
+            .unwrap_or(0);
+        let max_cmp = visible_rules
+            .iter()
+            .map(|r| format_comparator(&r.comparator).len())
+            .max()
+            .unwrap_or(0);
+        let mut display_idx = 1usize;
+        for r in &visible_rules {
+            let driver = format_driver(&r.driver);
+            let cmp = format_comparator(&r.comparator);
+            let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
+                if group.is_deleted || r.is_deleted {
+                    (
+                        "│".red().dimmed().to_string(),
+                        display_idx.to_string().dimmed().to_string(),
+                        driver.dimmed().to_string(),
+                        cmp.dimmed().to_string(),
+                        r.value.dimmed().to_string(),
+                        if r.is_deleted {
+                            "- deleted".red().to_string()
+                        } else {
+                            String::new()
+                        },
+                    )
+                } else if r.is_staged_add {
+                    (
+                        "│".green().to_string(),
+                        "+".green().to_string(),
+                        driver.bright_blue().to_string(),
+                        cmp.dimmed().to_string(),
+                        r.value.green().to_string(),
+                        "+ added".green().to_string(),
+                    )
+                } else {
+                    (
+                        "│".dimmed().to_string(),
+                        display_idx.to_string().dimmed().to_string(),
+                        driver.bright_blue().to_string(),
+                        cmp.dimmed().to_string(),
+                        r.value.green().to_string(),
+                        String::new(),
+                    )
+                };
+            group_lines.push(format!(
+                "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s:<cw$}  {val_s}",
+                dw = max_driver,
+                cw = max_cmp,
+            ));
+            group_stage.push(rule_stage);
+            if !r.is_staged_add {
+                display_idx += 1;
+            }
+        }
+    }
+
+    let close = if group.is_deleted {
+        "╰───".red().dimmed().to_string()
+    } else if group.is_staged_add {
+        "╰───".green().to_string()
+    } else {
+        "╰───".dimmed().to_string()
+    };
+    group_lines.push(close);
+    group_stage.push(String::new());
+
+    let group_str = group_lines.join("\n");
+    let group_stage_str = group_stage.join("\n");
+    let has_staged =
+        !joiner_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
+
+    let nlines = group_lines.len();
+    if has_staged {
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(100),
+                Align::Left,
+                Overflow::Truncate,
+                nlines,
+            )
+            .add_column(
+                None,
+                Layout::Fixed(10),
+                Align::Left,
+                Overflow::Truncate,
+                nlines,
+            )
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+        table.render(vec![
+            vec!["JOINER".to_string(), joiner_str, joiner_stage],
+            vec!["GROUP".to_string(), group_str, group_stage_str],
+        ]);
+    } else {
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(100),
+                Align::Left,
+                Overflow::Truncate,
+                nlines,
+            )
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+        table.render(vec![
+            vec!["JOINER".to_string(), joiner_str],
+            vec!["GROUP".to_string(), group_str],
+        ]);
+    }
+}
+
+/// Renders a single rule in a three-row FancyTable (`DRIVER` / `COMPARATOR` / `VALUE`),
+/// matching the style of `FEATURE describe` / `GROUP describe`.
+pub(crate) fn print_rule(group_label: &str, index: usize, rule: &effective::EffectiveRule) {
+    let title = format!("[{group_label}] rule #{index}");
+
+    let (driver_s, comparator_s, value_s, stage) = if rule.is_deleted {
+        (
+            format_driver(&rule.driver).dimmed().to_string(),
+            format_comparator(&rule.comparator).dimmed().to_string(),
+            rule.value.dimmed().to_string(),
+            "- deleted".red().to_string(),
+        )
+    } else if rule.is_staged_add {
+        (
+            format_driver(&rule.driver).bright_blue().to_string(),
+            format_comparator(&rule.comparator).dimmed().to_string(),
+            rule.value.green().to_string(),
+            "+ added".green().to_string(),
+        )
+    } else {
+        (
+            format_driver(&rule.driver).bright_blue().to_string(),
+            format_comparator(&rule.comparator).dimmed().to_string(),
+            rule.value.green().to_string(),
+            String::new(),
+        )
+    };
+
+    if stage.is_empty() {
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 1)
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+        table.render(vec![
+            vec!["DRIVER".to_string(), driver_s],
+            vec!["COMPARATOR".to_string(), comparator_s],
+            vec!["VALUE".to_string(), value_s],
+        ]);
+    } else {
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 1)
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .build();
+        table.render(vec![
+            vec!["DRIVER".to_string(), driver_s, stage.clone()],
+            vec!["COMPARATOR".to_string(), comparator_s, String::new()],
+            vec!["VALUE".to_string(), value_s, String::new()],
+        ]);
     }
 }
 

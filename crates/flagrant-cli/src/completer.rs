@@ -156,6 +156,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let ctx = self.session.context.read().unwrap();
 
                 Ok(match op {
+                    // Since group labels are auto-generated, let's simplify the autocompletion
+                    // and reduce it to "group-" only.
+                    "add" | "describe" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
                     "add" if arg_n == 3 => {
                         if let Some(trait_prefix) = prefix.strip_prefix("trait:") {
                             let res = ctx.project.as_base_resource();
@@ -208,6 +211,13 @@ impl AutoCompleter for ArgCompleter<'_> {
                         }
                         _ => vec![],
                     },
+                    _ => vec![],
+                })
+            }
+            "GROUP" if arg_n >= 2 => {
+                let op: &str = &args[1];
+                Ok(match op {
+                    "describe" | "delete" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
                     _ => vec![],
                 })
             }

@@ -3,6 +3,50 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Comparator, SegmentDriver, payload::SegmentPatchOp};
 
+use crate::{handlers::internal::effectives, printer::tabular};
+
+/// Print details of a single rule within a group, overlaying any staged changes.
+///
+/// Expected args: `<group-label> <rule-index>`
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let label = args
+        .get(1)
+        .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;
+    let index_str = args
+        .get(2)
+        .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
+    let index: usize = index_str.parse::<usize>().map_err(|_| {
+        anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
+    })?;
+    if index == 0 {
+        bail!("Rule index is 1-based; use 1 for the first rule.");
+    }
+
+    let ctx = session.context.read().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
+
+    let eff = effectives::effective_segment(segment, ctx.segment_patch.as_ref().filter(|p| !p.is_empty()));
+    let group = eff
+        .groups
+        .iter()
+        .find(|g| g.label == label.as_ref())
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
+
+    let committed_rules: Vec<_> = group.rules.iter().filter(|r| !r.is_staged_add).collect();
+    let rule = committed_rules.get(index - 1).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No rule at index {index} in [{label}] (has {} committed rule(s)).",
+            committed_rules.len()
+        )
+    })?;
+
+    tabular::print_rule(label.as_ref(), index, rule);
+    Ok(())
+}
+
 /// Stage a rule addition on a group in the current segment.
 ///
 /// Expected args: `<group-label> <driver> <comparator> <value>`

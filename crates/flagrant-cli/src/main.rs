@@ -285,8 +285,14 @@ fn main() -> anyhow::Result<()> {
             has_segment_ctx,
         ),
         Command::Group.op_in_context("list", "", handlers::groups::list, has_segment_ctx),
+        Command::Group.op_in_context(
+            "describe",
+            "label",
+            handlers::groups::describe,
+            has_segment_ctx,
+        ),
         Command::Group.op_in_context("delete", "label", handlers::groups::delete, has_segment_ctx),
-        Command::Group.args_in_context("add · list · delete", has_segment_ctx),
+        Command::Group.args_in_context("add · list · describe · delete", has_segment_ctx),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
@@ -295,12 +301,18 @@ fn main() -> anyhow::Result<()> {
             has_segment_ctx,
         ),
         Command::Rule.op_in_context(
+            "describe",
+            "group-label rule-index",
+            handlers::rules::describe,
+            has_segment_ctx,
+        ),
+        Command::Rule.op_in_context(
             "delete",
             "group-label rule-index",
             handlers::rules::delete,
             has_segment_ctx,
         ),
-        Command::Rule.args_in_context("add · delete", has_segment_ctx),
+        Command::Rule.args_in_context("add · describe · delete", has_segment_ctx),
         // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",

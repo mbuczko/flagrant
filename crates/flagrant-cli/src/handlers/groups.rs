@@ -3,7 +3,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::internal::effectives, printer::tabular::{self, Tabular}};
 
 /// Stage a group addition for the current segment.
 ///
@@ -63,6 +63,31 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         return Ok(());
     }
     bail!("Not in a segment context.");
+}
+
+/// Print details of a single group, overlaying any staged changes.
+///
+/// Expected args: `<label>`
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let label = args
+        .get(1)
+        .ok_or_else(|| anyhow::anyhow!("No group label provided. Expected: GROUP describe <label>"))?;
+
+    let ctx = session.context.read().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
+
+    let eff = effectives::effective_segment(segment, ctx.segment_patch.as_ref().filter(|p| !p.is_empty()));
+    let group = eff
+        .groups
+        .iter()
+        .find(|g| g.label == label.as_ref())
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
+
+    tabular::print_group(group);
+    Ok(())
 }
 
 /// Stage a group deletion for the current segment.
