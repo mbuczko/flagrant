@@ -3,7 +3,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{Comparator, SegmentDriver, payload::SegmentPatchOp};
 
-use crate::{handlers::internal::effectives, printer::tabular};
+use crate::printer::tabular::Tabular;
 
 /// Print details of a single rule within a group, overlaying any staged changes.
 ///
@@ -28,22 +28,20 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
 
-    let eff = effectives::effective_segment(segment, ctx.segment_patch.as_ref().filter(|p| !p.is_empty()));
-    let group = eff
+    let group = segment
         .groups
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
 
-    let committed_rules: Vec<_> = group.rules.iter().filter(|r| !r.is_staged_add).collect();
-    let rule = committed_rules.get(index - 1).ok_or_else(|| {
+    let rule = group.rules.get(index - 1).ok_or_else(|| {
         anyhow::anyhow!(
-            "No rule at index {index} in [{label}] (has {} committed rule(s)).",
-            committed_rules.len()
+            "No rule at index {index} in [{label}] (has {} rule(s)).",
+            group.rules.len()
         )
     })?;
 
-    tabular::print_rule(label.as_ref(), index, rule);
+    rule.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &(label.to_string(), index));
     Ok(())
 }
 

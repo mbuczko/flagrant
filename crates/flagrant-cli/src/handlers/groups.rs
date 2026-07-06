@@ -3,7 +3,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
-use crate::{handlers::internal::effectives, printer::tabular::{self, Tabular}};
+use crate::printer::tabular::Tabular;
 
 /// Stage a group addition for the current segment.
 ///
@@ -79,14 +79,13 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
 
-    let eff = effectives::effective_segment(segment, ctx.segment_patch.as_ref().filter(|p| !p.is_empty()));
-    let group = eff
+    let group = segment
         .groups
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
 
-    tabular::print_group(group);
+    group.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
     Ok(())
 }
 
