@@ -11,12 +11,12 @@ use crate::errors::FlagrantError;
 struct SQLSegments {}
 
 #[derive(sqlx::FromRow)]
-pub(crate) struct RuleRow {
-    pub(crate) rule_id: i32,
-    pub(crate) group_id: i32,
-    pub(crate) driver: SegmentDriver,
-    pub(crate) comparator: Comparator,
-    pub(crate) value: String,
+struct RuleRow {
+    rule_id: i32,
+    group_id: i32,
+    driver: SegmentDriver,
+    comparator: Comparator,
+    value: String,
 }
 
 /// Adds a rule to the given group.
@@ -39,6 +39,7 @@ pub async fn delete(conn: &mut SqliteConnection, rule_id: i32) -> anyhow::Result
     SQLSegments::delete_rule::<_>(conn, params![rule_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not delete rule", e))?;
+
     Ok(())
 }
 
@@ -50,8 +51,7 @@ pub(crate) fn remove_from_groups(groups: &mut [SegmentGroup], rule_id: i32) {
     }
 }
 
-/// Groups `RuleRow`s by `group_id` into a map consumed by the segment loading helpers.
-pub(crate) fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
+fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
     let mut map: HashMap<i32, Vec<SegmentRule>> = HashMap::new();
     for row in rows {
         map.entry(row.group_id).or_default().push(SegmentRule {
@@ -62,4 +62,28 @@ pub(crate) fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>
         });
     }
     map
+}
+
+/// Fetches and groups rules for a single segment.
+pub(crate) async fn collect_rules_for_segment(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+) -> anyhow::Result<HashMap<i32, Vec<SegmentRule>>> {
+    let rows = SQLSegments::fetch_rules_for_segment::<_, RuleRow>(conn, params![segment_id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
+
+    Ok(collect_rules(rows))
+}
+
+/// Fetches and groups all rules for a project (used for bulk segment loading).
+pub(crate) async fn collect_rules_for_project(
+    conn: &mut SqliteConnection,
+    project_id: i32,
+) -> anyhow::Result<HashMap<i32, Vec<SegmentRule>>> {
+    let rows = SQLSegments::fetch_rules::<_, RuleRow>(conn, params![project_id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
+
+    Ok(collect_rules(rows))
 }

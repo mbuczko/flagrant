@@ -10,7 +10,8 @@
 
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
-use flagrant_types::payload::VariantPatchOp;
+
+use super::effectives;
 
 /// Resolve a 1-based display index to a [`VariantRef`].
 pub(crate) fn resolve(idx: usize, ctx: &Connection) -> anyhow::Result<VariantRef> {
@@ -27,31 +28,34 @@ pub(crate) fn resolve(idx: usize, ctx: &Connection) -> anyhow::Result<VariantRef
     Ok(ctx.variant_index[idx - 1].clone())
 }
 
-/// Rebuilds the variant index from the current feature's committed variants and any staged Add ops.
-/// Committed variants come first (sorted by id), followed by staged additions in order.
+/// Rebuilds the variant index to match the display order produced by `FEATURE describe`.
+///
+/// Uses `effective_variants` (same sort: descending weight, staged adds last) so that
+/// the 1-based numbers the user sees are always in sync with what `resolve` returns.
+/// Deleted variants are excluded - they are going away and should not be addressable.
 pub(crate) fn rebuild(ctx: &mut Connection) {
-    let variants = ctx
-        .feature
-        .as_ref()
-        .map(|f| f.variants.as_slice())
-        .unwrap_or_default();
-    let staged_count = ctx
-        .feature_patch
-        .as_ref()
-        .map(|p| {
-            p.variants
-                .iter()
-                .filter(|op| matches!(op, VariantPatchOp::Add { .. }))
-                .count()
-        })
-        .unwrap_or(0);
+    let feature = match ctx.feature.as_ref() {
+        Some(f) => f,
+        None => {
+            ctx.variant_index = vec![];
+            return;
+        }
+    };
 
-    let mut sorted_ids: Vec<i32> = variants.iter().map(|v| v.id).collect();
-    sorted_ids.sort_unstable();
-
-    let mut index: Vec<VariantRef> = sorted_ids.into_iter().map(VariantRef::Committed).collect();
-    for staged_pos in 0..staged_count {
-        index.push(VariantRef::Staged(staged_pos));
+    let eff = effectives::effective_variants(feature, ctx.feature_patch.as_ref());
+    let mut staged_pos = 0usize;
+    let mut index = Vec::with_capacity(eff.len());
+    for e in &eff {
+        if e.is_deleted {
+            continue;
+        }
+        match e.id {
+            Some(id) => index.push(VariantRef::Committed(id)),
+            None => {
+                index.push(VariantRef::Staged(staged_pos));
+                staged_pos += 1;
+            }
+        }
     }
     ctx.variant_index = index;
 }

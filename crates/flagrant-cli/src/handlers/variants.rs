@@ -112,6 +112,10 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .parse::<FeatureValue>()
         .unwrap_or_else(|_| current.clone_with(raw.trim()));
 
+    if fv == current {
+        return Ok(());
+    }
+
     let feature = ctx.feature.as_ref().unwrap();
     let duplicate = feature.variants.iter().any(|v| {
         v.value == fv && !matches!(&variant_ref, VariantRef::Committed(id) if *id == v.id)
@@ -184,6 +188,9 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     };
     if !(0..=100).contains(&new_weight) {
         bail!("Variant weight should be positive number in range of <0, 100>.")
+    }
+    if new_weight == current_variant_weight(&variant_ref, &ctx) as u8 {
+        return Ok(());
     }
     if let VariantRef::Committed(id) = &variant_ref {
         let is_control = ctx

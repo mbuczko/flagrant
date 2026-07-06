@@ -199,8 +199,6 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     segment.describe(None, &());
 
     let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
-    ctx.feature = None;
-    ctx.feature_patch = None;
     ctx.variant_index.clear();
     ctx.identity = None;
     ctx.identity_patch = None;

@@ -8,7 +8,7 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
-use super::rule::{self, RuleRow, collect_rules};
+use super::rule;
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -230,7 +230,13 @@ pub async fn patch(
             SegmentPatchOp::SetName(name) => {
                 segment.name = name;
                 segment.validate()?;
-                update(conn, &segment, &segment.name, segment.description.as_deref()).await?;
+                update(
+                    conn,
+                    &segment,
+                    &segment.name,
+                    segment.description.as_deref(),
+                )
+                .await?;
             }
             SegmentPatchOp::SetDescription(description) => {
                 update(conn, &segment, &segment.name, description.as_deref()).await?;
@@ -317,12 +323,7 @@ async fn load_segment(conn: &mut SqliteConnection, row: SegmentRow) -> anyhow::R
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment groups", e))?;
 
-    let rule_rows =
-        SQLSegments::fetch_rules_for_segment::<_, RuleRow>(&mut *conn, params![row.segment_id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
-
-    let mut rules = collect_rules(rule_rows);
+    let mut rules = rule::collect_rules_for_segment(&mut *conn, row.segment_id).await?;
     let groups = group_rows
         .into_iter()
         .map(|g| {
@@ -363,11 +364,7 @@ async fn load_all_segments(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment groups", e))?;
 
-    let rule_rows = SQLSegments::fetch_rules::<_, RuleRow>(&mut *conn, params![project_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment rules", e))?;
-
-    let rules = collect_rules(rule_rows);
+    let rules = rule::collect_rules_for_project(&mut *conn, project_id).await?;
     let mut groups = collect_groups(group_rows, rules);
 
     Ok(rows
