@@ -198,7 +198,13 @@ impl Tabular for Segment {
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 20)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    20,
+                )
                 .add_column(
                     None,
                     Layout::Fixed(10),
@@ -212,7 +218,13 @@ impl Tabular for Segment {
         } else {
             FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(13), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 20)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    20,
+                )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build()
@@ -341,14 +353,11 @@ impl Tabular for SegmentGroup {
                 .rules
                 .iter()
                 .map(|r| format_driver(&r.driver).len())
-                .chain(staged_add_rules.iter().map(|(d, _, _)| format_driver(d).len()))
-                .max()
-                .unwrap_or(0);
-            let max_cmp = group
-                .rules
-                .iter()
-                .map(|r| format_comparator(&r.comparator).len())
-                .chain(staged_add_rules.iter().map(|(_, c, _)| format_comparator(c).len()))
+                .chain(
+                    staged_add_rules
+                        .iter()
+                        .map(|(d, _, _)| format_driver(d).len()),
+                )
                 .max()
                 .unwrap_or(0);
 
@@ -382,23 +391,21 @@ impl Tabular for SegmentGroup {
                         )
                     };
                 group_lines.push(format!(
-                    "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s:<cw$}  {val_s}",
+                    "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}",
                     dw = max_driver,
-                    cw = max_cmp,
                 ));
                 group_stage.push(rule_stage);
                 display_idx += 1;
             }
             for (driver, comparator, value) in &staged_add_rules {
                 group_lines.push(format!(
-                    "{}  {}  {:<dw$}  {:<cw$}  {}",
+                    "{}  {}  {:<dw$}  {}  {}",
                     "│".green(),
                     "+".green(),
                     format_driver(driver).bright_blue(),
                     format_comparator(comparator).dimmed(),
                     value.green(),
                     dw = max_driver,
-                    cw = max_cmp,
                 ));
                 group_stage.push("+ added".green().to_string());
             }
@@ -420,8 +427,20 @@ impl Tabular for SegmentGroup {
         if has_staged {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, nlines)
-                .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, nlines)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Truncate,
+                    nlines,
+                )
+                .add_column(
+                    None,
+                    Layout::Fixed(10),
+                    Align::Left,
+                    Overflow::Truncate,
+                    nlines,
+                )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
@@ -432,7 +451,13 @@ impl Tabular for SegmentGroup {
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, nlines)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Truncate,
+                    nlines,
+                )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
@@ -480,7 +505,13 @@ impl Tabular for SegmentRule {
         if stage.is_empty() {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 1)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Wrap,
+                    10,
+                )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
@@ -492,7 +523,13 @@ impl Tabular for SegmentRule {
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 1)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Wrap,
+                    10,
+                )
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 1)
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
