@@ -5,6 +5,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+flagrant-repl = {path = "../flagrant-repl"}
 flagrant-types = {path = "../flagrant-types"}
 flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
 
@@ -12,12 +13,13 @@ flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
 serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
-rustyline = {version = "14.0.0", features = ["derive"]}
-ascii_table = {version = "4.0.3", features = ["auto_table_width"]}
-
-clap = "4.5.1"
+rustyline = { workspace = true }
+fancy-table = {path = "../../../fancy-table"}
+argh = "0.1"
 strum = "0.26.2"
 strum_macros = "0.26.2"
+colored = "3.0.0"
+tempfile = "3"
 
 [[bin]]
 name = "flagrant-cli"

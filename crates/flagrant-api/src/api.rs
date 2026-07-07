@@ -1,17 +1,51 @@
-use axum::{extract::{Path, State}, Json};
-use flagrant::{distributor, models::{environment, feature}};
-use flagrant_types::FeatureValue;
-use sqlx::SqlitePool;
+use axum::{Json, extract::Path};
+use flagrant::models::{environment, identity, project};
+use flagrant_types::FeatureResponse;
 
-use crate::errors::ServiceError;
+use crate::{
+    errors::ServiceError,
+    extractors::{DbConnection, Identity},
+};
 
-pub async fn get_feature(
-    State(pool): State<SqlitePool>,
-    Path((environment_id, _ident, feature_name)): Path<(u16, String, String)>,
-) -> Result<Json<FeatureValue>, ServiceError> {
-    let env = environment::fetch(&pool, environment_id).await?;
-    let feature = feature::fetch_by_name(&pool, &env, feature_name).await?;
-    let variant = distributor::Distributor::new(feature).distribute(&pool, &env).await?;
+/// Returns feature values for a given identity.
+///
+/// Requires the `X-Flagrant-Identity` header to identify the caller and
+/// determine which variant value to return for each active feature.
+#[utoipa::path(
+    get,
+    path = "/api/v1/projects/{project}/envs/{environment}/features",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("X-Flagrant-Identity" = String, Header, description = "Caller identity used for variant assignment")
+    ),
+    responses(
+        (status = 200, description = "Feature values for the identity", body = Vec<FeatureResponse>),
+        (status = 401, description = "Missing X-Flagrant-Identity header")
+    ),
+    tag = "api"
+)]
+pub async fn get_features(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name)): Path<(String, String)>,
+    Identity(identity): Identity,
+) -> Result<Json<Vec<FeatureResponse>>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let identity = identity::get_or_create_by_value(&mut conn, &env, identity).await?;
+    let variants = identity::get_identity_variants(&mut conn, &env, &identity)
+        .await?
+        .into_iter()
+        // get_identity_variants always distributes, so feature_value should always be Some.
+        // filter_map drops any entries where distribution unexpectedly produced None.
+        .filter_map(|v| {
+            Some(FeatureResponse {
+                feature_id: v.feature_id,
+                name: v.feature_name,
+                value: v.feature_value?,
+            })
+        })
+        .collect::<Vec<_>>();
 
-    Ok(Json(variant.value))
+    Ok(Json(variants))
 }

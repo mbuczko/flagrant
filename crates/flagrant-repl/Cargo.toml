@@ -1,0 +1,9 @@
+[package]
+name = "flagrant-repl"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = {workspace = true}
+rustyline = { workspace = true }

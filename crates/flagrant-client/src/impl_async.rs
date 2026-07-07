@@ -1,30 +1,32 @@
 use reqwest::Response;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::http::HttpClient;
+use crate::http::{Auth, HttpClient};
 
 impl HttpClient {
-    pub fn new(host: String) -> HttpClient {
+    pub fn new(host: String, auth: Auth) -> HttpClient {
         let client = reqwest::Client::new();
-        HttpClient::Async(client, host)
+        HttpClient::Async(client, host, auth)
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: String) -> anyhow::Result<T> {
         match self {
-            HttpClient::Async(client, host) => {
+            HttpClient::Async(client, host, _auth) => {
                 match client.get(format!("{host}{path}")).send().await {
-                    Ok(response) if response.status().is_success() => Ok(response.json::<T>().await?),
+                    Ok(response) if response.status().is_success() => {
+                        Ok(response.json::<T>().await?)
+                    }
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
     pub async fn put<P: Serialize>(&self, path: String, payload: P) -> anyhow::Result<()> {
         match self {
-            HttpClient::Async(client, host) => {
+            HttpClient::Async(client, host, _auth) => {
                 let result = client
                     .put(format!("{host}{path}"))
                     .json(&payload)
@@ -36,8 +38,8 @@ impl HttpClient {
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -47,7 +49,7 @@ impl HttpClient {
         payload: P,
     ) -> anyhow::Result<T> {
         match self {
-            HttpClient::Async(client, host) => {
+            HttpClient::Async(client, host, _auth) => {
                 let result = client
                     .post(format!("{host}{path}"))
                     .json(&payload)
@@ -55,31 +57,29 @@ impl HttpClient {
                     .await;
 
                 match result {
-                    Ok(response) if response.status().is_success() => Ok(response.json::<T>().await?),
+                    Ok(response) if response.status().is_success() => {
+                        Ok(response.json::<T>().await?)
+                    }
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 
     pub async fn delete(&self, path: String) -> anyhow::Result<Response> {
         match self {
-            HttpClient::Async(client, host) => {
-                let result = client
-                    .delete(format!("{host}{path}"))
-                    .send()
-                    .await;
+            HttpClient::Async(client, host, _auth) => {
+                let result = client.delete(format!("{host}{path}")).send().await;
 
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response),
                     Ok(response) => Err(anyhow::anyhow!(response.text().await?)),
                     Err(err) => Err(err.into()),
                 }
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         }
     }
 }
-

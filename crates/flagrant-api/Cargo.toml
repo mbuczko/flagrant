@@ -11,8 +11,8 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant = {path = "../flagrant", version = "0.0.3"}
-flagrant-types = {path = "../flagrant-types", version = "0.0.3"}
+flagrant = {path = "../flagrant", version = "0.0.4"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.4"}
 
 tokio = {workspace = true}
 axum = {workspace = true}
@@ -25,6 +25,13 @@ anyhow = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 thiserror = {workspace = true}
+smallvec = {workspace = true}
+
+utoipa = {workspace = true}
+utoipa-scalar = {workspace = true}
+
+# for auto-reload
+listenfd = "1.0"
 
 [dependencies.tower-http]
 version = "0.5.2"

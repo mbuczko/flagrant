@@ -1,7 +1,12 @@
 .envrc
-TAGS
-target
-history.txt
+.lsp
+.idea
 *.db-shm
 *.db-wal
 *.db
+*.org
+*.org_archive
+TAGS
+target
+history.txt
+bacon.toml

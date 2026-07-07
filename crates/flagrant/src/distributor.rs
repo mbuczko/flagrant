@@ -1,41 +1,30 @@
-use flagrant_types::{Environment, Feature, Variant};
-use sqlx::{Pool, Sqlite};
+use flagrant_types::{Environment, Variant};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::models::{feature, variant};
 
-pub struct Distributor {
-    feature: Feature,
-}
+/// Distributes a hit among the defined feature variants according to their associated weights.
+/// On every call:
+///  - choose the variant with the largest `accumulator`
+///  - subtract 100 from the `accumulator` of the chosen variant
+///  - add `weight` to all variant accumulators, including the chosen one
+pub async fn distribute(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+) -> anyhow::Result<Variant> {
+    let mut tx = conn.begin().await?;
+    let variants = variant::get_for_feature(&mut tx, environment, feature_id).await?;
 
-impl Distributor {
-    pub fn new(feature: Feature) -> Self {
-        Self { feature }
-    }
+    // There should always be at least one variant with a control value
+    let variant = variants
+        .into_iter()
+        .max_by(|a, b| a.accumulator.cmp(&b.accumulator))
+        .unwrap();
 
-    /// Distributes hit among defined featured variants in respect to associated weights.
-    /// On every call:
-    ///  - choose the variation with the largest `accum`
-    ///  - subtract 100 from the `accum` for the chosen variation
-    ///  - add `weight` to `accum` for all variations, including the chosen one
-    pub async fn distribute(
-        &self,
-        pool: &Pool<Sqlite>,
-        environment: &Environment,
-    ) -> anyhow::Result<Variant> {
-        let variants = variant::list(pool, environment, &self.feature).await?;
+    variant::update_accumulator(&mut tx, environment, &variant, variant.accumulator - 100).await?;
+    feature::bump_up_accumulators(&mut tx, environment, feature_id).await?;
 
-        // there should be always at least one variation with a control value
-        let variant = variants
-            .into_iter()
-            .max_by(|a, b| a.accumulator.cmp(&b.accumulator))
-            .unwrap();
-
-        let mut tx = pool.begin().await?;
-
-        variant::update_accumulator(&mut tx, environment, &variant, variant.accumulator - 100).await?;
-        feature::bump_up_accumulators(&mut tx, environment, &self.feature).await?;
-
-        tx.commit().await?;
-        Ok(variant)
-    }
+    tx.commit().await?;
+    Ok(variant)
 }

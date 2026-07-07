@@ -11,8 +11,7 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.3"}
-flagrant-macros = {path = "../flagrant-macros", version = "0.0.3"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.4"}
 
 sqlx = {workspace = true}
 hugsqlx = {workspace = true}
@@ -22,10 +21,8 @@ serde_json = {workspace = true}
 serde_valid = {workspace = true}
 anyhow = {workspace = true}
 thiserror = {workspace = true}
-
-semver = "1.0.14"
-rust-embed = "6.4.1"
-lazy_static = "1.4.0"
+smallvec = {workspace = true}
+chrono = {workspace = true}
 
 [dev-dependencies]
 rand = "0.8.5"
