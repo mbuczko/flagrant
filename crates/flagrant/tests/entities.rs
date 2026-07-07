@@ -284,6 +284,28 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
+async fn delete_feature_with_multiple_environments(mut conn: PoolConnection<Sqlite>) {
+    // Feature creation seeds a control variant per environment. Deletion from one
+    // environment must still remove all control variants (and their weights) across
+    // every environment — otherwise the FK on variant_weights blocks variants deletion.
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
+
+    // Sanity: the feature is visible from both environments.
+    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_ok());
+    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_ok());
+
+    assert!(
+        feature::delete(&mut conn, &environment1, &feature)
+            .await
+            .is_ok()
+    );
+    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_err());
+    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_err());
+}
+
+#[sqlx::test]
 async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "foo").await;

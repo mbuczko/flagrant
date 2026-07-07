@@ -78,8 +78,16 @@ WHERE environment_id = $1 AND variant_id IN (select variant_id from variants whe
 DELETE FROM features WHERE feature_id = $1
 
 -- :name delete_variants_for_feature :<> :!
--- :doc Removes a feature value.
+-- :doc Removes all variants for a feature (all environments).
 DELETE FROM variants WHERE feature_id = $1
+
+-- :name delete_variant_weights_for_feature :<> :!
+-- :doc Removes all variant_weights rows for all variants of a feature (across all environments).
+DELETE FROM variant_weights WHERE variant_id IN (SELECT variant_id FROM variants WHERE feature_id = $1)
+
+-- :name delete_identity_variants_for_feature :<> :!
+-- :doc Removes all identity_variants rows for a feature (across all environments).
+DELETE FROM identity_variants WHERE feature_id = $1
 
 -- :name delete_tags_for_feature :<> :!
 -- :doc Removes a feature tags.

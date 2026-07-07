@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use crate::errors::FlagrantError;
 use std::collections::HashMap;
 
@@ -366,27 +364,17 @@ pub async fn patch(
 /// the backend rejects control-variant deletion while other variants still exist.
 pub async fn delete(
     conn: &mut SqliteConnection,
-    environment: &Environment,
+    _environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let mut vars = variant::get_for_feature(&mut tx, environment, feature.id).await?;
 
-    // Sort variants so that control ones go last in the vector.
-    // This is required because of the strict deletion policy - control variants
-    // cannot be deleted while other variants still exist.
-    vars.sort_by(|a, _| match a.is_control() {
-        true => Ordering::Greater,
-        false => Ordering::Less,
-    });
-
-    // In transaction, remove all feature variants first.
-    // Due to the sorting above, the control variant will be deleted last.
-    for var in vars {
-        variant::delete(&mut tx, environment, &var).await?;
-    }
-
-    // Then remove the feature value and the entire feature definition.
+    // Delete across all environments in dependency order to satisfy FK constraints.
+    // Feature creation seeds control variants for every environment in the project, so
+    // a single-environment variant loop would miss control variants from other environments
+    // and leave their variant_weights rows behind, causing FK failures.
+    SQLFeatures::delete_identity_variants_for_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_variant_weights_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_tags_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;

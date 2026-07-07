@@ -321,6 +321,15 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
             ctx.client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 
+            let in_context = ctx.feature.as_ref().is_some_and(|f| f.id == feature.id);
+            drop(ctx);
+
+            if in_context {
+                let mut ctx = session.context.write().unwrap();
+                ctx.feature = None;
+                ctx.feature_patch = None;
+                ctx.variant_index = vec![];
+            }
             println!("Feature removed.");
             return Ok(());
         }
