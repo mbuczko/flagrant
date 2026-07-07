@@ -30,9 +30,6 @@ smallvec = {workspace = true}
 utoipa = {workspace = true}
 utoipa-scalar = {workspace = true}
 
-# for auto-reload
-listenfd = "1.0"
-
 [dependencies.tower-http]
 version = "0.5.2"
 features = ["add-extension", "compression-full", "trace"]
