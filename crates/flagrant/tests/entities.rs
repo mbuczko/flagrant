@@ -1,4 +1,5 @@
 use common::{create_context, create_environment, random_string};
+use flagrant::errors::FlagrantError;
 use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{
     FeatureValue,
@@ -29,7 +30,6 @@ async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
         Some("descriptozzo".to_owned()),
         value.clone(),
         true,
-        true,
     )
     .await
     .unwrap();
@@ -58,7 +58,6 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
         Some("samle description".to_owned()),
         value.clone(),
         true,
-        true,
     )
     .await
     .unwrap();
@@ -69,6 +68,43 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
         .await
         .unwrap();
     assert_eq!(feature_env2.get_default_value(), &value);
+}
+
+#[sqlx::test]
+async fn same_control_value_is_allowed_across_environments(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let value = FeatureValue::build("shared-default");
+
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
+
+    // Both environments set the same control value — this must not violate the unique constraint.
+    feature::update_one(&mut conn, &environment1, &feature)
+        .value(value.clone())
+        .update()
+        .await
+        .unwrap();
+
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(value.clone())
+        .update()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        feature::get_by_id(&mut conn, &environment1, feature.id)
+            .await
+            .unwrap()
+            .get_default_value(),
+        &value
+    );
+    assert_eq!(
+        feature::get_by_id(&mut conn, &environment2, feature.id)
+            .await
+            .unwrap()
+            .get_default_value(),
+        &value
+    );
 }
 
 #[sqlx::test]
@@ -138,7 +174,7 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
 #[sqlx::test]
 async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    for name in [" ble", "123", "💕333", "foo-bazz"] {
+    for name in [" ble", "123", "1feature", "my feature", "💕333", "foo-bazz"] {
         let feature = feature::create(
             &mut conn,
             &environment,
@@ -146,7 +182,6 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             None,
             FeatureValue::Text("foo".to_owned()),
             false,
-            true,
         )
         .await;
         assert!(feature.is_err())
@@ -160,7 +195,6 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await;
     assert!(feature.is_err())
@@ -179,7 +213,6 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await
     .unwrap();
@@ -191,7 +224,6 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::Text("foo".to_owned()),
         false,
-        true,
     )
     .await
     .unwrap();
@@ -252,6 +284,28 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
 }
 
 #[sqlx::test]
+async fn delete_feature_with_multiple_environments(mut conn: PoolConnection<Sqlite>) {
+    // Feature creation seeds a control variant per environment. Deletion from one
+    // environment must still remove all control variants (and their weights) across
+    // every environment — otherwise the FK on variant_weights blocks variants deletion.
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+    let feature = create_feature(&mut conn, &environment1, "foo").await;
+
+    // Sanity: the feature is visible from both environments.
+    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_ok());
+    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_ok());
+
+    assert!(
+        feature::delete(&mut conn, &environment1, &feature)
+            .await
+            .is_ok()
+    );
+    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_err());
+    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_err());
+}
+
+#[sqlx::test]
 async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "foo").await;
@@ -264,6 +318,75 @@ async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
     )
     .await;
     assert!(variant.is_ok());
+}
+
+#[sqlx::test]
+async fn create_variant_with_duplicate_value_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        10,
+    )
+    .await
+    .unwrap();
+
+    let err = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        20,
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(e, FlagrantError::BadRequest(_))),
+        "expected BadRequest, got: {err}"
+    );
+}
+
+#[sqlx::test]
+async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let v1 = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("bar"),
+        10,
+    )
+    .await
+    .unwrap();
+
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("baz"),
+        20,
+    )
+    .await
+    .unwrap();
+
+    // Updating v1's value to "baz" conflicts with the second variant.
+    let err = variant::update_one(&mut conn, &environment, &v1, FeatureValue::build("baz"), 10)
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(e, FlagrantError::BadRequest(_))),
+        "expected BadRequest, got: {err}"
+    );
 }
 
 #[sqlx::test]
@@ -327,7 +450,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        FeatureValue::build("bar-2"),
         30,
     )
     .await
@@ -632,7 +755,7 @@ async fn patch_control_variant_weight_is_rejected(mut conn: PoolConnection<Sqlit
         ..Default::default()
     };
     assert!(
-        feature::apply_patch(&mut conn, &environment, &feature, patch)
+        feature::patch(&mut conn, &environment, &feature, patch)
             .await
             .is_err()
     );
@@ -652,7 +775,7 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
         ..Default::default()
     };
     assert!(
-        feature::apply_patch(&mut conn, &environment, &feature, patch)
+        feature::patch(&mut conn, &environment, &feature, patch)
             .await
             .is_ok()
     );
@@ -795,4 +918,95 @@ async fn create_environment_with_non_unique_name(mut conn: PoolConnection<Sqlite
     environment::create(&mut conn, &project, name.to_owned(), None, None)
         .await
         .unwrap();
+}
+
+#[sqlx::test]
+async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment1) = create_context(&mut conn).await;
+    let environment2 = create_environment(&mut conn, &project).await;
+
+    // Feature created in env1 propagates its control variant to env2.
+    let feature = create_feature(&mut conn, &environment1, "control-env1").await;
+
+    // Give env2 a distinct control value.
+    feature::update_one(&mut conn, &environment2, &feature)
+        .value(FeatureValue::build("control-env2"))
+        .update()
+        .await
+        .unwrap();
+
+    // Add a shared (non-control, NULL env_id) variant visible in both environments.
+    variant::create(
+        &mut conn,
+        &environment1,
+        &feature,
+        FeatureValue::build("shared"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    // env1's control value is found in env1.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("control-env1"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_some_and(|v| v.is_control()));
+
+    // env2's control value is found in env2.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("control-env2"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_some_and(|v| v.is_control()));
+
+    // env2's control value is NOT visible in env1.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("control-env2"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_none());
+
+    // env1's control value is NOT visible in env2.
+    let v = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("control-env1"),
+    )
+    .await
+    .unwrap();
+    assert!(v.is_none());
+
+    // Shared non-control variant is found in both environments.
+    let v1 = variant::get_by_value(
+        &mut conn,
+        &environment1,
+        feature.id,
+        &FeatureValue::build("shared"),
+    )
+    .await
+    .unwrap();
+    let v2 = variant::get_by_value(
+        &mut conn,
+        &environment2,
+        feature.id,
+        &FeatureValue::build("shared"),
+    )
+    .await
+    .unwrap();
+    assert!(v1.is_some_and(|v| !v.is_control()));
+    assert!(v2.is_some_and(|v| !v.is_control()));
 }

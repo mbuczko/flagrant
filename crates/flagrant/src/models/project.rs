@@ -58,3 +58,11 @@ pub async fn get_by_id(conn: &mut SqliteConnection, project_id: i32) -> anyhow::
 
     Ok(project)
 }
+
+pub async fn get_by_name(conn: &mut SqliteConnection, name: String) -> anyhow::Result<Project> {
+    let project = Projects::fetch_project_by_name(conn, params!(name))
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch project", e))?;
+
+    Ok(project)
+}

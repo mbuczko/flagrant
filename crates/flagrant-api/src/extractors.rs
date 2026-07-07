@@ -8,8 +8,9 @@ use sqlx::{Sqlite, SqlitePool, pool::PoolConnection};
 
 use crate::errors::ServiceError;
 
-pub struct Identity(pub String);
 pub struct DbConnection(pub PoolConnection<Sqlite>);
+
+pub struct Identity(pub String);
 
 #[async_trait]
 impl<S> FromRequestParts<S> for Identity

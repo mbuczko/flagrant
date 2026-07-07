@@ -1,6 +1,9 @@
 use axum::{Json, extract::Path};
 use flagrant::models::project;
-use flagrant_types::{Environment, Project, payload::ProjectRequestPayload};
+use flagrant_types::{
+    Project,
+    payload::{NewProjectPayload, ProjectCreatedResponse},
+};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -21,12 +24,12 @@ pub async fn list(
     Ok(Json(projects))
 }
 
-/// Fetches a project by ID.
+/// Fetches a project by name.
 #[utoipa::path(
     get,
-    path = "/projects/{project_id}",
+    path = "/projects/{project}",
     params(
-        ("project_id" = i32, Path, description = "Project ID")
+        ("project" = String, Path, description = "Project name")
     ),
     responses(
         (status = 200, description = "Project details", body = Project)
@@ -35,9 +38,9 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path(project_id): Path<i32>,
+    Path(project_name): Path<String>,
 ) -> Result<Json<Project>, ServiceError> {
-    let project = project::get_by_id(&mut conn, project_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
 
     Ok(Json(project))
 }
@@ -46,17 +49,21 @@ pub async fn fetch(
 #[utoipa::path(
     post,
     path = "/projects/",
-    request_body = ProjectRequestPayload,
+    request_body = NewProjectPayload,
     responses(
-        (status = 200, description = "Created project and its default environment", body = Vec<serde_json::Value>)
+        (status = 200, description = "Created project and its default environment", body = ProjectCreatedResponse)
     ),
     tag = "projects"
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Json(payload): Json<ProjectRequestPayload>,
-) -> Result<Json<(Project, Environment)>, ServiceError> {
-    let (project, env) = project::create_with_environment(&mut conn, payload.name, None).await?;
+    Json(payload): Json<NewProjectPayload>,
+) -> Result<Json<ProjectCreatedResponse>, ServiceError> {
+    let (project, environment) =
+        project::create_with_environment(&mut conn, payload.name, None).await?;
 
-    Ok(Json((project, env)))
+    Ok(Json(ProjectCreatedResponse {
+        project,
+        environment,
+    }))
 }

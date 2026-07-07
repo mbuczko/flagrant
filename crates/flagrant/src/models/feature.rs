@@ -1,8 +1,7 @@
-use std::cmp::Ordering;
-
 use crate::errors::FlagrantError;
 use std::collections::HashMap;
 
+use chrono::Utc;
 use flagrant_types::{
     Environment, Feature, FeatureValue, Project, TagList, Variant,
     payload::{FeaturePatch, VariantPatchOp},
@@ -93,18 +92,11 @@ pub async fn create(
     description: Option<String>,
     value: FeatureValue,
     is_enabled: bool,
-    is_active: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![
-            environment.project_id,
-            name,
-            description,
-            is_active,
-            is_enabled
-        ],
+        params![environment.project_id, name, description, is_enabled],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -173,32 +165,11 @@ pub async fn get_by_name(
     Ok(feature.with_variants(variants))
 }
 
-/// Returns features with name starting by given `prefix`.
-///
-/// For performance reasons each feature is returned with its control variant only.
-pub async fn get_by_prefix(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    prefix: String,
-) -> anyhow::Result<Vec<Feature>> {
-    let features = SQLFeatures::fetch_features_by_pattern(
-        conn,
-        params![environment.project_id, environment.id, format!("{prefix}%")],
-        |row| row_to_feature(row, environment),
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
-
-    Ok(features)
-}
-
-/// Returns all features for given `environment`.
-///
-/// For performance reasons each feature is returned with its control variant only.
+/// Returns all features for given `environment`, each with all its variants.
 pub async fn get_all(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    is_active: Option<bool>,
+    is_archived: Option<bool>,
     is_enabled: Option<bool>,
     pattern: Option<String>,
     tags_included: Option<SmallVec<[&str; 3]>>,
@@ -208,11 +179,12 @@ pub async fn get_all(
     let has_excluded = tags_excluded.as_ref().map(|t| !t.is_empty());
     let has_pattern = pattern.is_some();
 
-    Ok(SQLFeatures::fetch_features_for_environment(
+    // One row per (feature, variant) — aggregate into features below.
+    let rows = SQLFeatures::fetch_features_for_environment(
         conn,
         |cond_id| match cond_id {
             FetchFeaturesForEnvironment::Pattern => has_pattern,
-            FetchFeaturesForEnvironment::IsActive => is_active.is_some(),
+            FetchFeaturesForEnvironment::IsArchived => is_archived.is_some(),
             FetchFeaturesForEnvironment::IsEnabled => is_enabled.is_some(),
             FetchFeaturesForEnvironment::TagsIncluded => has_included.unwrap_or(false),
             FetchFeaturesForEnvironment::TagsExcluded => has_excluded.unwrap_or(false),
@@ -220,16 +192,47 @@ pub async fn get_all(
         params![
             environment.project_id,
             environment.id,
-            is_active,
+            is_archived,
             is_enabled,
             pattern,
             into_json_string(tags_included),
             into_json_string(tags_excluded)
         ],
-        |row| row_to_feature(row, environment),
+        |row| {
+            let variant = if let Ok(Some(variant_id)) = row.try_get::<Option<i32>, _>("variant_id")
+            {
+                Some(Variant {
+                    id: variant_id,
+                    value: row.get("value"),
+                    weight: row.get("weight"),
+                    accumulator: row.try_get("accumulator").unwrap_or(0),
+                    environment_id: row.try_get("environment_id").ok().flatten(),
+                })
+            } else {
+                None
+            };
+            (row_to_feature(row, environment), variant)
+        },
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?)
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch list of features", e))?;
+
+    let mut result: Vec<Feature> = Vec::new();
+    let mut id_to_idx: HashMap<i32, usize> = HashMap::new();
+
+    print!("ROWS: {}", rows.len());
+
+    for (feature, variant) in rows {
+        if let Some(&idx) = id_to_idx.get(&feature.id) {
+            if let Some(v) = variant {
+                result[idx].variants.push(v);
+            }
+        } else {
+            id_to_idx.insert(feature.id, result.len());
+            result.push(feature.with_variants(variant.into_iter().collect()));
+        }
+    }
+    Ok(result)
 }
 
 pub fn update_one<'a>(
@@ -256,16 +259,16 @@ pub async fn bump_up_accumulators(
 ///
 /// Operations are applied in the following order to ensure weight constraints remain
 /// satisfiable throughout the transaction:
-/// 1. Feature-level property changes (is_enabled, is_active)
+/// 1. Feature-level property changes (is_enabled, archived_at)
 /// 2. Variant deletes (free up weight)
 /// 3. Variant updates (SetValue / SetWeight, grouped by variant id)
 /// 4. Variant adds (consume weight)
-pub async fn apply_patch(
+pub async fn patch(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
     patch: FeaturePatch,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
 
     // Feature-level properties
@@ -274,8 +277,14 @@ pub async fn apply_patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
     }
-    if let Some(active) = patch.is_active {
-        SQLFeatures::update_feature_is_active(&mut *tx, params![feature.id, active])
+    if let Some(description) = patch.description {
+        SQLFeatures::update_feature_description(&mut *tx, params![feature.id, description])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not update feature description", e))?;
+    }
+    if let Some(archived) = patch.is_archived {
+        let ts = if archived { Some(Utc::now()) } else { None };
+        SQLFeatures::archive_feature(&mut *tx, params![feature.id, ts])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
     }
@@ -345,7 +354,7 @@ pub async fn apply_patch(
     }
 
     tx.commit().await?;
-    Ok(())
+    get_by_id(conn, environment, feature.id).await
 }
 
 /// Permanently deletes a feature and all of its variants within a single transaction.
@@ -355,27 +364,17 @@ pub async fn apply_patch(
 /// the backend rejects control-variant deletion while other variants still exist.
 pub async fn delete(
     conn: &mut SqliteConnection,
-    environment: &Environment,
+    _environment: &Environment,
     feature: &Feature,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let mut vars = variant::get_for_feature(&mut tx, environment, feature.id).await?;
 
-    // Sort variants so that control ones go last in the vector.
-    // This is required because of the strict deletion policy - control variants
-    // cannot be deleted while other variants still exist.
-    vars.sort_by(|a, _| match a.is_control() {
-        true => Ordering::Greater,
-        false => Ordering::Less,
-    });
-
-    // In transaction, remove all feature variants first.
-    // Due to the sorting above, the control variant will be deleted last.
-    for var in vars {
-        variant::delete(&mut tx, environment, &var).await?;
-    }
-
-    // Then remove the feature value and the entire feature definition.
+    // Delete across all environments in dependency order to satisfy FK constraints.
+    // Feature creation seeds control variants for every environment in the project, so
+    // a single-environment variant loop would miss control variants from other environments
+    // and leave their variant_weights rows behind, causing FK failures.
+    SQLFeatures::delete_identity_variants_for_feature(&mut *tx, params![feature.id]).await?;
+    SQLFeatures::delete_variant_weights_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_tags_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_variants_for_feature(&mut *tx, params![feature.id]).await?;
     SQLFeatures::delete_feature(&mut *tx, params![feature.id]).await?;
@@ -401,14 +400,15 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
             variant_value,
         ))
     }
-
     Feature {
         id: row.get("feature_id"),
         project_id: row.get("project_id"),
-        is_enabled: row.get("is_enabled"),
-        is_active: row.get("is_active"),
         name: row.get("name"),
         description: row.get("description"),
+        is_enabled: row.get("is_enabled"),
+        is_archived: row
+            .try_get::<Option<String>, _>("archived_at")
+            .is_ok_and(|v| v.is_some()),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }

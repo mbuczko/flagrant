@@ -9,6 +9,12 @@ SELECT project_id, name
 FROM projects
 WHERE project_id = $1
 
+-- :name fetch_project_by_name :<> :1
+-- :doc Fetches a project by name
+SELECT project_id, name
+FROM projects
+WHERE name = $1
+
 -- :name list_projects :<> :*
 -- :doc Lists all projects
 SELECT project_id, name

@@ -54,6 +54,7 @@ pub fn init<T>(
 
                 if let Some(cmd) = commands.iter().find(|c| {
                     c.matches_slices(&slices.iter().map(Deref::deref).collect::<Vec<_>>())
+                        && c.has_context.map(|check| check(session)).unwrap_or(true)
                 }) {
                     rl.add_history_entry(line.as_str())?;
                     if let Err(error) = (cmd.handler)(&slices[1..], session) {

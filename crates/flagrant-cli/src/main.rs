@@ -30,9 +30,9 @@ struct Args {
     )]
     host: String,
 
-    /// project ID (mutually exclusive with --create-project)
+    /// project name (mutually exclusive with --create-project)
     #[argh(option, short = 'p')]
-    project: Option<i32>,
+    project: Option<String>,
 
     /// environment ID
     #[argh(option, short = 'e', default = "1")]
@@ -49,27 +49,71 @@ struct Args {
 
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
-    let dirty = ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false);
+    let dirty_feature = ctx
+        .feature_patch
+        .as_ref()
+        .map(|p| !p.is_empty())
+        .unwrap_or(false);
+    let dirty_identity = ctx.has_identity_pending();
     let feat = match &ctx.feature {
-        Some(feat) if dirty => format!(" → {}*", feat.name),
+        Some(feat) if dirty_feature => format!(" → {}*", feat.name),
         Some(feat) => format!(" → {}", feat.name),
         _ => String::default(),
     };
+    let id = match &ctx.identity {
+        Some(id) if dirty_identity => format!(" @ {}*", id.value),
+        Some(id) => format!(" @ {}", id.value),
+        _ => String::default(),
+    };
+    let dirty_segment = ctx.has_segment_pending();
+    let seg = match &ctx.segment {
+        Some(s) if dirty_segment => format!(" [{}*]", s.name),
+        Some(s) => format!(" [{}]", s.name),
+        None => String::default(),
+    };
     format!(
-        "{}/{}{}\x1b[0m › ",
+        "{}/{}{}{}{}\x1b[0m › ",
         ctx.project.name,
         ctx.environment.name.purple(),
-        feat.green()
+        feat.green(),
+        id.cyan(),
+        seg.yellow()
     )
 }
 
 fn has_feature_ctx(session: &Session<Connection>) -> bool {
-    let ctx = &session.context.read().unwrap();
-    ctx.feature.is_some()
+    session.context.read().unwrap().feature.is_some()
 }
-fn has_feature_with_pending_ctx(session: &Session<Connection>) -> bool {
-    let ctx = &session.context.read().unwrap();
-    ctx.feature.is_some() && ctx.pending.is_some()
+fn has_identity_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    // Identity context is mutually exclusive with segment context.
+    ctx.identity.is_some() && ctx.segment.is_none()
+}
+fn has_feature_and_identity_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    ctx.feature.is_some() && ctx.identity.is_some() && ctx.segment.is_none()
+}
+fn has_feature_or_identity_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    (ctx.feature.is_some() || ctx.identity.is_some()) && ctx.segment.is_none()
+}
+fn has_segment_ctx(session: &Session<Connection>) -> bool {
+    session.context.read().unwrap().segment.is_some()
+}
+fn has_any_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    ctx.feature.is_some() || ctx.identity.is_some() || ctx.segment.is_some()
+}
+fn has_pending_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    (ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false))
+        || (ctx.identity.is_some() && ctx.has_identity_pending())
+        || (ctx.segment.is_some() && ctx.has_segment_pending())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -78,21 +122,21 @@ fn main() -> anyhow::Result<()> {
     if args.list_projects {
         let client = HttpClient::new(args.host.clone(), Auth::None);
         let projects = handlers::projects::list_projects(&client)?;
+        println!("Known projects:\n---------------");
         for project in projects {
-            println!("Known projects:\n---------------");
-            println!("{:>4} : {}", project.id, project.name);
+            println!("{}", project.name);
         }
         return Ok(());
     }
 
     let connection = match (args.project, args.create_project) {
-        (Some(project_id), None) => {
-            Connection::init(args.host, Auth::None, project_id, args.environment)?
+        (Some(project_name), None) => {
+            Connection::init(args.host, Auth::None, project_name, args.environment)?
         }
         (None, Some(name)) => {
             let client = HttpClient::new(args.host.clone(), Auth::None);
             let (project, env) = handlers::projects::create_with_env(&name, &client)?;
-            Connection::init(args.host, Auth::None, project.id, env.id)?
+            Connection::init(args.host, Auth::None, project.name, env.id)?
         }
         (Some(_), Some(_)) => {
             anyhow::bail!("--project and --create-project are mutually exclusive")
@@ -108,14 +152,28 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.args("add · list · use"),
         // Features
-        Command::Feature.op("list", "filter", handlers::features::list),
+        Command::Feature.op(
+            "list",
+            "archived|enabled|tag|[pattern]",
+            handlers::features::list,
+        ),
         Command::Feature.op("add", "feature value", handlers::features::add),
         Command::Feature.op("describe", "feature", handlers::features::describe),
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.args("add · delete · describe · list · use"),
+        // Identities
+        Command::Identity.op(
+            "add",
+            "identity [trait:value ...]",
+            handlers::identities::add,
+        ),
+        Command::Identity.op("list", "[pattern]", handlers::identities::list),
+        Command::Identity.op("describe", "[identity]", handlers::identities::describe),
+        Command::Identity.op("delete", "identity", handlers::identities::delete),
+        Command::Identity.op("use", "identity", handlers::identities::r#use),
+        Command::Identity.args("add · delete · describe · list · use"),
         // Variants
-        Command::Variant.op_in_context("list", "", handlers::variants::list, has_feature_ctx),
         Command::Variant.op_in_context(
             "add",
             "weight value",
@@ -146,21 +204,13 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::weight,
             has_feature_ctx,
         ),
-        Command::Variant.args_in_context(
-            "list · add · delete · discard · weight · value",
-            has_feature_ctx,
-        ),
-        // Feature setters (only available in feature context)
-        Command::Set.op_in_context(
-            "state",
-            "on|off",
-            handlers::features::state,
-            has_feature_ctx,
-        ),
+        Command::Variant
+            .args_in_context("add · delete · discard · weight · value", has_feature_ctx),
+        // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "status",
-            "active|inactive",
-            handlers::features::status,
+            "on|off|archived",
+            handlers::features::set_status,
             has_feature_ctx,
         ),
         Command::Set.op_in_context(
@@ -169,17 +219,115 @@ fn main() -> anyhow::Result<()> {
             handlers::features::set_value,
             has_feature_ctx,
         ),
-        Command::Set.args_in_context("state · status · value", has_feature_ctx),
-        // Commit / discard (only available in feature context)
+        Command::Set.op_in_context(
+            "description",
+            "[description]",
+            handlers::features::set_description,
+            has_feature_ctx,
+        ),
+        // Identity setters (only in identity context)
+        Command::Set.op_in_context(
+            "trait",
+            "name:value",
+            handlers::identities::set_trait,
+            has_identity_ctx,
+        ),
+        Command::Set.op_in_context(
+            "pin",
+            "[value]",
+            handlers::identities::set_pin,
+            has_feature_and_identity_ctx,
+        ),
+        Command::Set.args_in_context(
+            "status · value · description · pin · trait",
+            has_feature_or_identity_ctx,
+        ),
+        // Segment setters (only in segment context)
+        Command::Set.op_in_context(
+            "name",
+            "value",
+            handlers::segments::set_name,
+            has_segment_ctx,
+        ),
+        Command::Set.op_in_context(
+            "description",
+            "value",
+            handlers::segments::set_description,
+            has_segment_ctx,
+        ),
+        Command::Set.args_in_context("name · description", has_segment_ctx),
+        // UNSET (only in identity context)
+        Command::Unset.op_in_context(
+            "trait",
+            "name",
+            handlers::identities::unset_trait,
+            has_identity_ctx,
+        ),
+        Command::Unset.op_in_context(
+            "pin",
+            "",
+            handlers::identities::unset_pin,
+            has_feature_and_identity_ctx,
+        ),
+        Command::Unset.args_in_context("trait · pin", has_identity_ctx),
+        // Segments
+        Command::Segment.op("add", "name [description]", handlers::segments::add),
+        Command::Segment.op("list", "", handlers::segments::list),
+        Command::Segment.op("describe", "[name]", handlers::segments::describe),
+        Command::Segment.op("delete", "name", handlers::segments::delete),
+        Command::Segment.op("use", "name", handlers::segments::r#use),
+        Command::Segment.args("add · delete · describe · list · use"),
+        // Groups (only in segment context)
+        Command::Group.op_in_context(
+            "add",
+            "[--and|--and-not] [description]",
+            handlers::groups::add,
+            has_segment_ctx,
+        ),
+        Command::Group.op_in_context("list", "", handlers::groups::list, has_segment_ctx),
+        Command::Group.op_in_context(
+            "describe",
+            "label",
+            handlers::groups::describe,
+            has_segment_ctx,
+        ),
+        Command::Group.op_in_context("delete", "label", handlers::groups::delete, has_segment_ctx),
+        Command::Group.args_in_context("add · list · describe · delete", has_segment_ctx),
+        // Rules (only in segment context)
+        Command::Rule.op_in_context(
+            "add",
+            "group-label <identity|trait|environment> comparator value",
+            handlers::rules::add,
+            has_segment_ctx,
+        ),
+        Command::Rule.op_in_context(
+            "describe",
+            "group-label rule-index",
+            handlers::rules::describe,
+            has_segment_ctx,
+        ),
+        Command::Rule.op_in_context(
+            "delete",
+            "group-label rule-index",
+            handlers::rules::delete,
+            has_segment_ctx,
+        ),
+        Command::Rule.args_in_context("add · describe · delete", has_segment_ctx),
+        // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
-            handlers::features::commit,
-            has_feature_with_pending_ctx,
+            handlers::commit,
+            has_pending_ctx,
         ),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
-            handlers::features::discard,
-            has_feature_with_pending_ctx,
+            handlers::discard,
+            has_pending_ctx,
+        ),
+        Command::Reset.no_op_in_context(
+            "→ reset feature and identity context",
+            handlers::reset,
+            has_any_ctx,
         ),
     ];
     let overlays = vec![

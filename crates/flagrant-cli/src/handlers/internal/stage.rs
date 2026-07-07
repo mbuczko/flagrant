@@ -1,14 +1,28 @@
-//! Staging helpers for building up a [`FeaturePatch`] before it is committed to the API.
-//!
-//! [`stage_value`] and [`stage_weight`] upsert the appropriate [`VariantPatchOp`]
-//! into the pending patch. [`discard`] removes all pending ops for a
-//! given variant.
+//! Staging helpers for building up a [`FeaturePatch`] or [`IdentityPatch`] before
+//! they are committed to the API.
 
 use anyhow::bail;
-use flagrant_client::connection::VariantRef;
-use flagrant_types::{FeatureValue, payload::{FeaturePatch, VariantPatchOp}};
+use flagrant_client::connection::{Connection, VariantRef};
+use flagrant_repl::{command::Arg, session::Session};
 
-/// Upserts a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
+/// Bail if any context has uncommitted staged changes.
+///
+/// Call this at the top of every context-switching handler (`use`, `add`) before
+/// clearing and replacing the current context.
+pub(crate) fn ensure_no_pending(session: &Session<Connection>) -> anyhow::Result<()> {
+    if session.context.read().unwrap().has_any_pending() {
+        bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+    }
+    Ok(())
+}
+use flagrant_types::{
+    FeatureValue, TraitValue,
+    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
+};
+
+use crate::handlers::{features, identities, segments};
+
+/// Stages a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
@@ -50,7 +64,7 @@ pub(crate) fn stage_value(
     Ok(())
 }
 
-/// Upserts a `SetWeight` op for a committed variant, or updates the weight of a staged `Add` op.
+/// Stages a `SetWeight` op for a committed variant, or updates the weight of a staged `Add` op.
 pub(crate) fn stage_weight(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
@@ -89,7 +103,7 @@ pub(crate) fn stage_weight(
 /// Discards all pending ops for the given variant ref from the patch.
 /// For committed variants, removes any SetValue / SetWeight / Delete ops by id.
 /// For staged variants, removes the corresponding Add op by its position.
-pub(crate) fn discard(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
+pub(crate) fn discard_feature_patch(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
     match variant_ref {
         VariantRef::Committed(id) => {
             let before = pending.variants.len();
@@ -128,4 +142,141 @@ pub(crate) fn discard(pending: &mut FeaturePatch, variant_ref: &VariantRef) {
             }
         }
     }
+}
+
+/// Stages a trait value change on an identity patch.
+///
+/// Uses `SetValue` if the trait already exists on the identity, `Add` otherwise.
+/// If a pending op for the same trait name already exists, it is replaced.
+pub(crate) fn stage_trait(
+    pending: &mut IdentityPatch,
+    trait_exists: bool,
+    name: String,
+    value: TraitValue,
+) {
+    let op = if trait_exists {
+        TraitPatchOp::SetValue {
+            name: name.clone(),
+            value: Some(value.clone()),
+        }
+    } else {
+        TraitPatchOp::Add {
+            name: name.clone(),
+            value: Some(value.clone()),
+        }
+    };
+    if let Some(existing) = pending.traits.iter_mut().find(|o| match o {
+        TraitPatchOp::Add { name: n, .. }
+        | TraitPatchOp::SetValue { name: n, .. }
+        | TraitPatchOp::Delete { name: n } => *n == name,
+    }) {
+        *existing = op;
+    } else {
+        pending.traits.push(op);
+    }
+    println!("Staged: {name} = {value}");
+}
+
+/// Stages a trait deletion on an identity patch.
+///
+/// If a pending op for the same trait name already exists, it is replaced.
+pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
+    let op = TraitPatchOp::Delete { name: name.clone() };
+    if let Some(existing) = pending.traits.iter_mut().find(|o| match o {
+        TraitPatchOp::Add { name: n, .. }
+        | TraitPatchOp::SetValue { name: n, .. }
+        | TraitPatchOp::Delete { name: n } => *n == name,
+    }) {
+        *existing = op;
+    } else {
+        pending.traits.push(op);
+    }
+    println!("Staged: unset {name}");
+}
+
+/// Commits all staged changes across active contexts (feature, identity, and/or segment).
+pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    let has_segment = ctx.segment.is_some() && ctx.has_segment_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity && !has_segment {
+        println!("No pending changes to commit.");
+        return Ok(());
+    }
+    if has_feature {
+        features::commit(args, session)?;
+    }
+    if has_identity {
+        identities::commit(args, session)?;
+    }
+    if has_segment {
+        segments::commit(args, session)?;
+    }
+    Ok(())
+}
+
+/// Resets both feature and identity contexts, clearing all state.
+///
+/// Refuses to run if there are any uncommitted staged changes — run `COMMIT` or
+/// `DISCARD` first to avoid losing work.
+pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    {
+        let ctx = session.context.read().unwrap();
+        let has_pending_feature = ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+        if has_pending_feature || ctx.has_identity_pending() || ctx.has_segment_pending() {
+            anyhow::bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
+        }
+    }
+    let mut ctx = session.context.write().unwrap();
+    ctx.feature = None;
+    ctx.feature_patch = None;
+    ctx.variant_index.clear();
+    ctx.identity = None;
+    ctx.identity_patch = None;
+    ctx.segment = None;
+    ctx.segment_patch = None;
+    println!("Context reset.");
+    Ok(())
+}
+
+/// Discards all staged changes across active contexts (feature, identity, and/or segment).
+pub(crate) fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let has_feature = ctx.feature.is_some()
+        && ctx
+            .feature_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false);
+    let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
+    let has_segment = ctx.segment.is_some() && ctx.has_segment_pending();
+    drop(ctx);
+
+    if !has_feature && !has_identity && !has_segment {
+        println!("No pending changes.");
+        return Ok(());
+    }
+
+    if has_feature {
+        features::discard(args, session)?;
+    }
+    if has_identity {
+        identities::discard(args, session)?;
+    }
+    if has_segment {
+        segments::discard(args, session)?;
+    }
+    Ok(())
 }

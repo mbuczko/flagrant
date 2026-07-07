@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS features (
   project_id INTEGER NOT NULL REFERENCES projects,
   name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
   description TEXT CHECK(LENGTH(description) <= 2048),
-  is_active BOOLEAN NOT NULL DEFAULT FALSE,
   is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  archived_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   version INTEGER NOT NULL DEFAULT 0,
 
@@ -50,20 +50,46 @@ CREATE TABLE IF NOT EXISTS variants (
 -- using a partial index, ensure that there is only one control value for feature per environment
 --CREATE UNIQUE INDEX idx_unique_is_control ON variants(feature_id, environment_id) WHERE is_control = true;
 
+-- Enforce unique values only among non-control variants (environment_id IS NULL).
+-- Control variants may share the same value across different environments.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_variant_value ON variants(feature_id, value) WHERE environment_id IS NULL;
+
 CREATE TABLE IF NOT EXISTS variant_weights (
   variant_id INTEGER NOT NULL REFERENCES variants,
   environment_id INTEGER NOT NULL REFERENCES environments,
   weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0 and weight <= 100),
   accumulator INTEGER NOT NULL DEFAULT 100,
+
   PRIMARY KEY (variant_id, environment_id)
+);
+
+CREATE TABLE IF NOT EXISTS traits (
+  trait_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects,
+  name TEXT NOT NULL CHECK(LENGTH(name) <= 255),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(project_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS identities (
   identity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  identity TEXT NOT NULL UNIQUE,
+  environment_id INTEGER NOT NULL REFERENCES environments,
+  identity TEXT NOT NULL CHECK(LENGTH(identity) <= 255),
   updated_at DATETIME,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(environment_id, identity)
 );
+
+CREATE TABLE IF NOT EXISTS identity_traits (
+  identity_id INTEGER NOT NULL REFERENCES identities,
+  trait_id INTEGER NOT NULL REFERENCES traits,
+  value TEXT CHECK (LENGTH(value) <= 1024),
+
+  PRIMARY KEY (identity_id, trait_id)
+);
+
 
 CREATE TABLE IF NOT EXISTS identity_variants (
   identity_id INTEGER NOT NULL REFERENCES identities,
@@ -72,6 +98,7 @@ CREATE TABLE IF NOT EXISTS identity_variants (
   environment_id INTEGER NOT NULL REFERENCES environments,
   migrated_id INTEGER REFERENCES variants,
   attached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  pinned_at DATETIME,
 
   UNIQUE(identity_id, feature_id, environment_id),
 

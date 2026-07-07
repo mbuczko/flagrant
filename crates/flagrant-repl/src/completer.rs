@@ -129,7 +129,8 @@ impl<'a> CommandLineCompleter<'a> {
             pos,
             match self.arg_completer {
                 Some(arg_completer) => arg_completer
-                    .complete_by_prefix(command, args, arg_number, arg_prefix)?
+                    .complete_by_prefix(command, args, arg_number, arg_prefix)
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|s| Pair {
                         replacement: s,

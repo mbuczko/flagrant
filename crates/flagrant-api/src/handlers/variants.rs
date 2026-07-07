@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use axum::{Json, extract::Path};
-use flagrant::models::{environment, feature, variant};
-use flagrant_types::{FeatureValue, Variant, payload::VariantRequestPayload};
+use flagrant::models::{environment, feature, project, variant};
+use flagrant_types::{FeatureValue, Variant, payload::NewVariantPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -13,12 +13,13 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 /// - the variant should be created for all environments (with the same value by default)
 #[utoipa::path(
     post,
-    path = "/envs/{environment_id}/features/{feature_id}/variants",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/variants",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
-    request_body = VariantRequestPayload,
+    request_body = NewVariantPayload,
     responses(
         (status = 200, description = "Created variant", body = Variant)
     ),
@@ -26,10 +27,11 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 )]
 pub async fn create(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
-    Json(payload): Json<VariantRequestPayload>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Json(payload): Json<NewVariantPayload>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
     let variant = variant::create(&mut conn, &env, &feature, value, payload.weight).await?;
@@ -40,12 +42,13 @@ pub async fn create(
 /// Updates existing variant with provided value/weight.
 #[utoipa::path(
     put,
-    path = "/envs/{environment_id}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
-    request_body = VariantRequestPayload,
+    request_body = NewVariantPayload,
     responses(
         (status = 200, description = "Variant updated successfully")
     ),
@@ -53,10 +56,11 @@ pub async fn create(
 )]
 pub async fn update(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, variant_id)): Path<(i32, i32)>,
-    Json(payload): Json<VariantRequestPayload>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
+    Json(payload): Json<NewVariantPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
     let value = FeatureValue::from_str(&payload.value)?;
 
@@ -67,9 +71,10 @@ pub async fn update(
 /// Fetches a variant by ID.
 #[utoipa::path(
     get,
-    path = "/envs/{environment_id}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
     responses(
@@ -79,9 +84,10 @@ pub async fn update(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, variant_id)): Path<(i32, i32)>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
 ) -> Result<Json<Variant>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let variant = variant::get_by_id(&mut conn, &env, variant_id).await?;
 
     Ok(Json(variant))
@@ -90,9 +96,10 @@ pub async fn fetch(
 /// Lists all variants for a feature.
 #[utoipa::path(
     get,
-    path = "/envs/{environment_id}/features/{feature_id}/variants",
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/variants",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("feature_id" = i32, Path, description = "Feature ID")
     ),
     responses(
@@ -102,9 +109,10 @@ pub async fn fetch(
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, feature_id)): Path<(i32, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let variants = variant::get_for_feature(&mut conn, &env, feature.id).await?;
 
@@ -114,9 +122,10 @@ pub async fn list(
 /// Deletes a variant.
 #[utoipa::path(
     delete,
-    path = "/envs/{environment_id}/variants/{variant_id}",
+    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
     params(
-        ("environment_id" = i32, Path, description = "Environment ID"),
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
         ("variant_id" = i32, Path, description = "Variant ID")
     ),
     responses(
@@ -126,9 +135,10 @@ pub async fn list(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((environment_id, variant_id)): Path<(i32, i32)>,
+    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = environment::get_by_id(&mut conn, environment_id).await?;
+    let proj = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
 
     Ok(Json(variant::delete(&mut conn, &env, &var).await?))

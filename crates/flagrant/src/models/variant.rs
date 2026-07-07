@@ -65,7 +65,17 @@ pub async fn create(
         v.get("variant_id")
     })
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not create a variant", e))?;
+    .map_err(|e| -> anyhow::Error {
+        if let sqlx::Error::Database(db_err) = &e
+            && db_err.is_unique_violation()
+        {
+            return FlagrantError::BadRequest(
+                "A variant with this value already exists for this feature",
+            )
+            .into();
+        }
+        FlagrantError::QueryFailed("Could not create a variant", e).into()
+    })?;
 
     SQLVariants::upsert_variant_weight(&mut *tx, params![environment.id, variant_id, weight])
         .await
@@ -77,6 +87,9 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
+/// Updates a variant's value (shared across environments) and weight (environment-specific).
+/// Rejects updates to control variants — use `feature::update` to change the control value.
+/// Returns the variant's `feature_id` for use in post-update weight balancing.
 async fn update(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -92,7 +105,17 @@ async fn update(
             v.get("feature_id")
         })
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not update variant value", e))?;
+        .map_err(|e| -> anyhow::Error {
+            if let sqlx::Error::Database(db_err) = &e
+                && db_err.is_unique_violation()
+            {
+                return FlagrantError::BadRequest(
+                    "A variant with this value already exists for this feature",
+                )
+                .into();
+            }
+            FlagrantError::QueryFailed("Could not update variant value", e).into()
+        })?;
 
     SQLVariants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
         .await
@@ -137,14 +160,32 @@ pub async fn get_by_id(
     environment: &Environment,
     variant_id: i32,
 ) -> anyhow::Result<Variant> {
-    let variant = SQLVariants::fetch_variant(conn, params![environment.id, variant_id])
+    let variant = SQLVariants::fetch_variant_by_id(conn, params![environment.id, variant_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variant)
 }
 
-/// Returns variant assigned to given identity
+/// Returns the variant for a feature matching the given value, or `None` if not found.
+///
+/// Matches both non-control variants (environment_id IS NULL) and the environment's
+/// control variant.
+pub async fn get_by_value(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    value: &FeatureValue,
+) -> anyhow::Result<Option<Variant>> {
+    let variant =
+        SQLVariants::fetch_variant_by_value(conn, params![environment.id, feature_id, value])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+
+    Ok(variant)
+}
+
+/// Returns variants across all features assigned to a given identity in the given environment.
 pub async fn get_by_identity<T: AsRef<str>>(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -158,8 +199,8 @@ pub async fn get_by_identity<T: AsRef<str>>(
     Ok(variants)
 }
 
-/// Returns all variants of given feature. Variants are returned along with their values and weights.
-/// Returns Error when no feature value has been set.
+/// Returns all variants for a feature in the given environment, including values and weights.
+/// Errors if the feature has no default value set in this environment (which should never happen).
 pub async fn get_for_feature(
     conn: &mut SqliteConnection,
     environment: &Environment,

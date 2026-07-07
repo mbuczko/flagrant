@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{Feature, FeatureValue};
+use crate::{
+    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, SegmentDriver,
+    TraitValue,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
@@ -11,35 +14,41 @@ pub enum VariantPatchOp {
     Delete { id: i32 },
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
-pub struct FeaturePatch {
-    pub is_enabled: Option<bool>,
-    pub is_active: Option<bool>,
-    pub variants: Vec<VariantPatchOp>,
-}
-
-impl FeaturePatch {
-    pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none()
-            && self.is_active.is_none()
-            && self.variants.is_empty()
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TraitPatchOp {
+    Add {
+        name: String,
+        value: Option<TraitValue>,
+    },
+    Delete {
+        name: String,
+    },
+    SetValue {
+        name: String,
+        value: Option<TraitValue>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct ProjectRequestPayload {
+pub struct NewProjectPayload {
     pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct EnvRequestPayload {
+pub struct ProjectCreatedResponse {
+    pub project: Project,
+    pub environment: Environment,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewEnvironmentPayload {
     pub name: String,
     pub description: Option<String>,
     pub base_env: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct FeatureRequestPayload {
+pub struct NewFeaturePayload {
     pub name: String,
     pub value: FeatureValue,
     pub description: Option<String>,
@@ -47,14 +56,39 @@ pub struct FeatureRequestPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct VariantRequestPayload {
+pub struct NewVariantPayload {
     pub value: String,
     pub weight: u8,
 }
 
-impl From<Feature> for FeatureRequestPayload {
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewIdentityPayload {
+    pub identity: String,
+    pub traits: Option<Vec<IdentityTraitPayload>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewTraitPayload {
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityTraitPayload {
+    pub name: String,
+    pub value: Option<TraitValue>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct FeaturePatch {
+    pub is_enabled: Option<bool>,
+    pub is_archived: Option<bool>,
+    pub description: Option<String>,
+    pub variants: Vec<VariantPatchOp>,
+}
+
+impl From<Feature> for NewFeaturePayload {
     fn from(feature: Feature) -> Self {
-        FeatureRequestPayload {
+        NewFeaturePayload {
             name: feature.name,
             value: feature
                 .variants
@@ -65,5 +99,89 @@ impl From<Feature> for FeatureRequestPayload {
             description: None,
             is_enabled: feature.is_enabled,
         }
+    }
+}
+
+impl FeaturePatch {
+    pub fn is_empty(&self) -> bool {
+        self.is_enabled.is_none()
+            && self.is_archived.is_none()
+            && self.description.is_none()
+            && self.variants.is_empty()
+    }
+}
+
+/// A single staged variant override for one feature, carried inside [`IdentityPatch`].
+/// The server resolves feature name to an existing feature and value to a variant.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct IdentityOverridePatch {
+    pub feature_name: String,
+    pub variant_value: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct IdentityPatch {
+    pub traits: Vec<TraitPatchOp>,
+    pub overrides: Vec<IdentityOverridePatch>,
+    /// Feature names whose variant assignment should be deleted (identity freed for distribution).
+    pub unpins: Vec<String>,
+}
+
+impl IdentityPatch {
+    pub fn is_empty(&self) -> bool {
+        self.traits.is_empty() && self.overrides.is_empty() && self.unpins.is_empty()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewSegmentPayload {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewGroupPayload {
+    pub description: Option<String>,
+    /// Required for all groups except the first (head) group of a segment.
+    pub connector: Option<GroupConnector>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct NewRulePayload {
+    pub driver: SegmentDriver,
+    pub comparator: Comparator,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum SegmentPatchOp {
+    SetName(String),
+    SetDescription(Option<String>),
+    AddGroup {
+        connector: Option<GroupConnector>,
+        description: Option<String>,
+    },
+    DeleteGroup {
+        label: String,
+    },
+    AddRule {
+        group_label: String,
+        driver: SegmentDriver,
+        comparator: Comparator,
+        value: String,
+    },
+    DeleteRule {
+        rule_id: i32,
+    },
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct SegmentPatch {
+    pub ops: Vec<SegmentPatchOp>,
+}
+
+impl SegmentPatch {
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
     }
 }

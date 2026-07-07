@@ -3,38 +3,42 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler       | Description                                          |
-//! |----------------------|---------------|------------------------------------------------------|
-//! | `FEATURE list`       | [`list`]      | List features in the current environment.            |
-//! | `FEATURE add`        | [`add`]       | Create a new feature with a default value.           |
-//! | `FEATURE use`        | [`r#use`]     | Switch into a feature context.                       |
-//! | `FEATURE describe`   | [`describe`]  | Print details of a feature.                          |
-//! | `FEATURE delete`     | [`delete`]    | Delete a feature.                                    |
-//! | `SET state`          | [`state`]     | Stage a feature state change (`on` / `off`).         |
-//! | `SET status`         | [`status`]    | Stage a feature status change (`active`/`inactive`). |
-//! | `SET value`          | [`set_value`] | Stage a default value change.                        |
-//! | `COMMIT`             | [`commit`]    | Send all staged changes to the API.                  |
-//! | `DISCARD`            | [`discard`]   | Drop all staged changes for the current feature.     |
+//! | Command              | Handler          | Description                                      |
+//! |----------------------|------------------|--------------------------------------------------|
+//! | `FEATURE list`       | [`list`]         | List features in the current environment.        |
+//! | `FEATURE add`        | [`add`]          | Create a new feature with a default value.       |
+//! | `FEATURE use`        | [`r#use`]        | Switch into a feature context.                   |
+//! | `FEATURE describe`   | [`describe`]     | Print details of a feature.                      |
+//! | `FEATURE delete`     | [`delete`]       | Delete a feature.                                |
+//! | `SET state`          | [`state`]        | Stage a feature state change (`on` / `off`).     |
+//! | `SET archived`       | [`set_archived`] | Stage a feature archivisation (`yes` / `no`).    |
+//! | `SET value`          | [`set_value`]    | Stage a default value change.                    |
+//! | `COMMIT`             | [`commit`]       | Send all staged changes to the API.              |
+//! | `DISCARD`            | [`discard`]      | Drop all staged changes for the current feature. |
 
 use std::{collections::BTreeSet, ops::Deref};
 
 use anyhow::bail;
-use flagrant_client::connection::{Connection, Resource};
+use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureValue,
-    payload::{FeatureRequestPayload, VariantPatchOp},
+    payload::{NewFeaturePayload, VariantPatchOp},
 };
 
 use crate::{
-    handlers::{edit_in_editor, internal::stage},
+    handlers::{
+        identities,
+        internal::{index, stage},
+        open_in_editor,
+    },
     printer::tabular::Tabular,
 };
 use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
-    let res = ctx.environment.as_base_resource();
+    let res = ctx.env_resource();
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
@@ -48,30 +52,30 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        {
+        stage::ensure_no_pending(session)?;
+        let feature = {
             let ctx = session.context.read().unwrap();
-            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
-                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
-            }
-        }
-        let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
-        let val = match args.get(2) {
-            Some(a) => a.to_string(),
-            None => edit_in_editor("")?,
+            let res = ctx.env_resource();
+            let val = match args.get(2) {
+                Some(a) => a.to_string(),
+                None => open_in_editor("")?,
+            };
+            let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
+            ctx.client.post::<_, Feature>(
+                res.subpath("/features"),
+                NewFeaturePayload {
+                    name: name.to_string(),
+                    description: args.get(3).map(|d| d.to_string()),
+                    is_enabled: false,
+                    value: parsed,
+                },
+            )?
         };
-        let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
-        let feature = ctx.client.post::<_, Feature>(
-            res.subpath("/features"),
-            FeatureRequestPayload {
-                name: name.to_string(),
-                description: args.get(3).map(|d| d.to_string()),
-                is_enabled: false,
-                value: parsed,
-            },
-        )?;
 
-        feature.describe(None);
+        feature.describe(None, &());
+        let mut ctx = session.context.write().unwrap();
+        ctx.feature = Some(feature);
+        index::rebuild(&mut ctx);
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -86,16 +90,26 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// staged changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        {
-            let ctx = session.context.read().unwrap();
-            if ctx.pending.as_ref().map(|p| !p.is_empty()).unwrap_or(false) {
-                bail!("You have uncommitted changes. Run `commit` or `discard` first.");
-            }
+        let (feature_name, identity_str) = match name.split_once('@') {
+            Some((f, i)) => (f, Some(i)),
+            None => (name.deref(), None),
+        };
+        if feature_name.is_empty() {
+            bail!("No feature name provided.");
         }
-        let feature = fetch_feature(name, session)?;
-        feature.describe(None);
+        stage::ensure_no_pending(session)?;
+        let feature = fetch_feature(feature_name, session)
+            .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
+        feature.describe(None, &());
+        {
+            let mut ctx = session.context.write().unwrap();
+            ctx.feature = Some(feature);
+            index::rebuild(&mut ctx);
+        }
 
-        session.context.write().unwrap().feature = Some(feature);
+        if let Some(identity_str) = identity_str {
+            identities::switch_to(identity_str, session)?;
+        }
         return Ok(());
     }
     bail!("No feature name provided.")
@@ -109,58 +123,64 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// describes the feature in the current context, overlaying any pending staged changes.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_feature(name, session)?.describe(None);
+        fetch_feature(name, session)?.describe(None, &());
     } else {
-        let ctx = session.context.read().unwrap();
-        if let Some(feature) = &ctx.feature {
-            let patch = ctx.pending.as_ref().filter(|p| !p.is_empty()).cloned();
-            feature.describe(patch);
-        } else {
-            bail!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
+        {
+            let ctx = session.context.read().unwrap();
+            match ctx.feature.as_ref() {
+                Some(f) => f.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &()),
+                None => bail!(
+                    "Not in a feature context. Set the context with: \"FEATURE use\" command."
+                ),
+            }
         }
+        index::rebuild(&mut session.context.write().unwrap());
     }
     Ok(())
 }
 
 /// Stage a feature state change.
 ///
-/// Expected args: `on` or `off`
-pub fn state(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// Expected args: `on`, `off` and `archived`
+pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let enabled = args
         .get(1)
         .map(|arg| matches!(arg.to_lowercase().as_str(), "on"));
+    let archived = args
+        .get(1)
+        .map(|arg| matches!(arg.to_lowercase().as_str(), "archived"));
 
-    if ctx.feature.is_some()
-        && let Some(enabled) = enabled
-    {
-        ctx.get_or_init_pending().is_enabled = Some(enabled);
-        println!("Staged: state = {}", if enabled { "on" } else { "off" });
+    if ctx.feature.is_some() {
+        if archived.unwrap_or_default() {
+            ctx.get_or_init_pending().is_archived = Some(true);
+            ctx.get_or_init_pending().is_enabled = Some(false);
+            println!("Staged: status = ARCHIVED");
+        } else if let Some(enabled) = enabled {
+            ctx.get_or_init_pending().is_enabled = Some(enabled);
+            ctx.get_or_init_pending().is_archived = Some(false);
+            println!("Staged: status = {}", if enabled { "ON" } else { "OFF" });
+        }
         return Ok(());
     }
     bail!("Not enough arguments provided")
 }
 
-/// Stage a feature status change.
+/// Stage a feature description change.
 ///
-/// Expected args: `active` or `inactive`
-pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// Expected args: `[description]` (omit to clear)
+pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
     let mut ctx = session.context.write().unwrap();
-    let active = args
-        .get(1)
-        .map(|arg| matches!(arg.to_lowercase().as_str(), "active"));
-
-    if ctx.feature.is_some()
-        && let Some(active) = active
-    {
-        ctx.get_or_init_pending().is_active = Some(active);
-        println!(
-            "Staged: status = {}",
-            if active { "active" } else { "inactive" }
-        );
-        return Ok(());
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context.");
     }
-    bail!("Not enough arguments provided")
+    ctx.get_or_init_pending().description = Some(desc.clone());
+    println!(
+        "Staged: description = {}",
+        if desc.is_empty() { "(cleared)" } else { &desc }
+    );
+    Ok(())
 }
 
 /// Stages a new value for the current feature (i.e. its control variant).
@@ -181,7 +201,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
             // No value provided — open editor with current bare value (without type prefix).
             // Prefer any already-staged value over the committed one.
             let current_fv = ctx
-                .pending
+                .feature_patch
                 .as_ref()
                 .and_then(|p| {
                     p.variants.iter().find_map(|op| match op {
@@ -191,7 +211,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
                 })
                 .unwrap_or_else(|| feature.get_default_value());
             let (_, bare) = current_fv.decompose();
-            let edited = edit_in_editor(bare)?;
+            let edited = open_in_editor(bare)?;
 
             // Type is inferred from the edited content, not the original.
             let parsed = FeatureValue::build(&edited);
@@ -222,27 +242,23 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .map(|f| f.id)
         .ok_or_else(|| anyhow::anyhow!("Not within a feature context."))?;
 
-    let patch = match &ctx.pending {
+    let patch = match &ctx.feature_patch {
         Some(p) if !p.is_empty() => p.clone(),
-        _ => {
-            println!("No pending changes to commit.");
-            return Ok(());
-        }
+        _ => return Ok(()),
     };
 
     let path = ctx
-        .environment
-        .as_base_resource()
+        .env_resource()
         .subpath(format!("/features/{feature_id}"));
 
-    match ctx.client.patch::<_, Feature>(path, patch) {
-        Ok(updated) => {
-            updated.describe(None);
-            ctx.pending = None;
-            ctx.feature = Some(updated);
-        }
-        Err(err) => eprintln!("Commit failed: {err}"),
-    }
+    let updated = ctx
+        .client
+        .patch::<_, Feature>(path, patch)
+        .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
+
+    updated.describe(None, &());
+    ctx.feature_patch = None;
+    ctx.feature = Some(updated);
     Ok(())
 }
 
@@ -253,14 +269,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if !args.is_empty() {
         bail!(
-            "To discard a single change use `FEATURE discard <name | state | status | tags>` or `VARIANT discard <index>`."
+            "No arguments expected. To discard a single change on variant use `VARIANT discard <index>`."
         );
     }
     let mut ctx = session.context.write().unwrap();
-    if ctx.pending.take().is_some() {
+    if ctx.feature_patch.take().is_some() {
         println!("Pending changes discarded.");
-    } else {
-        println!("No pending changes.");
     }
     Ok(())
 }
@@ -270,12 +284,12 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// Accepts optional filter arguments of the form `tag:a,b`, `status:active`,
 /// and `state:on`, plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let res = ctx.environment.as_base_resource();
+    let ctx: std::sync::RwLockReadGuard<'_, Connection> = session.context.read().unwrap();
+    let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);
-    let status = concat_values_for_arg("status", args);
-    let state = concat_values_for_arg("state", args);
+    let archived: String = concat_values_for_arg("archived", args);
+    let enabled = concat_values_for_arg("enabled", args);
     let pat = args[1..]
         .iter()
         .find(|a| !a.contains(":"))
@@ -285,7 +299,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Feature::list(
         ctx.client
             .get::<Vec<Feature>>(res.subpath(format!(
-                "/features?tags={tags}&status={status}&state={state}&pattern={pat}"
+                "/features?tags={tags}&archived={archived}&enabled={enabled}&pattern={pat}"
             )))?
             .as_ref(),
     );
@@ -298,7 +312,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();
-        let res = ctx.environment.as_base_resource();
+        let res = ctx.env_resource();
         let response = ctx
             .client
             .get::<Feature>(res.subpath(format!("/features/{name}")));
@@ -307,6 +321,15 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
             ctx.client
                 .delete(res.subpath(format!("/features/{}", feature.id)))?;
 
+            let in_context = ctx.feature.as_ref().is_some_and(|f| f.id == feature.id);
+            drop(ctx);
+
+            if in_context {
+                let mut ctx = session.context.write().unwrap();
+                ctx.feature = None;
+                ctx.feature_patch = None;
+                ctx.variant_index = vec![];
+            }
             println!("Feature removed.");
             return Ok(());
         }

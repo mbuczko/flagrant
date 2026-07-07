@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::{Decode, Encode, Sqlite, Type, encode::IsNull, sqlite::SqliteValueRef};
@@ -57,7 +58,7 @@ pub struct Feature {
     pub variants: Vec<Variant>,
     pub tags: TagList,
     pub is_enabled: bool,
-    pub is_active: bool,
+    pub is_archived: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -70,17 +71,229 @@ pub struct Variant {
     pub environment_id: Option<i32>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct Identity {
+    pub id: i32,
+    pub value: String,
+    #[serde(skip)]
+    pub environment_id: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct Trait {
+    #[sqlx(rename = "trait_id")]
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TraitValue {
+    Str(String),
+    Int(i32),
+    Float(f32),
+    Bool(bool),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct IdentityTrait {
+    pub trait_id: i32,
+    pub name: String,
+    pub value: Option<TraitValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct IdentityWithTraits {
+    pub id: i32,
+    pub value: String,
+    pub traits: Vec<IdentityTrait>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct IdentityVariant {
-    pub variant_id: i32,
+    pub variant_id: Option<i32>,
     pub feature_id: i32,
     pub identity_id: Option<i32>,
     pub migrated_id: Option<i32>,
+    pub feature_name: String,
+    pub feature_value: Option<FeatureValue>,
+    pub pinned_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SegmentDriver {
+    /// Match against the identity value string (e.g. email, user ID).
+    Identity,
+    /// Match against a named identity trait. The `String` is the trait name.
+    Trait(String),
+    /// Match against the environment name.
+    Environment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Comparator {
+    ExactlyMatches,
+    DoesNotMatch,
+    Contains,
+    DoesNotContain,
+    GreaterThan,
+    GreaterEqualThan,
+    LowerThan,
+    LowerEqualThan,
+    /// Value must be a JSON array string, e.g. `["a","b"]`.
+    In,
+    /// Value must be a JSON array string.
+    NotIn,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentRule {
+    #[sqlx(rename = "rule_id")]
+    pub id: i32,
+    pub driver: SegmentDriver,
+    pub comparator: Comparator,
+    /// For `In`/`NotIn` comparators this is a JSON array string; otherwise a plain value.
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupConnector {
+    And,
+    AndNot,
+}
+
+impl sqlx::Type<Sqlite> for SegmentDriver {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for SegmentDriver {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::Identity => "identity".to_string(),
+            Self::Trait(name) => format!("trait:{name}"),
+            Self::Environment => "environment".to_string(),
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for SegmentDriver {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "identity" => Ok(Self::Identity),
+            "environment" => Ok(Self::Environment),
+            _ if s.starts_with("trait:") => Ok(Self::Trait(s[6..].to_string())),
+            _ => Err(format!("Unknown segment driver: {s}").into()),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for Comparator {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for Comparator {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::ExactlyMatches => "exactly_matches",
+            Self::DoesNotMatch => "does_not_match",
+            Self::Contains => "contains",
+            Self::DoesNotContain => "does_not_contain",
+            Self::GreaterThan => "greater_than",
+            Self::GreaterEqualThan => "greater_equal_than",
+            Self::LowerThan => "lower_than",
+            Self::LowerEqualThan => "lower_equal_than",
+            Self::In => "in",
+            Self::NotIn => "not_in",
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for Comparator {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "exactly_matches" => Ok(Self::ExactlyMatches),
+            "does_not_match" => Ok(Self::DoesNotMatch),
+            "contains" => Ok(Self::Contains),
+            "does_not_contain" => Ok(Self::DoesNotContain),
+            "greater_than" => Ok(Self::GreaterThan),
+            "greater_equal_than" => Ok(Self::GreaterEqualThan),
+            "lower_than" => Ok(Self::LowerThan),
+            "lower_equal_than" => Ok(Self::LowerEqualThan),
+            "in" => Ok(Self::In),
+            "not_in" => Ok(Self::NotIn),
+            _ => Err(format!("Unknown comparator: {s}").into()),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for GroupConnector {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+impl Encode<'_, Sqlite> for GroupConnector {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        let s = match self {
+            Self::And => "and",
+            Self::AndNot => "and_not",
+        };
+        Encode::<Sqlite>::encode(s, buf)
+    }
+}
+impl<'r> Decode<'r, Sqlite> for GroupConnector {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        match s {
+            "and" => Ok(Self::And),
+            "and_not" => Ok(Self::AndNot),
+            _ => Err(format!("Unknown group connector: {s}").into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct SegmentGroup {
+    #[sqlx(rename = "group_id")]
+    pub id: i32,
+    /// Stable auto-generated label (e.g. "group-1"). Never reassigned after deletion.
+    pub label: String,
+    pub description: Option<String>,
+    /// `None` for the first (head) group; `Some` for all subsequent groups.
+    pub connector: Option<GroupConnector>,
+    pub rules: Vec<SegmentRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
+pub struct Segment {
+    #[sqlx(rename = "segment_id")]
+    pub id: i32,
+    pub project_id: i32,
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
-    pub value: FeatureValue,
+    #[validate(max_length = 2048)]
+    pub description: Option<String>,
+    /// Groups ordered by position; first group has `connector = None`.
+    pub groups: Vec<SegmentGroup>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
 pub enum FeatureValue {
     Text(String),
     Json(String),
@@ -99,7 +312,7 @@ pub struct Tag {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FeatureResponse {
     pub feature_id: i32,
-    pub feature_name: String,
+    pub name: String,
     pub value: FeatureValue,
 }
 
@@ -238,7 +451,6 @@ impl fmt::Display for FeatureValue {
         write!(f, "{typ}::{}", val.trim())
     }
 }
-
 impl FeatureValue {
     fn new(typ: &str, value: &str) -> Result<Self, ParseTypeError> {
         let val = value.to_owned();
@@ -282,5 +494,79 @@ impl FromStr for FeatureValue {
             };
         }
         Err(ParseTypeError::Encoding)
+    }
+}
+
+impl fmt::Display for TraitValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Str(v) => write!(f, "str::{v}"),
+            Self::Int(v) => write!(f, "int::{v}"),
+            Self::Float(v) => write!(f, "float::{v}"),
+            Self::Bool(v) => write!(f, "bool::{v}"),
+        }
+    }
+}
+
+impl TraitValue {
+    /// Infers the type from the raw string and returns the appropriate variant.
+    /// Detection order: bool → i32 → f32 → Str.
+    pub fn build(value: &str) -> Self {
+        if let Ok(b) = value.parse::<bool>() {
+            return Self::Bool(b);
+        }
+        if let Ok(i) = value.parse::<i32>() {
+            return Self::Int(i);
+        }
+        if let Ok(f) = value.parse::<f32>() {
+            return Self::Float(f);
+        }
+        Self::Str(value.to_owned())
+    }
+}
+
+impl FromStr for TraitValue {
+    type Err = ParseTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (typ, val) = s.split_once("::").ok_or(ParseTypeError::Encoding)?;
+        match typ {
+            "str" => Ok(Self::Str(val.to_owned())),
+            "int" => val
+                .parse::<i32>()
+                .map(Self::Int)
+                .map_err(|_| ParseTypeError::Encoding),
+            "float" => val
+                .parse::<f32>()
+                .map(Self::Float)
+                .map_err(|_| ParseTypeError::Encoding),
+            "bool" => val
+                .parse::<bool>()
+                .map(Self::Bool)
+                .map_err(|_| ParseTypeError::Encoding),
+            _ => Err(ParseTypeError::Type(typ.to_owned())),
+        }
+    }
+}
+
+impl sqlx::Type<Sqlite> for TraitValue {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as Type<Sqlite>>::type_info()
+    }
+}
+
+impl Encode<'_, Sqlite> for TraitValue {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
+    ) -> Result<IsNull, sqlx::error::BoxDynError> {
+        Encode::<Sqlite>::encode(self.to_string(), buf)
+    }
+}
+
+impl<'r> Decode<'r, Sqlite> for TraitValue {
+    fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
+        Self::from_str(s).map_err(Into::into)
     }
 }
