@@ -217,6 +217,7 @@ impl AutoCompleter for ArgCompleter<'_> {
             "GROUP" if arg_n >= 2 => {
                 let op: &str = &args[1];
                 Ok(match op {
+                    "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
                     "describe" | "delete" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
                     _ => vec![],
                 })
