@@ -1118,6 +1118,8 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 [[package]]
 name = "hugsqlx"
 version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffa45fc6794d3b75cbc3a00e8dfcbf25f4daba8e3dd38bb23bc720ccfa934ca2"
 dependencies = [
  "hugsqlx-core",
  "hugsqlx-derive",
@@ -1126,6 +1128,8 @@ dependencies = [
 [[package]]
 name = "hugsqlx-core"
 version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "654c3677d33c9faef50149bf50dd7d2b70e5b2864f0ef234fe1d7145df6e9e8e"
 dependencies = [
  "cfg-if",
  "chumsky",
@@ -1138,6 +1142,8 @@ dependencies = [
 [[package]]
 name = "hugsqlx-derive"
 version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec8299293ef1d0387129af06b0376df2da71513cecd18ede30d7dfd660da57ee"
 dependencies = [
  "hugsqlx-core",
  "proc-macro2",
