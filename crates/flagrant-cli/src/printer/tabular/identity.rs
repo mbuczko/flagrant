@@ -44,7 +44,7 @@ impl Tabular for IdentityWithTraits {
                     .map(|iv| {
                         if iv.identity_id.is_some() {
                             let pin = if iv.pinned_at.is_some() {
-                                "(pinned)".red().to_string()
+                                "★".yellow().to_string()
                             } else {
                                 String::default()
                             };
@@ -61,7 +61,7 @@ impl Tabular for IdentityWithTraits {
                             format!(
                                 "{} → {}",
                                 iv.feature_name.bright_blue(),
-                                "(not yet assigned)".dimmed()
+                                "(not assigned)".dimmed()
                             )
                         }
                     })
@@ -156,7 +156,7 @@ impl Tabular for IdentityWithTraits {
                                 format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
                                     .green()
                                     .to_string(),
-                                "pinning".green().to_string(),
+                                "★ pinned".green().to_string(),
                             )
                         })
                         .unzip();
@@ -170,7 +170,7 @@ impl Tabular for IdentityWithTraits {
                         )
                         .to_string(),
                     );
-                    override_stage.push("unpinning".red().to_string());
+                    override_stage.push("★ unpinned".red().to_string());
                 }
                 rows.push(vec![
                     "OVERRIDES".to_string(),
@@ -201,6 +201,7 @@ impl Tabular for IdentityWithTraits {
             }
             table.render(rows);
         }
+        println!("  {} variant overridden\n", "★".dimmed());
     }
 }
 
