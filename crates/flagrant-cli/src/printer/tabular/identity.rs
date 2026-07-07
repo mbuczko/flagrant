@@ -121,8 +121,14 @@ impl Tabular for IdentityWithTraits {
         if has_staged_traits || has_staged_pins {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(100), Align::Left, Overflow::Truncate, 11)
-                .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 10)
+                .add_column(
+                    None,
+                    Layout::Expandable(100),
+                    Align::Left,
+                    Overflow::Truncate,
+                    11,
+                )
+                .add_column(None, Layout::Fixed(12), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .width(100)
                 .build();
@@ -134,7 +140,11 @@ impl Tabular for IdentityWithTraits {
             ]];
 
             if let Some(value) = assigned_variant {
-                rows.push(vec!["VARIANTS".to_string(), value.to_string(), String::new()]);
+                rows.push(vec![
+                    "VARIANTS".to_string(),
+                    value.to_string(),
+                    String::new(),
+                ]);
             }
 
             if has_staged_pins {
@@ -153,8 +163,12 @@ impl Tabular for IdentityWithTraits {
 
                 for feature_name in staged_unpins {
                     override_lines.push(
-                        format!("{} → {}", feature_name.bright_blue(), "(not assigned)".red())
-                            .to_string(),
+                        format!(
+                            "{} → {}",
+                            feature_name.bright_blue(),
+                            "(not assigned)".red()
+                        )
+                        .to_string(),
                     );
                     override_stage.push("unpinning".red().to_string());
                 }
@@ -169,7 +183,13 @@ impl Tabular for IdentityWithTraits {
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .width(100)
                 .build();

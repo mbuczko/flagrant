@@ -69,34 +69,23 @@ impl Tabular for Segment {
 
         for group in &eff.groups {
             if let Some(connector) = &group.connector {
-                let sym = match connector {
-                    GroupConnector::And => "⊕ AND",
-                    GroupConnector::AndNot => "⊖ AND NOT",
-                };
+                let sym = format_connector(connector);
                 let sym_colored = if group.is_staged_add {
-                    sym.green().to_string()
+                    sym.green()
                 } else if group.is_deleted {
-                    sym.dimmed().to_string()
+                    sym.dimmed()
                 } else {
-                    sym.bright_cyan().to_string()
+                    sym.bright_cyan()
                 };
-                group_lines.push(String::new());
-                group_stage.push(String::new());
-                group_lines.push(format!(" {sym_colored}"));
-                group_stage.push(String::new());
-                group_lines.push(String::new());
-                group_stage.push(String::new());
+                group_lines.push(format!("\n {sym_colored}\n"));
             }
 
             let (frame, label_colored) = if group.is_deleted {
-                (
-                    "╭─".red().dimmed().to_string(),
-                    group.label.red().dimmed().to_string(),
-                )
+                ("╭─".red().dimmed(), group.label.red().dimmed())
             } else if group.is_staged_add {
-                ("╭─".green().to_string(), group.label.green().to_string())
+                ("╭─".green(), group.label.green())
             } else {
-                ("╭─".dimmed().to_string(), group.label.yellow().to_string())
+                ("╭─".dimmed(), group.label.yellow())
             };
             let desc_part = group
                 .description
@@ -115,11 +104,11 @@ impl Tabular for Segment {
             let visible_rules: Vec<_> = group.rules.iter().collect();
             if visible_rules.is_empty() {
                 let pipe = if group.is_deleted {
-                    "│".red().dimmed().to_string()
+                    "│".red().dimmed()
                 } else if group.is_staged_add {
-                    "│".green().to_string()
+                    "│".green()
                 } else {
-                    "│".dimmed().to_string()
+                    "│".dimmed()
                 };
                 group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
                 group_stage.push(String::new());
@@ -137,11 +126,11 @@ impl Tabular for Segment {
                     let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                         if group.is_deleted || r.is_deleted {
                             (
-                                "│".red().dimmed().to_string(),
-                                display_idx.to_string().dimmed().to_string(),
-                                driver.dimmed().to_string(),
-                                cmp.dimmed().to_string(),
-                                r.value.dimmed().to_string(),
+                                "│".red().dimmed(),
+                                display_idx.to_string().dimmed(),
+                                driver.dimmed(),
+                                cmp.dimmed(),
+                                r.value.dimmed(),
                                 if r.is_deleted {
                                     "- deleted".red().to_string()
                                 } else {
@@ -150,20 +139,20 @@ impl Tabular for Segment {
                             )
                         } else if r.is_staged_add {
                             (
-                                "│".green().to_string(),
-                                "+".green().to_string(),
-                                driver.bright_blue().to_string(),
-                                cmp.dimmed().to_string(),
-                                r.value.green().to_string(),
+                                "│".green(),
+                                "+".green(),
+                                driver.bright_blue(),
+                                cmp.dimmed(),
+                                r.value.green(),
                                 "+ added".green().to_string(),
                             )
                         } else {
                             (
-                                "│".dimmed().to_string(),
-                                display_idx.to_string().dimmed().to_string(),
-                                driver.bright_blue().to_string(),
-                                cmp.dimmed().to_string(),
-                                r.value.green().to_string(),
+                                "│".dimmed(),
+                                display_idx.to_string().dimmed(),
+                                driver.bright_blue(),
+                                cmp.dimmed(),
+                                r.value.green(),
                                 String::new(),
                             )
                         };
@@ -181,13 +170,13 @@ impl Tabular for Segment {
             }
 
             let close = if group.is_deleted {
-                "╰───".red().dimmed().to_string()
+                "╰───".red().dimmed()
             } else if group.is_staged_add {
-                "╰───".green().to_string()
+                "╰───".green()
             } else {
-                "╰───".dimmed().to_string()
+                "╰───".dimmed()
             };
-            group_lines.push(close);
+            group_lines.push(close.to_string());
             group_stage.push(String::new());
         }
 
@@ -207,7 +196,7 @@ impl Tabular for Segment {
                 )
                 .add_column(
                     None,
-                    Layout::Fixed(10),
+                    Layout::Fixed(12),
                     Align::Left,
                     Overflow::Truncate,
                     group_stage.len().max(1),
@@ -265,6 +254,7 @@ impl Tabular for SegmentGroup {
                 |op| matches!(op, SegmentPatchOp::DeleteGroup { label } if label == &group.label),
             )
         });
+
         let deleted_rule_ids: std::collections::HashSet<i32> = patch
             .map(|p| {
                 p.ops
@@ -276,6 +266,7 @@ impl Tabular for SegmentGroup {
                     .collect()
             })
             .unwrap_or_default();
+
         let staged_add_rules: Vec<(&SegmentDriver, &Comparator, &String)> = patch
             .map(|p| {
                 p.ops
@@ -293,23 +284,18 @@ impl Tabular for SegmentGroup {
             })
             .unwrap_or_default();
 
-        let joiner_str = match &group.connector {
-            None => "(first group)".dimmed().to_string(),
-            Some(GroupConnector::And) => {
-                if is_deleted {
-                    "⊕ AND".dimmed().to_string()
-                } else {
-                    "⊕ AND".bright_cyan().to_string()
-                }
-            }
-            Some(GroupConnector::AndNot) => {
-                if is_deleted {
-                    "⊖ AND NOT".dimmed().to_string()
-                } else {
-                    "⊖ AND NOT".bright_cyan().to_string()
-                }
-            }
+        let sym = group
+            .connector
+            .as_ref()
+            .map(format_connector)
+            .unwrap_or("(first group)");
+
+        let sym_colored = if is_deleted || sym.len() >= 10 {
+            sym.dimmed().to_string()
+        } else {
+            sym.bright_cyan().to_string()
         };
+
         let joiner_stage = if is_deleted {
             "- deleted".red().to_string()
         } else {
@@ -320,18 +306,17 @@ impl Tabular for SegmentGroup {
         let mut group_stage: Vec<String> = Vec::new();
 
         let (frame, label_colored) = if is_deleted {
-            (
-                "╭─".red().dimmed().to_string(),
-                group.label.red().dimmed().to_string(),
-            )
+            ("╭─".red().dimmed(), group.label.red().dimmed())
         } else {
-            ("╭─".dimmed().to_string(), group.label.yellow().to_string())
+            ("╭─".dimmed(), group.label.yellow())
         };
+
         let desc_part = group
             .description
             .as_deref()
             .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
             .unwrap_or_default();
+
         group_lines.push(format!("{frame} {label_colored}{desc_part}"));
         group_stage.push(if is_deleted {
             "- deleted".red().to_string()
@@ -340,11 +325,12 @@ impl Tabular for SegmentGroup {
         });
 
         let all_empty = group.rules.is_empty() && staged_add_rules.is_empty();
+
         if all_empty {
             let pipe = if is_deleted {
-                "│".red().dimmed().to_string()
+                "│".red().dimmed()
             } else {
-                "│".dimmed().to_string()
+                "│".dimmed()
             };
             group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
             group_stage.push(String::new());
@@ -361,19 +347,18 @@ impl Tabular for SegmentGroup {
                 .max()
                 .unwrap_or(0);
 
-            let mut display_idx = 1usize;
-            for r in &group.rules {
+            for (display_idx, r) in (1usize..).zip(group.rules.iter()) {
                 let driver = format_driver(&r.driver);
                 let cmp = format_comparator(&r.comparator);
                 let rule_deleted = deleted_rule_ids.contains(&r.id);
                 let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                     if is_deleted || rule_deleted {
                         (
-                            "│".red().dimmed().to_string(),
-                            display_idx.to_string().dimmed().to_string(),
-                            driver.dimmed().to_string(),
-                            cmp.dimmed().to_string(),
-                            r.value.dimmed().to_string(),
+                            "│".red().dimmed(),
+                            display_idx.to_string().dimmed(),
+                            driver.dimmed(),
+                            cmp.dimmed(),
+                            r.value.dimmed(),
                             if rule_deleted {
                                 "- deleted".red().to_string()
                             } else {
@@ -382,11 +367,11 @@ impl Tabular for SegmentGroup {
                         )
                     } else {
                         (
-                            "│".dimmed().to_string(),
-                            display_idx.to_string().dimmed().to_string(),
-                            driver.bright_blue().to_string(),
-                            cmp.dimmed().to_string(),
-                            r.value.green().to_string(),
+                            "│".dimmed(),
+                            display_idx.to_string().dimmed(),
+                            driver.bright_blue(),
+                            cmp.dimmed(),
+                            r.value.green(),
                             String::new(),
                         )
                     };
@@ -395,7 +380,6 @@ impl Tabular for SegmentGroup {
                     dw = max_driver,
                 ));
                 group_stage.push(rule_stage);
-                display_idx += 1;
             }
             for (driver, comparator, value) in &staged_add_rules {
                 group_lines.push(format!(
@@ -412,11 +396,11 @@ impl Tabular for SegmentGroup {
         }
 
         let close = if is_deleted {
-            "╰───".red().dimmed().to_string()
+            "╰───".red().dimmed()
         } else {
-            "╰───".dimmed().to_string()
+            "╰───".dimmed()
         };
-        group_lines.push(close);
+        group_lines.push(close.to_string());
         group_stage.push(String::new());
 
         let group_str = group_lines.join("\n");
@@ -436,7 +420,7 @@ impl Tabular for SegmentGroup {
                 )
                 .add_column(
                     None,
-                    Layout::Fixed(10),
+                    Layout::Fixed(12),
                     Align::Left,
                     Overflow::Truncate,
                     nlines,
@@ -445,7 +429,7 @@ impl Tabular for SegmentGroup {
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
             table.render(vec![
-                vec!["JOINER".to_string(), joiner_str, joiner_stage],
+                vec!["JOINER".to_string(), sym_colored, joiner_stage],
                 vec!["GROUP".to_string(), group_str, group_stage_str],
             ]);
         } else {
@@ -462,7 +446,7 @@ impl Tabular for SegmentGroup {
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
             table.render(vec![
-                vec!["JOINER".to_string(), joiner_str],
+                vec!["JOINER".to_string(), sym_colored],
                 vec!["GROUP".to_string(), group_str],
             ]);
         }
@@ -488,20 +472,19 @@ impl Tabular for SegmentRule {
 
         let (driver_s, comparator_s, value_s, stage) = if is_deleted {
             (
-                format_driver(&rule.driver).dimmed().to_string(),
-                format_comparator(&rule.comparator).dimmed().to_string(),
-                rule.value.dimmed().to_string(),
+                format_driver(&rule.driver).dimmed(),
+                format_comparator(&rule.comparator).dimmed(),
+                rule.value.dimmed(),
                 "- deleted".red().to_string(),
             )
         } else {
             (
-                format_driver(&rule.driver).bright_blue().to_string(),
-                format_comparator(&rule.comparator).dimmed().to_string(),
-                rule.value.green().to_string(),
+                format_driver(&rule.driver).bright_blue(),
+                format_comparator(&rule.comparator).dimmed(),
+                rule.value.green(),
                 String::new(),
             )
         };
-
         if stage.is_empty() {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
@@ -516,9 +499,9 @@ impl Tabular for SegmentRule {
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
             table.render(vec![
-                vec!["DRIVER".to_string(), driver_s],
-                vec!["COMPARATOR".to_string(), comparator_s],
-                vec!["VALUE".to_string(), value_s],
+                vec!["DRIVER".to_string(), driver_s.to_string()],
+                vec!["COMPARATOR".to_string(), comparator_s.to_string()],
+                vec!["VALUE".to_string(), value_s.to_string()],
             ]);
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
@@ -528,16 +511,21 @@ impl Tabular for SegmentRule {
                     Layout::Expandable(100),
                     Align::Left,
                     Overflow::Wrap,
-                    10,
+                    12,
                 )
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 1)
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build();
+
             table.render(vec![
-                vec!["DRIVER".to_string(), driver_s, stage],
-                vec!["COMPARATOR".to_string(), comparator_s, String::new()],
-                vec!["VALUE".to_string(), value_s, String::new()],
+                vec!["DRIVER".to_string(), driver_s.to_string(), stage],
+                vec![
+                    "COMPARATOR".to_string(),
+                    comparator_s.to_string(),
+                    String::new(),
+                ],
+                vec!["VALUE".to_string(), value_s.to_string(), String::new()],
             ]);
         }
     }
@@ -563,5 +551,12 @@ fn format_comparator(comparator: &Comparator) -> &'static str {
         Comparator::LowerEqualThan => "lower-equal-than",
         Comparator::In => "in",
         Comparator::NotIn => "not-in",
+    }
+}
+
+fn format_connector(connector: &GroupConnector) -> &'static str {
+    match connector {
+        GroupConnector::And => "⊕ AND",
+        GroupConnector::AndNot => "⊖ AND NOT",
     }
 }

@@ -30,7 +30,11 @@ impl Tabular for Feature {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
-            .add_column_named_with_align("DEFAULT VALUE".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align(
+                "DEFAULT VALUE".into(),
+                Layout::Expandable(30),
+                Align::Left,
+            )
             .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
             .width(100)
             .build()
@@ -46,8 +50,12 @@ impl Tabular for Feature {
                 Some(v) => (v, true),
                 None => (committed, false),
             };
-            let s = if effective { on.to_string() } else { off.to_string() };
-            if is_pending { s.yellow().to_string() } else { s }
+            let s = if effective { on } else { off };
+            if is_pending {
+                s.yellow().to_string()
+            } else {
+                s.to_string()
+            }
         };
 
         let pending_enabled = patch.and_then(|p| p.is_enabled);
@@ -68,18 +76,18 @@ impl Tabular for Feature {
             )
         };
         let status_stage = if pending_enabled.is_some() || pending_archived.is_some() {
-            "updated".yellow().to_string()
+            "▪ updated".yellow().to_string()
         } else {
             String::new()
         };
 
         let desc_str = match patch.and_then(|p| p.description.as_deref()) {
-            Some(d) if d.is_empty() => "(cleared)".yellow().to_string(),
+            Some("") => "(cleared)".yellow().to_string(),
             Some(d) => d.yellow().to_string(),
             None => self.description.clone(),
         };
         let desc_stage = if patch.and_then(|p| p.description.as_ref()).is_some() {
-            "updated".yellow().to_string()
+            "▪ updated".yellow().to_string()
         } else {
             String::new()
         };
@@ -97,7 +105,11 @@ impl Tabular for Feature {
         let mut variant_stage: Vec<String> = Vec::with_capacity(total_lines);
 
         for (i, e) in eff.iter().enumerate() {
-            let connector = if i + 1 == total_lines { "╰╴" } else { "├╴" };
+            let connector = if i + 1 == total_lines {
+                "╰╴"
+            } else {
+                "├╴"
+            };
             let weight = if e.is_control && has_ops {
                 100u32.saturating_sub(non_control_total) as u8
             } else {
@@ -146,10 +158,16 @@ impl Tabular for Feature {
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
                 .add_column(
                     None,
-                    Layout::Fixed(10),
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
+                .add_column(
+                    None,
+                    Layout::Fixed(12),
                     Align::Left,
                     Overflow::Truncate,
                     variant_stage.len().max(1),
@@ -160,7 +178,13 @@ impl Tabular for Feature {
         } else {
             FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
-                .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 10)
+                .add_column(
+                    None,
+                    Layout::Expandable(120),
+                    Align::Left,
+                    Overflow::Truncate,
+                    10,
+                )
                 .width(100)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build()

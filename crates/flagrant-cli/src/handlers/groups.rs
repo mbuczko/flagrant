@@ -69,9 +69,9 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 ///
 /// Expected args: `<label>`
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let label = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("No group label provided. Expected: GROUP describe <label>"))?;
+    let label = args.get(1).ok_or_else(|| {
+        anyhow::anyhow!("No group label provided. Expected: GROUP describe <label>")
+    })?;
 
     let ctx = session.context.read().unwrap();
     let segment = ctx

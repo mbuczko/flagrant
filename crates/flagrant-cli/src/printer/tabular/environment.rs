@@ -10,7 +10,12 @@ impl Tabular for Environment {
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
             .iter()
-            .map(|env| [env.name.clone(), env.description.clone().unwrap_or_default()])
+            .map(|env| {
+                [
+                    env.name.clone(),
+                    env.description.clone().unwrap_or_default(),
+                ]
+            })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
@@ -27,7 +32,13 @@ impl Tabular for Environment {
         let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(6), Align::Right, Overflow::Truncate, 1)
-            .add_column(None, Layout::Expandable(120), Align::Left, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                1,
+            )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
             .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
             .build();

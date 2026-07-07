@@ -41,7 +41,10 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         )
     })?;
 
-    rule.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &(label.to_string(), index));
+    rule.describe(
+        ctx.segment_patch.as_ref().filter(|p| !p.is_empty()),
+        &(label.to_string(), index),
+    );
     Ok(())
 }
 
