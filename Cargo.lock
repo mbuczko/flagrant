@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -679,7 +679,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-api"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-bombardier"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "flagrant-client",
@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-cli"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "argh",
@@ -737,7 +737,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-client"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "flagrant-types",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-repl"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "rustyline",
@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-types"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "chrono",
  "regex",
