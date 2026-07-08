@@ -172,7 +172,7 @@ impl Tabular for Feature {
                     Overflow::Truncate,
                     variant_stage.len().max(1),
                 )
-                .width(100)
+                .width(Width::Percentage(100))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build()
         } else {

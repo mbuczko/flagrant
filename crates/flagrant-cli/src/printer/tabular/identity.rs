@@ -20,7 +20,7 @@ impl Tabular for IdentityWithTraits {
                 let traits = id
                     .traits
                     .iter()
-                    .map(|t| format!("{}:{}", t.name, format_trait_value(&t.value)))
+                    .map(|t| format_trait_value(&t.name, &t.value))
                     .collect::<Vec<_>>()
                     .join(", ");
                 [id.value.clone(), traits]
@@ -45,28 +45,16 @@ impl Tabular for IdentityWithTraits {
         for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
             if t.is_deleted {
-                trait_lines.push(
-                    format!("{}:{}", name, format_trait_value(&t.value))
-                        .dimmed()
-                        .to_string(),
-                );
+                trait_lines.push(format_trait_value(&name, &t.value).dimmed().to_string());
                 trait_stage.push("- deleted".red().to_string());
             } else if t.value_modified {
-                trait_lines.push(
-                    format!("{}:{}", name, format_trait_value(&t.value))
-                        .yellow()
-                        .to_string(),
-                );
+                trait_lines.push(format_trait_value(&name, &t.value).yellow().to_string());
                 trait_stage.push("▪ updated".yellow().to_string());
             } else if t.is_staged_add {
-                trait_lines.push(
-                    format!("{}:{}", name, format_trait_value(&t.value))
-                        .green()
-                        .to_string(),
-                );
+                trait_lines.push(format_trait_value(&name, &t.value).green().to_string());
                 trait_stage.push("+ added".green().to_string());
             } else {
-                trait_lines.push(format!("{}:{}", name, format_trait_value(&t.value)));
+                trait_lines.push(format_trait_value(&name, &t.value));
                 trait_stage.push(String::new());
             }
         }
@@ -195,12 +183,12 @@ impl Tabular for IdentityWithTraits {
     }
 }
 
-fn format_trait_value(value: &Option<TraitValue>) -> String {
+fn format_trait_value(trait_name: &str, value: &Option<TraitValue>) -> String {
     match value {
-        Some(TraitValue::Str(v)) => format!("{v} ({})", "string".yellow()),
-        Some(TraitValue::Int(v)) => format!("{v} ({})", "int".yellow()),
-        Some(TraitValue::Float(v)) => format!("{v} ({})", "float".yellow()),
-        Some(TraitValue::Bool(v)) => format!("{v} ({})", "bool".yellow()),
+        Some(TraitValue::Str(v)) => format!("{}  : {trait_name}:{v}", "string".dimmed()),
+        Some(TraitValue::Int(v)) => format!("{}     : {trait_name}:{v}", "int".dimmed()),
+        Some(TraitValue::Float(v)) => format!("{}   : {trait_name}:{v}", "float".dimmed()),
+        Some(TraitValue::Bool(v)) => format!("{}    : {trait_name}:{v}", "bool".dimmed()),
         None => "(unset)".dimmed().to_string(),
     }
 }
