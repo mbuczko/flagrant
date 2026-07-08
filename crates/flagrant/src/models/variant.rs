@@ -191,10 +191,12 @@ pub async fn get_by_identity<T: AsRef<str>>(
     environment: &Environment,
     identity: T,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
-    let variants =
-        SQLVariants::fetch_variants_for_identity(conn, params![environment.id, identity.as_ref()])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+    let variants = SQLVariants::fetch_variants_for_identity(
+        conn,
+        params![environment.project_id, environment.id, identity.as_ref()],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variants)
 }
