@@ -59,7 +59,7 @@ impl Tabular for Segment {
             eff.description.as_deref().unwrap_or("").to_string()
         };
         let desc_stage = if eff.description_modified {
-            "updated".yellow().to_string()
+            "▪ updated".yellow().to_string()
         } else {
             String::new()
         };
@@ -77,7 +77,16 @@ impl Tabular for Segment {
                 } else {
                     sym.bright_cyan()
                 };
-                group_lines.push(format!("\n {sym_colored}\n"));
+                // Three separate pushes rather than one entry with embedded "\n"s: the
+                // stage column height is set to group_stage.len(), so every visual line
+                // must correspond to exactly one vector element. Otherwise the column is
+                // sized too small and trailing annotations (e.g. "- deleted") get cut off.
+                group_lines.push(String::new());
+                group_stage.push(String::new());
+                group_lines.push(format!(" {sym_colored}"));
+                group_stage.push(String::new());
+                group_lines.push(String::new());
+                group_stage.push(String::new());
             }
 
             let (frame, label_colored) = if group.is_deleted {
