@@ -36,40 +36,6 @@ impl Tabular for IdentityWithTraits {
     }
 
     fn describe(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
-        let assigned_variant: Option<String> = if ctx.is_empty() {
-            None
-        } else {
-            Some(
-                ctx.iter()
-                    .map(|iv| {
-                        if iv.identity_id.is_some() {
-                            let pin = if iv.pinned_at.is_some() {
-                                "★".yellow().to_string()
-                            } else {
-                                String::default()
-                            };
-                            format!(
-                                "{} → {} {}",
-                                iv.feature_name.bright_blue(),
-                                iv.feature_value
-                                    .as_ref()
-                                    .map(|v| v.to_string())
-                                    .unwrap_or_default(),
-                                pin
-                            )
-                        } else {
-                            format!(
-                                "{} → {}",
-                                iv.feature_name.bright_blue(),
-                                "(not assigned)".dimmed()
-                            )
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-        };
-
         let title = format!("Identity: {} (ID={})", self.value, self.id);
         let eff_traits = effective::effective_identity_traits(self, patch);
 
@@ -115,10 +81,64 @@ impl Tabular for IdentityWithTraits {
             patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
         let staged_unpins: &[String] = patch.map(|p| p.unpins.as_slice()).unwrap_or_default();
 
-        let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
-        let has_staged_pins = !staged_pins.is_empty() || !staged_unpins.is_empty();
+        // Build variant lines: committed state overlaid with staged pins/unpins.
+        let mut variant_lines: Vec<String> = Vec::new();
+        let mut variant_stage: Vec<String> = Vec::new();
 
-        if has_staged_traits || has_staged_pins {
+        for iv in ctx {
+            let feature = iv.feature_name.bright_blue().to_string();
+            if let Some(pin) = staged_pins
+                .iter()
+                .find(|o| o.feature_name == iv.feature_name)
+            {
+                // Staged override: show the new value
+                variant_lines.push(format!("{feature} → {}", pin.variant_value.green()));
+                variant_stage.push("▪ override".yellow().to_string());
+            } else if staged_unpins.iter().any(|s| *s == iv.feature_name) {
+                // Staged unoverride
+                variant_lines.push(format!("{feature} → {}", "(not assigned)".dimmed()));
+                variant_stage.push("- override".red().to_string());
+            } else if iv.identity_id.is_some() {
+                let pin_marker = if iv.pinned_at.is_some() {
+                    format!(" {}", "★".yellow())
+                } else {
+                    String::new()
+                };
+                variant_lines.push(format!(
+                    "{feature} → {}{}",
+                    iv.feature_value
+                        .as_ref()
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    pin_marker
+                ));
+                variant_stage.push(String::new());
+            } else {
+                variant_lines.push(format!("{feature} → {}", "(not assigned)".dimmed()));
+                variant_stage.push(String::new());
+            }
+        }
+
+        // Staged pins for features not yet in committed state
+        for o in staged_pins {
+            if !ctx.iter().any(|iv| iv.feature_name == o.feature_name) {
+                variant_lines.push(format!(
+                    "{} → {}",
+                    o.feature_name.bright_blue(),
+                    o.variant_value.green()
+                ));
+                variant_stage.push("+ override".green().to_string());
+            }
+        }
+
+        let variants_str = variant_lines.join("\n");
+        let variants_stage_str = variant_stage.join("\n");
+        let has_variants = !variant_lines.is_empty();
+
+        let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
+        let has_staged_variants = !variant_stage.iter().all(|s| s.is_empty());
+
+        if has_staged_traits || has_staged_variants {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
                 .add_column(
@@ -138,47 +158,13 @@ impl Tabular for IdentityWithTraits {
                 traits_str,
                 trait_stage.join("\n"),
             ]];
-
-            if let Some(value) = assigned_variant {
+            if has_variants {
                 rows.push(vec![
                     "VARIANTS".to_string(),
-                    value.to_string(),
-                    String::new(),
+                    variants_str,
+                    variants_stage_str,
                 ]);
             }
-
-            if has_staged_pins {
-                let (mut override_lines, mut override_stage): (Vec<String>, Vec<String>) =
-                    staged_pins
-                        .iter()
-                        .map(|o| {
-                            (
-                                format!("{} → {}", o.feature_name.bright_blue(), o.variant_value)
-                                    .green()
-                                    .to_string(),
-                                "★ pinned".green().to_string(),
-                            )
-                        })
-                        .unzip();
-
-                for feature_name in staged_unpins {
-                    override_lines.push(
-                        format!(
-                            "{} → {}",
-                            feature_name.bright_blue(),
-                            "(not assigned)".red()
-                        )
-                        .to_string(),
-                    );
-                    override_stage.push("★ unpinned".red().to_string());
-                }
-                rows.push(vec![
-                    "OVERRIDES".to_string(),
-                    override_lines.join("\n"),
-                    override_stage.join("\n"),
-                ]);
-            }
-
             table.render(rows);
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
@@ -195,13 +181,17 @@ impl Tabular for IdentityWithTraits {
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
-
-            if let Some(value) = assigned_variant {
-                rows.push(vec!["VARIANTS".to_string(), value.to_string()]);
+            if has_variants {
+                rows.push(vec!["VARIANTS".to_string(), variants_str]);
             }
             table.render(rows);
         }
-        println!("  {} variant overridden\n", "★".dimmed());
+
+        let has_any_override =
+            ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
+        if has_any_override {
+            println!("  {} variant overridden\n", "★".dimmed());
+        }
     }
 }
 
