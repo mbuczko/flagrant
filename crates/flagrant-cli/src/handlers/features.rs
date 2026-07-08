@@ -98,6 +98,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             bail!("No feature name provided.");
         }
         stage::ensure_no_pending(session)?;
+
         let feature = fetch_feature(feature_name, session)
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
         feature.describe(None, &());

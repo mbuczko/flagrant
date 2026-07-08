@@ -293,16 +293,32 @@ async fn delete_feature_with_multiple_environments(mut conn: PoolConnection<Sqli
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
     // Sanity: the feature is visible from both environments.
-    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_ok());
-    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_ok());
+    assert!(
+        feature::get_by_id(&mut conn, &environment1, feature.id)
+            .await
+            .is_ok()
+    );
+    assert!(
+        feature::get_by_id(&mut conn, &environment2, feature.id)
+            .await
+            .is_ok()
+    );
 
     assert!(
         feature::delete(&mut conn, &environment1, &feature)
             .await
             .is_ok()
     );
-    assert!(feature::get_by_id(&mut conn, &environment1, feature.id).await.is_err());
-    assert!(feature::get_by_id(&mut conn, &environment2, feature.id).await.is_err());
+    assert!(
+        feature::get_by_id(&mut conn, &environment1, feature.id)
+            .await
+            .is_err()
+    );
+    assert!(
+        feature::get_by_id(&mut conn, &environment2, feature.id)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test]

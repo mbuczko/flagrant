@@ -89,10 +89,6 @@ fn has_identity_ctx(session: &Session<Connection>) -> bool {
     // Identity context is mutually exclusive with segment context.
     ctx.identity.is_some() && ctx.segment.is_none()
 }
-fn has_feature_and_identity_ctx(session: &Session<Connection>) -> bool {
-    let ctx = session.context.read().unwrap();
-    ctx.feature.is_some() && ctx.identity.is_some() && ctx.segment.is_none()
-}
 fn has_feature_or_identity_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     (ctx.feature.is_some() || ctx.identity.is_some()) && ctx.segment.is_none()
@@ -233,13 +229,13 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Set.op_in_context(
-            "pin",
+            "override",
             "[value]",
-            handlers::identities::set_pin,
-            has_feature_and_identity_ctx,
+            handlers::identities::set_override,
+            has_identity_ctx,
         ),
         Command::Set.args_in_context(
-            "status · value · description · pin · trait",
+            "status · value · description · override · trait",
             has_feature_or_identity_ctx,
         ),
         // Segment setters (only in segment context)
@@ -264,12 +260,12 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Unset.op_in_context(
-            "pin",
+            "override",
             "",
-            handlers::identities::unset_pin,
-            has_feature_and_identity_ctx,
+            handlers::identities::unset_override,
+            has_identity_ctx,
         ),
-        Command::Unset.args_in_context("trait · pin", has_identity_ctx),
+        Command::Unset.args_in_context("trait · override", has_identity_ctx),
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
         Command::Segment.op("list", "", handlers::segments::list),

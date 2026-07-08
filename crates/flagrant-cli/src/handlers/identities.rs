@@ -10,6 +10,7 @@
 //! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
 //! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
 //! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
+//! | `UNSET override`               | [`unset_trait`] | Unpin the identitfy from pinned feature variant.    |
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
@@ -213,7 +214,7 @@ pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
 ///
 /// The entered value must match an existing variant exactly. To use an arbitrary value,
 /// first create a variant with `VARIANT add`.
-pub fn set_pin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Gather everything under a read lock, including opening the editor if needed.
     let (feature_name, identity_value, raw) = {
         let ctx = session.context.read().unwrap();
@@ -302,16 +303,14 @@ pub fn set_pin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 ///
 /// On `COMMIT` the identity is freed from its pinned (or any explicit) variant assignment
 /// and will be re-distributed on the next feature evaluation.
-pub fn unset_pin(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let feature = ctx
-        .feature
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a feature context."))?;
-    let identity = ctx
-        .identity
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in an identity context."))?;
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+    })?;
+    let identity = ctx.identity.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY use ...\" to set a context.")
+    })?;
 
     let feature_name = feature.name.clone();
     let identity_value = identity.value.clone();
