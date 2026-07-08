@@ -203,6 +203,7 @@ impl Tabular for Segment {
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
@@ -428,6 +429,7 @@ impl Tabular for SegmentGroup {
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build();
             table.render(vec![
                 vec!["JOINER".to_string(), sym_colored, joiner_stage],
@@ -445,6 +447,7 @@ impl Tabular for SegmentGroup {
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build();
             table.render(vec![
                 vec!["JOINER".to_string(), sym_colored],
@@ -498,6 +501,7 @@ impl Tabular for SegmentRule {
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build();
             table.render(vec![
                 vec!["DRIVER".to_string(), driver_s.to_string()],
@@ -517,6 +521,7 @@ impl Tabular for SegmentRule {
                 .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 1)
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build();
 
             table.render(vec![
