@@ -3,18 +3,18 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler          | Description                                      |
-//! |----------------------|------------------|--------------------------------------------------|
-//! | `FEATURE list`       | [`list`]         | List features in the current environment.        |
-//! | `FEATURE add`        | [`add`]          | Create a new feature with a default value.       |
-//! | `FEATURE use`        | [`r#use`]        | Switch into a feature context.                   |
-//! | `FEATURE describe`   | [`describe`]     | Print details of a feature.                      |
-//! | `FEATURE delete`     | [`delete`]       | Delete a feature.                                |
-//! | `SET state`          | [`state`]        | Stage a feature state change (`on` / `off`).     |
-//! | `SET archived`       | [`set_archived`] | Stage a feature archivisation (`yes` / `no`).    |
-//! | `SET value`          | [`set_value`]    | Stage a default value change.                    |
-//! | `COMMIT`             | [`commit`]       | Send all staged changes to the API.              |
-//! | `DISCARD`            | [`discard`]      | Drop all staged changes for the current feature. |
+//! | Command              | Handler             | Description                                         |
+//! |----------------------|---------------------|-----------------------------------------------------|
+//! | `FEATURE list`       | [`list`]            | List features in the current environment.           |
+//! | `FEATURE add`        | [`add`]             | Create a new feature with a default value.          |
+//! | `FEATURE use`        | [`r#use`]           | Switch into a feature context.                      |
+//! | `FEATURE describe`   | [`describe`]        | Print details of a feature.                         |
+//! | `FEATURE delete`     | [`delete`]          | Delete a feature.                                   |
+//! | `SET status`         | [`set_status`]      | Stage a feature status (`on` / `off` / 'archived'). |
+//! | `SET value`          | [`set_value`]       | Stage a default value change.                       |
+//! | `SET description`    | [`set_description`] | Stage a feature description.                        |
+//! | `COMMIT`             | [`commit`]          | Send all staged changes to the API.                 |
+//! | `DISCARD`            | [`discard`]         | Drop all staged changes for the current feature.    |
 
 use std::{collections::BTreeSet, ops::Deref};
 
