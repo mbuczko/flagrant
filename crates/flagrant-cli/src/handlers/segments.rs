@@ -1,3 +1,17 @@
+//! REPL command handlers for segment management.
+//!
+//! | Command                   | Handler            | Description                                        |
+//! |---------------------------|--------------------|----------------------------------------------------|
+//! | `SEGMENT add`             | [`add`]            | Create a new segment and enter its context.        |
+//! | `SEGMENT list`            | [`list`]           | List all segments in the current project.          |
+//! | `SEGMENT describe`        | [`describe`]       | Print details of a segment.                        |
+//! | `SEGMENT delete`          | [`delete`]         | Delete a segment by name.                          |
+//! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                     |
+//! | `SET name`                | [`set_name`]       | Stage a segment name change.                       |
+//! | `SET description`         | [`set_description`]| Stage a segment description change.                |
+//! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.            |
+//! | `DISCARD`                 | [`discard`]        | Drop all staged segment changes.                   |
+
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};

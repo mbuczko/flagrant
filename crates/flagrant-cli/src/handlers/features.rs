@@ -173,6 +173,7 @@ pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
 pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
     let mut ctx = session.context.write().unwrap();
+
     if ctx.feature.is_none() {
         bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
@@ -236,11 +237,9 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
 /// Commits all staged changes for the current feature to the API atomically.
 pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-
     let feature_id = ctx.feature.as_ref().map(|f| f.id).ok_or_else(|| {
         anyhow::anyhow!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
     })?;
-
     let patch = match &ctx.feature_patch {
         Some(p) if !p.is_empty() => p.clone(),
         _ => return Ok(()),
