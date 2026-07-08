@@ -1,5 +1,5 @@
 use colored::Colorize;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{IdentityOverridePatch, IdentityPatch},
@@ -30,7 +30,7 @@ impl Tabular for IdentityWithTraits {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("IDENTITY".into(), Layout::Fixed(40), Align::Left)
             .add_column_named_with_align("TRAITS".into(), Layout::Expandable(60), Align::Left)
-            .width(100)
+            .width(Width::Percentage(100))
             .build()
             .render(rows);
     }
@@ -150,7 +150,7 @@ impl Tabular for IdentityWithTraits {
                 )
                 .add_column(None, Layout::Fixed(12), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(100)
+                .width(Width::Percentage(100))
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![vec![
@@ -177,7 +177,7 @@ impl Tabular for IdentityWithTraits {
                     10,
                 )
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(100)
+                .width(Width::Percentage(100))
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];

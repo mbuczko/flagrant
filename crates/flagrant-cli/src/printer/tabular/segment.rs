@@ -1,5 +1,5 @@
 use colored::Colorize;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     Comparator, GroupConnector, Segment, SegmentDriver, SegmentGroup, SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp},
@@ -29,7 +29,7 @@ impl Tabular for Segment {
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(50), Align::Left)
             .add_column_named_with_align("GROUPS".into(), Layout::Fixed(12), Align::Left)
-            .width(100)
+            .width(Width::Percentage(100))
             .build()
             .render(rows);
     }
@@ -216,6 +216,7 @@ impl Tabular for Segment {
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .width(Width::Percentage(100))
                 .build()
         };
 

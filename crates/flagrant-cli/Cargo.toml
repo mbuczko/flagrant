@@ -14,7 +14,7 @@ serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = { workspace = true }
-fancy-table = {path = "../../../fancy-table"}
+fancy-table = "0.4.2"
 argh = "0.1"
 strum = "0.26.2"
 strum_macros = "0.26.2"

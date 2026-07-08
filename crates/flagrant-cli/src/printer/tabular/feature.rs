@@ -1,5 +1,5 @@
 use colored::Colorize;
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{Feature, payload::FeaturePatch};
 
 use crate::handlers::internal::effectives as effective;
@@ -36,7 +36,7 @@ impl Tabular for Feature {
                 Align::Left,
             )
             .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
-            .width(100)
+            .width(Width::Percentage(100))
             .build()
             .render(rows)
     }
@@ -185,7 +185,7 @@ impl Tabular for Feature {
                     Overflow::Truncate,
                     10,
                 )
-                .width(100)
+                .width(Width::Percentage(100))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .build()
         };
