@@ -39,6 +39,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         )
         // Variants
         .route(
+            "/envs/:environment/features/:feature_id/overrides",
+            get(features::get_overrides),
+        )
+        .route(
             "/envs/:environment/features/:feature_id/variants",
             get(variants::list),
         )

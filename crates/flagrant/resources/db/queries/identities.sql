@@ -75,6 +75,13 @@ SELECT iv.identity_id, iv.feature_id, iv.variant_id, iv.environment_id, iv.migra
 FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE iv.environment_id = $1 AND iv.feature_id = $2
 
+-- :name fetch_overrides_for_feature :<> :*
+-- :doc Returns identity values that have an explicit override (pinned_at IS NOT NULL) for given feature
+SELECT i.identity
+FROM identity_variants iv JOIN identities i USING(identity_id)
+WHERE iv.environment_id = $1 AND iv.feature_id = $2 AND iv.pinned_at IS NOT NULL
+ORDER BY i.identity
+
 -- :name migrate_identities :<> :!
 -- :doc Migrates given percent of identities attached to one variant into the other variant
 WITH attached AS (

@@ -1,14 +1,16 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
-use flagrant_types::{Feature, payload::FeaturePatch};
+use flagrant_types::{Feature, FeatureOverride, payload::FeaturePatch};
 
 use crate::handlers::internal::effectives as effective;
 
 use super::Tabular;
 
+const SHOW_OVERRIDES: usize = 3;
+
 impl Tabular for Feature {
     type Patch = FeaturePatch;
-    type Context = ();
+    type Context = Vec<FeatureOverride>;
 
     fn list(selfs: &[Self]) {
         let rows = selfs
@@ -41,7 +43,7 @@ impl Tabular for Feature {
             .render(rows)
     }
 
-    fn describe(&self, patch: Option<&FeaturePatch>, _ctx: &()) {
+    fn describe(&self, patch: Option<&FeaturePatch>, overrides: &Vec<FeatureOverride>) {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
 
@@ -151,6 +153,53 @@ impl Tabular for Feature {
         let variants = variant_lines.join("\n");
         let variants_stage_str = variant_stage.join("\n");
 
+        let overrides_str = {
+            let mut lines = Vec::new();
+            let format_group = |label: &str, values: Vec<&str>| -> Option<String> {
+                if values.is_empty() {
+                    return None;
+                }
+                let shown = values
+                    .iter()
+                    .take(SHOW_OVERRIDES)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let rest = values.len().saturating_sub(SHOW_OVERRIDES);
+                Some(if rest > 0 {
+                    format!("{}: {} (+{} more)", label.dimmed(), shown, rest)
+                } else {
+                    format!("{}: {}", label.dimmed(), shown)
+                })
+            };
+
+            let identities: Vec<&str> = overrides
+                .iter()
+                .filter_map(|o| {
+                    if let FeatureOverride::Identity(v) = o {
+                        Some(v.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            let segments: Vec<&str> = overrides
+                .iter()
+                .filter_map(|o| {
+                    if let FeatureOverride::Segment(v) = o {
+                        Some(v.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            lines.extend(format_group("identities", identities));
+            lines.extend(format_group("segments", segments));
+            lines.join("\n")
+        };
+
         let has_staged = !status_stage.is_empty()
             || !desc_stage.is_empty()
             || variant_stage.iter().any(|s| !s.is_empty());
@@ -191,19 +240,27 @@ impl Tabular for Feature {
         };
 
         let rows: Vec<Vec<String>> = if has_staged {
-            vec![
+            let mut rows = vec![
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
-                vec!["TAGS".to_string(), tags, String::new()],
-                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
-            ]
+            ];
+            if !overrides_str.is_empty() {
+                rows.push(vec!["OVERRIDES".to_string(), overrides_str, String::new()]);
+            }
+            rows.push(vec!["TAGS".to_string(), tags, String::new()]);
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
+            rows
         } else {
-            vec![
+            let mut rows = vec![
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
-                vec!["TAGS".to_string(), tags],
-                vec!["DESCRIPTION".to_string(), desc_str],
-            ]
+            ];
+            if !overrides_str.is_empty() {
+                rows.push(vec!["OVERRIDES".to_string(), overrides_str]);
+            }
+            rows.push(vec!["TAGS".to_string(), tags]);
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
+            rows
         };
         table.render(rows);
         println!("  {} control variant\n", "★".dimmed());

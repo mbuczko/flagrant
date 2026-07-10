@@ -292,6 +292,13 @@ pub struct Segment {
     pub groups: Vec<SegmentGroup>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+pub enum FeatureOverride {
+    Identity(String),
+    Segment(String),
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum FeatureValue {

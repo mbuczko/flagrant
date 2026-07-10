@@ -22,7 +22,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue,
+    Feature, FeatureOverride, FeatureValue,
     payload::{NewFeaturePayload, VariantPatchOp},
 };
 
@@ -41,6 +41,14 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
     let res = ctx.env_resource();
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
+}
+
+fn fetch_overrides(feature_id: i32, session: &Session<Connection>) -> Vec<FeatureOverride> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.env_resource();
+    ctx.client
+        .get::<Vec<FeatureOverride>>(res.subpath(format!("/features/{feature_id}/overrides")))
+        .unwrap_or_default()
 }
 
 /// Create a new feature in the current environment.
@@ -72,7 +80,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             )?
         };
 
-        feature.describe(None, &());
+        let overrides = fetch_overrides(feature.id, session);
+        feature.describe(None, &overrides);
         let mut ctx = session.context.write().unwrap();
         ctx.feature = Some(feature);
         index::rebuild(&mut ctx);
@@ -101,7 +110,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         let feature = fetch_feature(feature_name, session)
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
-        feature.describe(None, &());
+        let overrides = fetch_overrides(feature.id, session);
+        feature.describe(None, &overrides);
         {
             let mut ctx = session.context.write().unwrap();
             ctx.feature = Some(feature);
@@ -124,16 +134,26 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// describes the feature in the current context, overlaying any pending staged changes.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_feature(name, session)?.describe(None, &());
+        let feature = fetch_feature(name, session)?;
+        let overrides = fetch_overrides(feature.id, session);
+        feature.describe(None, &overrides);
     } else {
         {
             let ctx = session.context.read().unwrap();
-            match ctx.feature.as_ref() {
-                Some(f) => f.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &()),
-                None => bail!(
+            let feature = ctx.feature.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
                     "Not in a feature context. Set the context with: \"FEATURE use\" command."
-                ),
-            }
+                )
+            })?;
+            let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty()).cloned();
+            let overrides_path = ctx
+                .env_resource()
+                .subpath(format!("/features/{}/overrides", feature.id));
+            let overrides = ctx
+                .client
+                .get::<Vec<FeatureOverride>>(overrides_path)
+                .unwrap_or_default();
+            feature.describe(patch.as_ref(), &overrides);
         }
         index::rebuild(&mut session.context.write().unwrap());
     }
@@ -254,7 +274,14 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, Feature>(path, patch)
         .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
 
-    updated.describe(None, &());
+    let overrides_path = ctx
+        .env_resource()
+        .subpath(format!("/features/{}/overrides", updated.id));
+    let overrides = ctx
+        .client
+        .get::<Vec<FeatureOverride>>(overrides_path)
+        .unwrap_or_default();
+    updated.describe(None, &overrides);
     ctx.feature_patch = None;
     ctx.feature = Some(updated);
     Ok(())

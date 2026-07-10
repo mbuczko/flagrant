@@ -2,9 +2,9 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{environment, feature, project};
+use flagrant::models::{environment, feature, identity, project};
 use flagrant_types::{
-    Feature,
+    Feature, FeatureOverride,
     payload::{FeaturePatch, NewFeaturePayload},
 };
 use serde::Deserialize;
@@ -255,4 +255,28 @@ pub async fn patch(
 
     let updated = feature::patch(&mut conn, &env, &feature, patch).await?;
     Ok(Json(updated))
+}
+
+/// Returns explicit variant overrides (pinned identities) for a feature.
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/overrides",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    responses(
+        (status = 200, description = "Explicit variant overrides for this feature", body = Vec<FeatureOverride>)
+    ),
+    tag = "features"
+)]
+pub async fn get_overrides(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+) -> Result<Json<Vec<FeatureOverride>>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let overrides = identity::list_overrides(&mut conn, env.id, feature_id).await?;
+    Ok(Json(overrides))
 }

@@ -96,7 +96,7 @@ impl Tabular for IdentityWithTraits {
                 variant_stage.push("▪ override".yellow().to_string());
             } else if staged_unpins.iter().any(|s| *s == iv.feature_name) {
                 // Staged unoverride
-                variant_lines.push(format!("{feature} → {}", "(not assigned)".dimmed()));
+                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));
                 variant_stage.push("- override".red().to_string());
             } else if iv.identity_id.is_some() {
                 let pin_marker = if iv.pinned_at.is_some() {
@@ -114,7 +114,7 @@ impl Tabular for IdentityWithTraits {
                 ));
                 variant_stage.push(String::new());
             } else {
-                variant_lines.push(format!("{feature} → {}", "(not assigned)".dimmed()));
+                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));
                 variant_stage.push(String::new());
             }
         }
@@ -160,7 +160,7 @@ impl Tabular for IdentityWithTraits {
             ]];
             if has_variants {
                 rows.push(vec![
-                    "VARIANTS".to_string(),
+                    "OVERRIDES".to_string(),
                     variants_str,
                     variants_stage_str,
                 ]);
@@ -182,7 +182,7 @@ impl Tabular for IdentityWithTraits {
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
             if has_variants {
-                rows.push(vec!["VARIANTS".to_string(), variants_str]);
+                rows.push(vec!["OVERRIDES".to_string(), variants_str]);
             }
             table.render(rows);
         }

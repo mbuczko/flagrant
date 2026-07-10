@@ -1,7 +1,8 @@
 use chrono::{NaiveDateTime, Utc};
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
-    Environment, FeatureValue, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits,
+    Environment, FeatureOverride, FeatureValue, Identity, IdentityTrait, IdentityVariant,
+    IdentityWithTraits,
 };
 
 use super::feature;
@@ -385,6 +386,21 @@ pub async fn override_variant(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
     Ok(())
+}
+
+/// Returns the overrides (pinned identities) for a given feature as typed `FeatureOverride` values.
+pub async fn list_overrides(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<Vec<FeatureOverride>> {
+    let rows = SQLIdentities::fetch_overrides_for_feature::<_, (String,)>(
+        conn,
+        params![environment_id, feature_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch overrides for feature", e))?;
+    Ok(rows.into_iter().map(|(s,)| FeatureOverride::Identity(s)).collect())
 }
 
 pub async fn detach_identities(
