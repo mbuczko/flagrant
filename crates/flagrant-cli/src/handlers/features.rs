@@ -145,7 +145,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                     "Not in a feature context. Set the context with: \"FEATURE use\" command."
                 )
             })?;
-            let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty()).cloned();
+            let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
             let overrides_path = ctx
                 .env_resource()
                 .subpath(format!("/features/{}/overrides", feature.id));
@@ -153,7 +153,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 .client
                 .get::<Vec<FeatureOverride>>(overrides_path)
                 .unwrap_or_default();
-            feature.describe(patch.as_ref(), &overrides);
+            feature.describe(patch, &overrides);
         }
         index::rebuild(&mut session.context.write().unwrap());
     }

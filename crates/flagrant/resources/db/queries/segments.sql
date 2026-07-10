@@ -99,3 +99,28 @@ ORDER BY g.segment_id, g.position, r.rule_id
 -- :name delete_rule :<> :!
 -- :doc Deletes a rule by id
 DELETE FROM segment_rules WHERE rule_id = $1
+
+-- :name upsert_segment_variant_weight :<> :!
+-- :doc Inserts or updates the weight override for a segment+feature+variant+environment
+INSERT INTO segment_variants(segment_id, feature_id, variant_id, environment_id, weight)
+VALUES($1, $2, $3, $4, $5)
+ON CONFLICT(segment_id, feature_id, environment_id, variant_id)
+DO UPDATE SET weight = excluded.weight
+
+-- :name delete_segment_variants_for_feature :<> :!
+-- :doc Removes all weight overrides for a segment+feature+environment
+DELETE FROM segment_variants
+WHERE segment_id = $1 AND feature_id = $2 AND environment_id = $3
+
+-- :name fetch_segment_overrides_for_feature :<> :*
+-- :doc Returns names of segments that have any weight override for given feature+environment
+SELECT DISTINCT s.name
+FROM segment_variants sv JOIN segments s USING(segment_id)
+WHERE sv.feature_id = $1 AND sv.environment_id = $2
+ORDER BY s.name
+
+-- :name fetch_segment_variant_weights :<> :*
+-- :doc Returns variant_id + weight overrides for a given segment+feature+environment
+SELECT variant_id, weight
+FROM segment_variants
+WHERE segment_id = $1 AND feature_id = $2 AND environment_id = $3

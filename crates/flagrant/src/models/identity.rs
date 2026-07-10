@@ -400,7 +400,10 @@ pub async fn list_overrides(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch overrides for feature", e))?;
-    Ok(rows.into_iter().map(|(s,)| FeatureOverride::Identity(s)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|(s,)| FeatureOverride::Identity(s))
+        .collect())
 }
 
 pub async fn detach_identities(

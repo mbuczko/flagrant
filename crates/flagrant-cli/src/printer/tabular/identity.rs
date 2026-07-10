@@ -94,7 +94,7 @@ impl Tabular for IdentityWithTraits {
                 // Staged override: show the new value
                 variant_lines.push(format!("{feature} → {}", pin.variant_value.green()));
                 variant_stage.push("▪ override".yellow().to_string());
-            } else if staged_unpins.iter().any(|s| *s == iv.feature_name) {
+            } else if staged_unpins.contains(&iv.feature_name) {
                 // Staged unoverride
                 variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));
                 variant_stage.push("- override".red().to_string());

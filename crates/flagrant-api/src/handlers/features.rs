@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{environment, feature, identity, project};
+use flagrant::models::{environment, feature, identity, project, segment};
 use flagrant_types::{
     Feature, FeatureOverride,
     payload::{FeaturePatch, NewFeaturePayload},
@@ -277,6 +277,9 @@ pub async fn get_overrides(
 ) -> Result<Json<Vec<FeatureOverride>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let overrides = identity::list_overrides(&mut conn, env.id, feature_id).await?;
+    let mut overrides = identity::list_overrides(&mut conn, env.id, feature_id).await?;
+    let seg_names = segment::list_overrides_for_feature(&mut conn, feature_id, env.id).await?;
+
+    overrides.extend(seg_names.into_iter().map(FeatureOverride::Segment));
     Ok(Json(overrides))
 }

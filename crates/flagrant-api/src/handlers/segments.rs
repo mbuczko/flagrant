@@ -1,11 +1,14 @@
 use axum::{
     Json,
     extract::{Path, Query},
+    http::StatusCode,
 };
 use flagrant::models::{project, rule, segment};
 use flagrant_types::{
     Project, Segment, SegmentGroup, SegmentRule,
-    payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentPatch},
+    payload::{
+        NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentPatch, SegmentVariantWeight,
+    },
 };
 use serde::Deserialize;
 use sqlx::SqliteConnection;
@@ -169,11 +172,11 @@ pub async fn update(
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
     Path((project_name, segment_id)): Path<(String, SegmentId)>,
-) -> Result<Json<()>, ServiceError> {
+) -> Result<StatusCode, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::delete(&mut conn, &seg).await?;
-    Ok(Json(()))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Applies a batch of staged operations to a segment.
@@ -233,11 +236,11 @@ pub async fn add_group(
 pub async fn delete_group(
     DbConnection(mut conn): DbConnection,
     Path((project_name, segment_id, group_id)): Path<(String, SegmentId, i32)>,
-) -> Result<Json<()>, ServiceError> {
+) -> Result<StatusCode, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     segment::delete_group(&mut conn, &seg, group_id).await?;
-    Ok(Json(()))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Adds a rule to a group.
@@ -290,8 +293,24 @@ pub async fn add_rule(
 pub async fn delete_rule(
     DbConnection(mut conn): DbConnection,
     Path((project_name, _segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
-) -> Result<Json<()>, ServiceError> {
+) -> Result<StatusCode, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
     rule::delete(&mut conn, rule_id).await?;
-    Ok(Json(()))
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Returns stored variant weight overrides for a segment+feature+environment.
+pub async fn get_feature_override_weights(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, segment_id, feature_id, environment_id)): Path<(String, i32, i32, i32)>,
+) -> Result<Json<Vec<SegmentVariantWeight>>, ServiceError> {
+    let _project = project::get_by_name(&mut conn, project_name).await?;
+    let rows =
+        segment::get_variant_weights(&mut conn, segment_id, feature_id, environment_id).await?;
+    let weights = rows
+        .into_iter()
+        .map(|(variant_id, weight)| SegmentVariantWeight { variant_id, weight })
+        .collect();
+
+    Ok(Json(weights))
 }
