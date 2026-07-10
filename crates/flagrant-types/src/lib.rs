@@ -296,7 +296,10 @@ pub struct Segment {
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum FeatureOverride {
     Identity(String),
-    Segment(String),
+    Segment {
+        name: String,
+        weights: Vec<payload::SegmentVariantWeight>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]

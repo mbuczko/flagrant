@@ -119,6 +119,13 @@ FROM segment_variants sv JOIN segments s USING(segment_id)
 WHERE sv.feature_id = $1 AND sv.environment_id = $2
 ORDER BY s.name
 
+-- :name fetch_segment_overrides_with_weights :<> :*
+-- :doc Returns (segment_name, variant_id, weight) for all segments overriding feature+environment
+SELECT s.name, sv.variant_id, sv.weight
+FROM segment_variants sv JOIN segments s USING(segment_id)
+WHERE sv.feature_id = $1 AND sv.environment_id = $2
+ORDER BY s.name, sv.variant_id
+
 -- :name fetch_segment_variant_weights :<> :*
 -- :doc Returns variant_id + weight overrides for a given segment+feature+environment
 SELECT variant_id, weight

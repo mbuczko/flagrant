@@ -1,6 +1,9 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
-use flagrant_types::{Feature, FeatureOverride, payload::FeaturePatch};
+use flagrant_types::{
+    Feature, FeatureOverride, Variant,
+    payload::{FeaturePatch, SegmentVariantWeight},
+};
 
 use crate::handlers::internal::effectives as effective;
 
@@ -8,9 +11,30 @@ use super::Tabular;
 
 const SHOW_OVERRIDES: usize = 3;
 
+/// Context passed to `Feature::describe` to show both committed and pending overrides.
+pub struct OverridesContext {
+    pub committed: Vec<FeatureOverride>,
+    /// If the identity in context has a staged change for this feature:
+    /// `(identity_value, Some(variant_value))` = override set; `(identity_value, None)` = unpin.
+    pub identity_pending: Option<String>,
+    /// If the segment in context has a staged change for this feature:
+    /// `(segment_name, Some(weights))` = override set; `(segment_name, None)` = unset.
+    pub segment_pending: Option<(String, Option<Vec<SegmentVariantWeight>>)>,
+}
+
+impl OverridesContext {
+    pub fn committed_only(committed: Vec<FeatureOverride>) -> Self {
+        Self {
+            committed,
+            identity_pending: None,
+            segment_pending: None,
+        }
+    }
+}
+
 impl Tabular for Feature {
     type Patch = FeaturePatch;
-    type Context = Vec<FeatureOverride>;
+    type Context = OverridesContext;
 
     fn list(selfs: &[Self]) {
         let rows = selfs
@@ -43,7 +67,7 @@ impl Tabular for Feature {
             .render(rows)
     }
 
-    fn describe(&self, patch: Option<&FeaturePatch>, overrides: &Vec<FeatureOverride>) {
+    fn describe(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let tags = format!("{}", self.tags.to_string().bright_blue());
 
@@ -153,56 +177,130 @@ impl Tabular for Feature {
         let variants = variant_lines.join("\n");
         let variants_stage_str = variant_stage.join("\n");
 
-        let overrides_str = {
-            let mut lines = Vec::new();
-            let format_group = |label: &str, values: Vec<&str>| -> Option<String> {
-                if values.is_empty() {
-                    return None;
-                }
-                let shown = values
-                    .iter()
-                    .take(SHOW_OVERRIDES)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let rest = values.len().saturating_sub(SHOW_OVERRIDES);
-                Some(if rest > 0 {
-                    format!("{}: {} (+{} more)", label.dimmed(), shown, rest)
+        // Build overrides lines and stage annotations in parallel.
+        let mut overrides_lines: Vec<String> = Vec::new();
+        let mut overrides_stages: Vec<String> = Vec::new();
+
+        // Identity overrides: one grouped line with optional staging annotation.
+        let committed_identities: Vec<&str> = ctx
+            .committed
+            .iter()
+            .filter_map(|o| {
+                if let FeatureOverride::Identity(v) = o {
+                    Some(v.as_str())
                 } else {
-                    format!("{}: {}", label.dimmed(), shown)
-                })
+                    None
+                }
+            })
+            .collect();
+
+        if !committed_identities.is_empty() || ctx.identity_pending.is_some() {
+            let mut identities = committed_identities
+                .iter()
+                .take(SHOW_OVERRIDES)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if let Some(pending) = ctx.identity_pending.as_ref()
+                && !committed_identities.contains(&pending.as_str())
+            {
+                identities.push(pending)
+            }
+
+            let line = identities.join(", ");
+            let rest = identities.len().saturating_sub(SHOW_OVERRIDES);
+            let content = if rest > 0 {
+                format!("{}: {} (+{} more)", "identities".dimmed(), line, rest)
+            } else {
+                format!("{}: {}", "identities".dimmed(), line)
             };
+            if ctx.identity_pending.is_some() {
+                // TODO: Generic "modified" annotation for now.
+                // Later we may distinct between different actions (like override being added/removed).
+                overrides_stages.push("▪ modified".yellow().to_string());
+            }
+            overrides_lines.push(content);
+        }
 
-            let identities: Vec<&str> = overrides
-                .iter()
-                .filter_map(|o| {
-                    if let FeatureOverride::Identity(v) = o {
-                        Some(v.as_str())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        // Segment overrides: one line per segment with optional staging annotation.
+        let mut pending_seg_shown = false;
 
-            let segments: Vec<&str> = overrides
-                .iter()
-                .filter_map(|o| {
-                    if let FeatureOverride::Segment(v) = o {
-                        Some(v.as_str())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        for ovr in &ctx.committed {
+            if let FeatureOverride::Segment { name, weights } = ovr {
+                let is_current_pending = ctx
+                    .segment_pending
+                    .as_ref()
+                    .map(|(n, _)| n == name)
+                    .unwrap_or(false);
 
-            lines.extend(format_group("identities", identities));
-            lines.extend(format_group("segments", segments));
-            lines.join("\n")
-        };
+                if is_current_pending {
+                    pending_seg_shown = true;
+                    let (line, stage) = match &ctx.segment_pending {
+                        Some((_, Some(pending_weights))) => {
+                            let parts = segment_weight_parts(pending_weights, &self.variants);
+                            let line = format!(
+                                "{} {}: {}",
+                                "(segment)".dimmed(),
+                                name.dimmed(),
+                                parts.join(", ")
+                            )
+                            .yellow()
+                            .to_string();
+                            (line, "▪ adjusted".yellow().to_string())
+                        }
+                        Some((_, None)) => {
+                            let parts = segment_weight_parts(weights, &self.variants);
+                            let line = format!(
+                                "{} {}: {}",
+                                "(segment)".dimmed(),
+                                name.dimmed(),
+                                parts.join(", ")
+                            )
+                            .dimmed()
+                            .to_string();
+                            (line, "▪ removed".red().to_string())
+                        }
+                        None => unreachable!(),
+                    };
+                    overrides_lines.push(line);
+                    overrides_stages.push(stage);
+                } else {
+                    let parts = segment_weight_parts(weights, &self.variants);
+                    overrides_lines.push(format!(
+                        "{} {}: {}",
+                        "(segment)".dimmed(),
+                        name.dimmed(),
+                        parts.join(", ")
+                    ));
+                    overrides_stages.push(String::new())
+                }
+            }
+        }
+
+        // Pending segment set for a segment not yet in committed — show as new added line.
+        if !pending_seg_shown && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
+        {
+            let parts = segment_weight_parts(pending_weights, &self.variants);
+            let line = format!(
+                "{} {}: {}",
+                "(segment)".dimmed(),
+                seg_name.green(),
+                parts.join(", ")
+            )
+            .green()
+            .to_string();
+            overrides_lines.push(line);
+            overrides_stages.push("▪ added".green().to_string());
+        }
+
+        let overrides_str = overrides_lines.join("\n");
+        let overrides_stage_str = overrides_stages.join("\n");
+        let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
 
         let has_staged = !status_stage.is_empty()
             || !desc_stage.is_empty()
-            || variant_stage.iter().any(|s| !s.is_empty());
+            || variant_stage.iter().any(|s| !s.is_empty())
+            || overrides_has_staged;
 
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
@@ -243,28 +341,45 @@ impl Tabular for Feature {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
+                vec!["TAGS".to_string(), tags, String::new()],
+                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
             ];
             if !overrides_str.is_empty() {
-                rows.push(vec!["OVERRIDES".to_string(), overrides_str, String::new()]);
+                rows.push(vec![
+                    "OVERRIDES".to_string(),
+                    overrides_str,
+                    overrides_stage_str,
+                ]);
             }
-            rows.push(vec!["TAGS".to_string(), tags, String::new()]);
-            rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
             rows
         } else {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
+                vec!["TAGS".to_string(), tags],
+                vec!["DESCRIPTION".to_string(), desc_str],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec!["OVERRIDES".to_string(), overrides_str]);
             }
-            rows.push(vec!["TAGS".to_string(), tags]);
-            rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
             rows
         };
         table.render(rows);
         println!("  {} control variant\n", "★".dimmed());
     }
+}
+
+fn segment_weight_parts(weights: &[SegmentVariantWeight], variants: &[Variant]) -> Vec<String> {
+    weights
+        .iter()
+        .filter_map(|w| {
+            variants.iter().find(|v| v.id == w.variant_id).map(|v| {
+                let (_, bare) = v.value.decompose();
+                let first_line = bare.lines().next().unwrap_or(bare);
+                format!("{} → {}", first_line, format!("{}%", w.weight).bold())
+            })
+        })
+        .collect()
 }
 
 pub fn bar(weight: u8, width: u16) -> String {

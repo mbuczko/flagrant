@@ -1,5 +1,5 @@
 mod environment;
-mod feature;
+pub mod feature;
 mod identity;
 mod segment;
 
