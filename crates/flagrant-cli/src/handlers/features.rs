@@ -319,10 +319,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let overrides_path = ctx
         .env_resource()
         .subpath(format!("/features/{}/overrides", updated.id));
+
     let overrides = ctx
         .client
         .get::<Vec<FeatureOverride>>(overrides_path)
         .unwrap_or_default();
+
     updated.describe(None, &OverridesContext::committed_only(overrides));
     ctx.feature_patch = None;
     ctx.feature = Some(updated);

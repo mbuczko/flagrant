@@ -9,6 +9,10 @@ use crate::handlers::internal::effectives as effective;
 
 use super::Tabular;
 
+const UTF_VERT_BAR: &'static str = "│";
+const UTF_TOP_CORNER: &'static str = "╭─";
+const UTF_BTM_CORNER: &'static str = "╰───";
+
 impl Tabular for Segment {
     type Patch = SegmentPatch;
     type Context = ();
@@ -90,11 +94,11 @@ impl Tabular for Segment {
             }
 
             let (frame, label_colored) = if group.is_deleted {
-                ("╭─".red().dimmed(), group.label.red().dimmed())
+                (UTF_TOP_CORNER.red().dimmed(), group.label.red().dimmed())
             } else if group.is_staged_add {
-                ("╭─".green(), group.label.green())
+                (UTF_TOP_CORNER.green(), group.label.green())
             } else {
-                ("╭─".dimmed(), group.label.yellow())
+                (UTF_TOP_CORNER.dimmed(), group.label.yellow())
             };
             let desc_part = group
                 .description
@@ -113,11 +117,11 @@ impl Tabular for Segment {
             let visible_rules: Vec<_> = group.rules.iter().collect();
             if visible_rules.is_empty() {
                 let pipe = if group.is_deleted {
-                    "│".red().dimmed()
+                    UTF_VERT_BAR.red().dimmed()
                 } else if group.is_staged_add {
-                    "│".green()
+                    UTF_VERT_BAR.green()
                 } else {
-                    "│".dimmed()
+                    UTF_VERT_BAR.dimmed()
                 };
                 group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
                 group_stage.push(String::new());
@@ -135,7 +139,7 @@ impl Tabular for Segment {
                     let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                         if group.is_deleted || r.is_deleted {
                             (
-                                "│".red().dimmed(),
+                                UTF_VERT_BAR.red().dimmed(),
                                 display_idx.to_string().dimmed(),
                                 driver.dimmed(),
                                 cmp.dimmed(),
@@ -148,7 +152,7 @@ impl Tabular for Segment {
                             )
                         } else if r.is_staged_add {
                             (
-                                "│".green(),
+                                UTF_VERT_BAR.green(),
                                 "+".green(),
                                 driver.bright_blue(),
                                 cmp.dimmed(),
@@ -157,7 +161,7 @@ impl Tabular for Segment {
                             )
                         } else {
                             (
-                                "│".dimmed(),
+                                UTF_VERT_BAR.dimmed(),
                                 display_idx.to_string().dimmed(),
                                 driver.bright_blue(),
                                 cmp.dimmed(),
@@ -179,11 +183,11 @@ impl Tabular for Segment {
             }
 
             let close = if group.is_deleted {
-                "╰───".red().dimmed()
+                UTF_BTM_CORNER.red().dimmed()
             } else if group.is_staged_add {
-                "╰───".green()
+                UTF_BTM_CORNER.green()
             } else {
-                "╰───".dimmed()
+                UTF_BTM_CORNER.dimmed()
             };
             group_lines.push(close.to_string());
             group_stage.push(String::new());
@@ -216,7 +220,7 @@ impl Tabular for Segment {
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(13), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),
@@ -317,9 +321,9 @@ impl Tabular for SegmentGroup {
         let mut group_stage: Vec<String> = Vec::new();
 
         let (frame, label_colored) = if is_deleted {
-            ("╭─".red().dimmed(), group.label.red().dimmed())
+            (UTF_TOP_CORNER.red().dimmed(), group.label.red().dimmed())
         } else {
-            ("╭─".dimmed(), group.label.yellow())
+            (UTF_TOP_CORNER.dimmed(), group.label.yellow())
         };
 
         let desc_part = group
@@ -339,9 +343,9 @@ impl Tabular for SegmentGroup {
 
         if all_empty {
             let pipe = if is_deleted {
-                "│".red().dimmed()
+                UTF_VERT_BAR.red().dimmed()
             } else {
-                "│".dimmed()
+                UTF_VERT_BAR.dimmed()
             };
             group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
             group_stage.push(String::new());
@@ -365,7 +369,7 @@ impl Tabular for SegmentGroup {
                 let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                     if is_deleted || rule_deleted {
                         (
-                            "│".red().dimmed(),
+                            UTF_VERT_BAR.red().dimmed(),
                             display_idx.to_string().dimmed(),
                             driver.dimmed(),
                             cmp.dimmed(),
@@ -378,7 +382,7 @@ impl Tabular for SegmentGroup {
                         )
                     } else {
                         (
-                            "│".dimmed(),
+                            UTF_VERT_BAR.dimmed(),
                             display_idx.to_string().dimmed(),
                             driver.bright_blue(),
                             cmp.dimmed(),
@@ -395,7 +399,7 @@ impl Tabular for SegmentGroup {
             for (driver, comparator, value) in &staged_add_rules {
                 group_lines.push(format!(
                     "{}  {}  {:<dw$}  {}  {}",
-                    "│".green(),
+                    UTF_VERT_BAR.green(),
                     "+".green(),
                     format_driver(driver).bright_blue(),
                     format_comparator(comparator).dimmed(),
@@ -407,9 +411,9 @@ impl Tabular for SegmentGroup {
         }
 
         let close = if is_deleted {
-            "╰───".red().dimmed()
+            UTF_BTM_CORNER.red().dimmed()
         } else {
-            "╰───".dimmed()
+            UTF_BTM_CORNER.dimmed()
         };
         group_lines.push(close.to_string());
         group_stage.push(String::new());
