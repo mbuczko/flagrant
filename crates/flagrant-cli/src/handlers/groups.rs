@@ -12,7 +12,10 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
-use crate::printer::tabular::Tabular;
+use crate::{
+    handlers::segments,
+    printer::tabular::{Tabular, segment::SegmentContext},
+};
 
 /// Stage a group addition for the current segment.
 ///
@@ -62,16 +65,20 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// List groups — shows the current committed segment state.
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    if let Some(segment) = &ctx.segment {
+    let (segment_id, fresh) = {
+        let ctx = session.context.read().unwrap();
+        let Some(segment_id) = ctx.segment.as_ref().map(|s| s.id) else {
+            bail!("Not in a segment context.");
+        };
         let res = ctx.project_resource();
         let fresh = ctx
             .client
-            .get::<Segment>(res.subpath(format!("/segments/{}", segment.id)))?;
-        fresh.describe(None, &());
-        return Ok(());
-    }
-    bail!("Not in a segment context.");
+            .get::<Segment>(res.subpath(format!("/segments/{segment_id}")))?;
+        (segment_id, fresh)
+    };
+    let overrides = segments::fetch_overridden_features(segment_id, session);
+    fresh.describe(None, &SegmentContext { overrides });
+    Ok(())
 }
 
 /// Print details of a single group, overlaying any staged changes.

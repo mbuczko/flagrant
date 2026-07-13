@@ -82,7 +82,7 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     // list_overrides_for_feature (backs "FEATURE describe") includes the control variant's
     // remainder too, so users can see where the rest of the percentages go.
     let control = organic.iter().find(|v| v.is_control()).unwrap();
-    let displayed = segment::list_overrides_for_feature(&mut conn, feature.id, environment.id)
+    let displayed = segment::list_overrides_for_feature(&mut conn, environment.id, feature.id)
         .await
         .unwrap();
     let (_, weights) = displayed.iter().find(|(name, _)| name == "vip").unwrap();
@@ -93,6 +93,80 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     expected.sort();
 
     assert_eq!(by_id, expected);
+}
+
+/// `list_overridden_features` (backs "SEGMENT describe") should return one entry per
+/// feature the segment overrides, each with its explicit weights plus the control
+/// variant's auto-balanced remainder — and nothing for features it doesn't touch.
+#[sqlx::test]
+async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature_a = create_feature(&mut conn, &environment, "control-a").await;
+    let feature_b = create_feature(&mut conn, &environment, "control-b").await;
+    let untouched = create_feature(&mut conn, &environment, "control-c").await;
+
+    let alt_a = variant::create(
+        &mut conn,
+        &environment,
+        &feature_a,
+        FeatureValue::build("alt-a"),
+        40,
+    )
+    .await
+    .unwrap();
+    let alt_b = variant::create(
+        &mut conn,
+        &environment,
+        &feature_b,
+        FeatureValue::build("alt-b"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+
+    for (feature, alt_id) in [(&feature_a, alt_a.id), (&feature_b, alt_b.id)] {
+        let patch = SegmentPatch {
+            ops: vec![SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt_id,
+                    weight: 25,
+                }],
+            }],
+        };
+        segment::patch(&mut conn, &project, segment.clone(), patch)
+            .await
+            .unwrap();
+    }
+
+    let overridden = segment::list_overridden_features(&mut conn, environment.id, segment.id)
+        .await
+        .unwrap();
+
+    assert_eq!(overridden.len(), 2);
+    assert!(
+        !overridden
+            .iter()
+            .any(|f| f.feature_id == untouched.id)
+    );
+
+    for feature_id in [feature_a.id, feature_b.id] {
+        let entry = overridden
+            .iter()
+            .find(|f| f.feature_id == feature_id)
+            .unwrap();
+        // One explicit override + one control-variant remainder.
+        assert_eq!(entry.weights.len(), 2);
+        let explicit = entry.weights.iter().find(|w| !w.is_control).unwrap();
+        let control = entry.weights.iter().find(|w| w.is_control).unwrap();
+        assert_eq!(explicit.weight, 25);
+        assert_eq!(control.weight, 75);
+    }
 }
 
 /// Distributing with `Some(segment_id)` should converge to that segment's weights and must

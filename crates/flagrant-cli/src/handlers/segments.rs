@@ -18,7 +18,7 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, Segment,
+    Feature, Segment, SegmentFeatureOverride,
     payload::{FeaturePatch, NewSegmentPayload, SegmentPatchOp, SegmentVariantWeight},
 };
 
@@ -28,7 +28,7 @@ use crate::{
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
-    printer::tabular::Tabular,
+    printer::tabular::{Tabular, segment::SegmentContext},
 };
 
 fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Segment> {
@@ -37,6 +37,22 @@ fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Se
 
     ctx.client
         .get::<Segment>(res.subpath(format!("/segments/{name}")))
+}
+
+/// Fetches the features this segment overrides in the current environment.
+pub(crate) fn fetch_overridden_features(
+    segment_id: i32,
+    session: &Session<Connection>,
+) -> Vec<SegmentFeatureOverride> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.project_resource();
+    let environment_id = ctx.environment.id;
+
+    ctx.client
+        .get::<Vec<SegmentFeatureOverride>>(
+            res.subpath(format!("/segments/{segment_id}/overrides/{environment_id}")),
+        )
+        .unwrap_or_default()
 }
 
 /// Create a new segment and enter its context.
@@ -58,7 +74,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?
     };
-    segment.describe(None, &());
+    // A brand-new segment can't override anything yet.
+    segment.describe(None, &SegmentContext::default());
 
     let mut ctx = session.context.write().unwrap();
     ctx.segment = Some(segment);
@@ -88,14 +105,26 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Expected args: `[name]`
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_segment(name, session)?.describe(None, &());
+        let segment = fetch_segment(name, session)?;
+        let overrides = fetch_overridden_features(segment.id, session);
+        segment.describe(None, &SegmentContext { overrides });
     } else {
+        let (segment_id, patch) = {
+            let ctx = session.context.read().unwrap();
+            let segment = ctx
+                .segment
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))?;
+            (segment.id, ctx.segment_patch.clone())
+        };
+        let overrides = fetch_overridden_features(segment_id, session);
+
         let ctx = session.context.read().unwrap();
-        if let Some(segment) = &ctx.segment {
-            segment.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
-        } else {
-            bail!("Not in a segment context. Use `SEGMENT use <name>` first.");
-        }
+        let segment = ctx.segment.as_ref().unwrap();
+        segment.describe(
+            patch.as_ref().filter(|p| !p.is_empty()),
+            &SegmentContext { overrides },
+        );
     }
     Ok(())
 }
@@ -479,9 +508,13 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, Segment>(path, patch)
         .map_err(|err| anyhow::anyhow!("Segment commit failed: {err}"))?;
 
-    updated.describe(None, &());
     ctx.segment_patch = None;
     ctx.segment = Some(updated);
+    drop(ctx);
+
+    let overrides = fetch_overridden_features(segment_id, session);
+    let ctx = session.context.read().unwrap();
+    ctx.segment.as_ref().unwrap().describe(None, &SegmentContext { overrides });
     drop(ctx);
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section
@@ -513,7 +546,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("No segment name provided.");
     };
     let segment = fetch_segment(name, session)?;
-    segment.describe(None, &());
+    let overrides = fetch_overridden_features(segment.id, session);
+    segment.describe(None, &SegmentContext { overrides });
 
     let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
     ctx.variant_index.clear();

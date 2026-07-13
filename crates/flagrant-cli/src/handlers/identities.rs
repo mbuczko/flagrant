@@ -88,7 +88,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             )?
         };
         identity.describe(None, &vec![]);
-        session.context.write().unwrap().identity = Some(identity);
+
+        let mut ctx = session.context.write().unwrap();
+        ctx.identity = Some(identity);
+        ctx.segment = None;
+
         return Ok(());
     }
     bail!("No identity provided.")

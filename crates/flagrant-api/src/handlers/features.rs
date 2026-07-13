@@ -278,7 +278,7 @@ pub async fn get_overrides(
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let mut overrides = identity::list_overrides(&mut conn, env.id, feature_id).await?;
-    let seg_overrides = segment::list_overrides_for_feature(&mut conn, feature_id, env.id).await?;
+    let seg_overrides = segment::list_overrides_for_feature(&mut conn, env.id, feature_id).await?;
     overrides.extend(
         seg_overrides
             .into_iter()

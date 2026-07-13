@@ -5,7 +5,7 @@ use axum::{
 };
 use flagrant::models::{project, rule, segment};
 use flagrant_types::{
-    Project, Segment, SegmentGroup, SegmentRule,
+    Project, Segment, SegmentFeatureOverride, SegmentGroup, SegmentRule,
     payload::{
         NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentPatch, SegmentVariantWeight,
     },
@@ -313,4 +313,16 @@ pub async fn get_feature_override_weights(
         .collect();
 
     Ok(Json(weights))
+}
+
+/// Returns every feature a segment overrides within a given environment, each with its
+/// full weight breakdown (including the control variant's auto-balanced remainder).
+pub async fn get_overridden_features(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, segment_id, environment_id)): Path<(String, i32, i32)>,
+) -> Result<Json<Vec<SegmentFeatureOverride>>, ServiceError> {
+    let _project = project::get_by_name(&mut conn, project_name).await?;
+    let overrides = segment::list_overridden_features(&mut conn, environment_id, segment_id).await?;
+
+    Ok(Json(overrides))
 }

@@ -135,6 +135,18 @@ FROM variant_weights vw
 JOIN variants v ON v.variant_id = vw.variant_id
 WHERE vw.segment_id = $1 AND v.feature_id = $2 AND vw.environment_id = $3 AND v.environment_id IS NULL
 
+-- :name fetch_features_overridden_by_segment :<> :*
+-- :doc Returns (feature_id, feature_name, variant_id, is_control, value, weight) for every
+-- variant this segment overrides (including each feature's control-variant remainder),
+-- across all features, within a given environment.
+SELECT f.feature_id, f.name AS feature_name, vw.variant_id,
+       (v.environment_id IS NOT NULL) AS is_control, v.value, vw.weight
+FROM variant_weights vw
+JOIN variants v ON v.variant_id = vw.variant_id
+JOIN features f ON f.feature_id = v.feature_id
+WHERE vw.segment_id = $1 AND vw.environment_id = $2
+ORDER BY f.name, (v.environment_id IS NULL), vw.variant_id
+
 -- :name fetch_variants_for_identity :<> :*
 -- :doc Fetches feature variants for given identity. Variants attached to identity by distributor are denoted by non-NULL identity_id field.
 SELECT f.feature_id, iv.variant_id, f.name AS feature_name, iv_v.value AS feature_value, iv.migrated_id, iv.pinned_at, iv.identity_id

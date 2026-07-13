@@ -108,6 +108,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route(
             "/segments/:segment_id/features/:feature_id/overrides/:environment_id",
             get(segments::get_feature_override_weights),
+        )
+        .route(
+            "/segments/:segment_id/overrides/:environment_id",
+            get(segments::get_overridden_features),
         );
 
     Router::new()

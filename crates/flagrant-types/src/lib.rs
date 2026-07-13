@@ -302,6 +302,25 @@ pub enum FeatureOverride {
     },
 }
 
+/// A single variant's weight within a segment override, carrying enough to display it
+/// (value, whether it's the control variant) without a separate variant lookup.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct OverriddenVariant {
+    pub variant_id: i32,
+    pub value: FeatureValue,
+    pub is_control: bool,
+    pub weight: u8,
+}
+
+/// A feature that a segment overrides, with the full weight breakdown (including the
+/// control variant's auto-balanced remainder) for a given environment.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SegmentFeatureOverride {
+    pub feature_id: i32,
+    pub feature_name: String,
+    pub weights: Vec<OverriddenVariant>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum FeatureValue {

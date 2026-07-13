@@ -1,7 +1,7 @@
 mod environment;
 pub mod feature;
 mod identity;
-mod segment;
+pub mod segment;
 
 pub trait Tabular {
     type Patch;

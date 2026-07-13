@@ -3,7 +3,9 @@ use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, FeatureValue, IdentityVariant, Variant};
+use flagrant_types::{
+    Environment, Feature, FeatureValue, IdentityVariant, OverriddenVariant, Variant,
+};
 
 use super::identity;
 
@@ -380,6 +382,49 @@ pub async fn get_segment_overrides_with_weights(
         .map_err(|e| {
             FlagrantError::QueryFailed("Could not fetch segment overrides for feature", e).into()
         })
+}
+
+#[derive(sqlx::FromRow)]
+struct OverriddenFeatureRow {
+    feature_id: i32,
+    feature_name: String,
+    variant_id: i32,
+    is_control: bool,
+    value: FeatureValue,
+    weight: u8,
+}
+
+/// Returns every variant a segment overrides (including each feature's control-variant
+/// remainder), across all features, within a given environment - flat rows of
+/// `(feature_id, feature_name, weight-info)`. Group by `feature_id` to build a per-feature
+/// view (see `segment::list_overridden_features`).
+pub async fn get_features_overridden_by_segment(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<Vec<(i32, String, OverriddenVariant)>> {
+    let rows = SQLVariants::fetch_features_overridden_by_segment::<_, OverriddenFeatureRow>(
+        conn,
+        params![segment_id, environment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch features overridden by segment", e))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.feature_id,
+                r.feature_name,
+                OverriddenVariant {
+                    variant_id: r.variant_id,
+                    value: r.value,
+                    is_control: r.is_control,
+                    weight: r.weight,
+                },
+            )
+        })
+        .collect())
 }
 
 /// Removes all segment-scoped weight overrides (including the control variant's remainder

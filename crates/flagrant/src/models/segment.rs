@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use flagrant_types::{
-    GroupConnector, Project, Segment, SegmentGroup, SegmentRule,
+    GroupConnector, Project, Segment, SegmentFeatureOverride, SegmentGroup, SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
 use hugsqlx::{HugSqlx, params};
@@ -139,8 +139,8 @@ pub async fn get_variant_weights(
 /// (segment, variant); this function groups them by segment name.
 pub async fn list_overrides_for_feature(
     conn: &mut SqliteConnection,
-    feature_id: i32,
     environment_id: i32,
+    feature_id: i32,
 ) -> anyhow::Result<Vec<(String, Vec<SegmentVariantWeight>)>> {
     let rows =
         variant::get_segment_overrides_with_weights(conn, feature_id, environment_id).await?;
@@ -151,6 +151,30 @@ pub async fn list_overrides_for_feature(
             entry.1.push(SegmentVariantWeight { variant_id, weight });
         } else {
             result.push((name, vec![SegmentVariantWeight { variant_id, weight }]));
+        }
+    }
+    Ok(result)
+}
+
+/// Returns every feature this segment overrides within the given environment, each with
+/// its full weight breakdown (including the control variant's auto-balanced remainder).
+pub async fn list_overridden_features(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    segment_id: i32,
+) -> anyhow::Result<Vec<SegmentFeatureOverride>> {
+    let rows = variant::get_features_overridden_by_segment(conn, segment_id, environment_id).await?;
+
+    let mut result: Vec<SegmentFeatureOverride> = Vec::new();
+    for (feature_id, feature_name, ov) in rows {
+        if let Some(entry) = result.iter_mut().find(|f| f.feature_id == feature_id) {
+            entry.weights.push(ov);
+        } else {
+            result.push(SegmentFeatureOverride {
+                feature_id,
+                feature_name,
+                weights: vec![ov],
+            });
         }
     }
     Ok(result)

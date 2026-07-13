@@ -1,7 +1,8 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Comparator, GroupConnector, Segment, SegmentDriver, SegmentGroup, SegmentRule,
+    Comparator, GroupConnector, OverriddenVariant, Segment, SegmentDriver, SegmentFeatureOverride,
+    SegmentGroup, SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 
@@ -13,9 +14,15 @@ const UTF_VERT_BAR: &'static str = "│";
 const UTF_TOP_CORNER: &'static str = "╭─";
 const UTF_BTM_CORNER: &'static str = "╰───";
 
+/// Context passed to `Segment::describe` to show the features this segment overrides.
+#[derive(Default)]
+pub struct SegmentContext {
+    pub overrides: Vec<SegmentFeatureOverride>,
+}
+
 impl Tabular for Segment {
     type Patch = SegmentPatch;
-    type Context = ();
+    type Context = SegmentContext;
 
     fn list(selfs: &[Self]) {
         let rows: Vec<_> = selfs
@@ -38,7 +45,7 @@ impl Tabular for Segment {
             .render(rows);
     }
 
-    fn describe(&self, patch: Option<&SegmentPatch>, _ctx: &()) {
+    fn describe(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
 
         let title = if eff.name_modified {
@@ -194,6 +201,22 @@ impl Tabular for Segment {
         }
 
         let groups_str = group_lines.join("\n");
+
+        let overrides_lines: Vec<String> = ctx
+            .overrides
+            .iter()
+            .map(|o| {
+                let parts = overridden_variant_parts(&o.weights);
+                format!(
+                    "{} {}: {}",
+                    "(feature)".dimmed(),
+                    o.feature_name.dimmed(),
+                    parts.join(", ")
+                )
+            })
+            .collect();
+        let overrides_str = overrides_lines.join("\n");
+
         let has_staged = !desc_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
         let rules_stage_str = group_stage.join("\n");
 
@@ -235,15 +258,27 @@ impl Tabular for Segment {
         };
 
         let rows: Vec<Vec<String>> = if has_staged {
-            vec![
+            let mut rows = vec![
                 vec!["RULES".to_string(), groups_str, rules_stage_str],
                 vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
-            ]
+            ];
+            if !overrides_str.is_empty() {
+                rows.push(vec![
+                    "OVERRIDES".to_string(),
+                    overrides_str,
+                    String::new(),
+                ]);
+            }
+            rows
         } else {
-            vec![
+            let mut rows = vec![
                 vec!["RULES".to_string(), groups_str],
                 vec!["DESCRIPTION".to_string(), desc_str],
-            ]
+            ];
+            if !overrides_str.is_empty() {
+                rows.push(vec!["OVERRIDES".to_string(), overrides_str]);
+            }
+            rows
         };
         table.render(rows);
 
@@ -548,6 +583,18 @@ impl Tabular for SegmentRule {
             ]);
         }
     }
+}
+
+fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
+    weights
+        .iter()
+        .map(|w| {
+            let (_, bare) = w.value.decompose();
+            let first_line = bare.lines().next().unwrap_or(bare);
+            let marker = if w.is_control { "★ " } else { "" };
+            format!("{marker}{first_line} → {}", format!("{}%", w.weight).bold())
+        })
+        .collect()
 }
 
 fn format_driver(driver: &SegmentDriver) -> String {
