@@ -68,10 +68,11 @@ UPDATE features SET description = $2 WHERE feature_id = $1
 UPDATE features SET archived_at = $2 WHERE feature_id = $1
 
 -- :name update_feature_variants_accumulators :<> :!
--- :doc Updates feature variants accumulators by given value
+-- :doc Bumps accumulators for feature variants, scoped to a segment (NULL = organic)
 UPDATE variant_weights
 SET accumulator = accumulator + weight
 WHERE environment_id = $1 AND variant_id IN (select variant_id from variants where feature_id = $2)
+  AND segment_id IS $3
 
 -- :name delete_feature :<> :!
 -- :doc Removes a feature. Note that feature value and variants need to be removed before.
@@ -82,7 +83,7 @@ DELETE FROM features WHERE feature_id = $1
 DELETE FROM variants WHERE feature_id = $1
 
 -- :name delete_variant_weights_for_feature :<> :!
--- :doc Removes all variant_weights rows for all variants of a feature (across all environments).
+-- :doc Removes all variant_weights rows (organic and segment-scoped) for all variants of a feature (across all environments).
 DELETE FROM variant_weights WHERE variant_id IN (SELECT variant_id FROM variants WHERE feature_id = $1)
 
 -- :name delete_identity_variants_for_feature :<> :!

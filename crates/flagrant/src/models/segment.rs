@@ -8,7 +8,7 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
-use super::rule;
+use super::{environment, rule, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -130,14 +130,7 @@ pub async fn get_variant_weights(
     feature_id: i32,
     environment_id: i32,
 ) -> anyhow::Result<Vec<(i32, u8)>> {
-    let rows = SQLSegments::fetch_segment_variant_weights::<_, (i32, u8)>(
-        conn,
-        params![segment_id, feature_id, environment_id],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment variant weights", e))?;
-
-    Ok(rows)
+    variant::get_segment_weights(conn, segment_id, feature_id, environment_id).await
 }
 
 /// Returns per-segment weight overrides for the given feature + environment.
@@ -149,12 +142,8 @@ pub async fn list_overrides_for_feature(
     feature_id: i32,
     environment_id: i32,
 ) -> anyhow::Result<Vec<(String, Vec<SegmentVariantWeight>)>> {
-    let rows = SQLSegments::fetch_segment_overrides_with_weights::<_, (String, i32, u8)>(
-        conn,
-        params![feature_id, environment_id],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment overrides for feature", e))?;
+    let rows =
+        variant::get_segment_overrides_with_weights(conn, feature_id, environment_id).await?;
 
     let mut result: Vec<(String, Vec<SegmentVariantWeight>)> = Vec::new();
     for (name, variant_id, weight) in rows {
@@ -335,39 +324,46 @@ pub async fn patch(
                 environment_id,
                 variant_weights,
             } => {
-                SQLSegments::delete_segment_variants_for_feature(
+                let environment = environment::get_by_id(&mut *conn, environment_id).await?;
+
+                variant::delete_segment_weights_for_feature(
                     &mut *conn,
-                    params![segment.id, feature_id, environment_id],
+                    segment.id,
+                    feature_id,
+                    environment_id,
                 )
-                .await
-                .map_err(|e| FlagrantError::QueryFailed("Could not clear segment overrides", e))?;
-                for vw in variant_weights {
-                    SQLSegments::upsert_segment_variant_weight(
+                .await?;
+                for vw in &variant_weights {
+                    variant::set_segment_weight(
                         &mut *conn,
-                        params![
-                            segment.id,
-                            feature_id,
-                            vw.variant_id,
-                            environment_id,
-                            vw.weight
-                        ],
+                        &environment,
+                        segment.id,
+                        vw.variant_id,
+                        vw.weight,
                     )
-                    .await
-                    .map_err(|e| {
-                        FlagrantError::QueryFailed("Could not set segment variant weight", e)
-                    })?;
+                    .await?;
                 }
+                // Balance the control variant's remainder within this segment, mirroring
+                // how organic weights always sum to 100.
+                variant::balance_segment_control_weight(
+                    &mut *conn,
+                    &environment,
+                    segment.id,
+                    feature_id,
+                )
+                .await?;
             }
             SegmentPatchOp::UnsetFeatureOverride {
                 feature_id,
                 environment_id,
             } => {
-                SQLSegments::delete_segment_variants_for_feature(
+                variant::delete_segment_weights_for_feature(
                     &mut *conn,
-                    params![segment.id, feature_id, environment_id],
+                    segment.id,
+                    feature_id,
+                    environment_id,
                 )
-                .await
-                .map_err(|e| FlagrantError::QueryFailed("Could not unset segment overrides", e))?;
+                .await?;
             }
         }
     }

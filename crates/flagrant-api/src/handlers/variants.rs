@@ -61,7 +61,7 @@ pub async fn update(
 ) -> Result<Json<()>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
+    let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
     let value = FeatureValue::from_str(&payload.value)?;
 
     variant::update_one(&mut conn, &env, &var, value, payload.weight).await?;
@@ -88,7 +88,7 @@ pub async fn fetch(
 ) -> Result<Json<Variant>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let variant = variant::get_by_id(&mut conn, &env, variant_id).await?;
+    let variant = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
 
     Ok(Json(variant))
 }
@@ -114,7 +114,7 @@ pub async fn list(
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-    let variants = variant::get_for_feature(&mut conn, &env, feature.id).await?;
+    let variants = variant::get_for_feature(&mut conn, &env, feature.id, None).await?;
 
     Ok(Json(variants))
 }
@@ -139,7 +139,7 @@ pub async fn delete(
 ) -> Result<Json<()>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let var = variant::get_by_id(&mut conn, &env, variant_id).await?;
+    let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
 
     Ok(Json(variant::delete(&mut conn, &env, &var).await?))
 }

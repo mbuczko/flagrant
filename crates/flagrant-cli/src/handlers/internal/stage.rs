@@ -4,6 +4,12 @@
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
+use flagrant_types::{
+    FeatureValue, TraitValue,
+    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
+};
+
+use crate::handlers::{features, identities, segments};
 
 /// Bail if any context has uncommitted staged changes.
 ///
@@ -15,12 +21,6 @@ pub(crate) fn ensure_no_pending(session: &Session<Connection>) -> anyhow::Result
     }
     Ok(())
 }
-use flagrant_types::{
-    FeatureValue, TraitValue,
-    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
-};
-
-use crate::handlers::{features, identities, segments};
 
 /// Stages a `SetValue` op for a committed variant, or updates the value of a staged `Add` op.
 pub(crate) fn stage_value(

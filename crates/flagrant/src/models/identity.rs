@@ -222,7 +222,7 @@ pub async fn patch(
             .parse()
             .unwrap_or_else(|_| FeatureValue::build(&ovr.variant_value));
 
-        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv)
+        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv, None)
             .await?
             .ok_or(FlagrantError::BadRequest(
                 "No variant with given value found for this feature",
@@ -314,9 +314,13 @@ pub async fn get_identity_variants(
         let attach_to_variant = if var.pinned_at.is_some() {
             None
         } else if let Some(id) = var.migrated_id {
-            variant::get_by_id(&mut tx, environment, id).await.ok()
+            variant::get_by_id(&mut tx, environment, id, None)
+                .await
+                .ok()
         } else if var.identity_id.is_none() {
-            Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
+            // TODO: resolve the identity's matching segment via the rule evaluator once
+            // it exists, and pass its id here instead of None.
+            Some(distributor::distribute(&mut tx, environment, var.feature_id, None).await?)
         } else {
             None
         };

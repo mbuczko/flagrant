@@ -14,8 +14,7 @@ const SHOW_OVERRIDES: usize = 3;
 /// Context passed to `Feature::describe` to show both committed and pending overrides.
 pub struct OverridesContext {
     pub committed: Vec<FeatureOverride>,
-    /// If the identity in context has a staged change for this feature:
-    /// `(identity_value, Some(variant_value))` = override set; `(identity_value, None)` = unpin.
+    /// Identity with staged change in a context.
     pub identity_pending: Option<String>,
     /// If the segment in context has a staged change for this feature:
     /// `(segment_name, Some(weights))` = override set; `(segment_name, None)` = unset.
