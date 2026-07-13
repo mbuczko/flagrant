@@ -111,10 +111,9 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         let (segment_id, patch) = {
             let ctx = session.context.read().unwrap();
-            let segment = ctx
-                .segment
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))?;
+            let segment = ctx.segment.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
+            })?;
             (segment.id, ctx.segment_patch.clone())
         };
         let overrides = fetch_overridden_features(segment_id, session);
@@ -514,7 +513,10 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     let overrides = fetch_overridden_features(segment_id, session);
     let ctx = session.context.read().unwrap();
-    ctx.segment.as_ref().unwrap().describe(None, &SegmentContext { overrides });
+    ctx.segment
+        .as_ref()
+        .unwrap()
+        .describe(None, &SegmentContext { overrides });
     drop(ctx);
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section

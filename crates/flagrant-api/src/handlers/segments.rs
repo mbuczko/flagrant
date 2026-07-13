@@ -322,7 +322,8 @@ pub async fn get_overridden_features(
     Path((project_name, segment_id, environment_id)): Path<(String, i32, i32)>,
 ) -> Result<Json<Vec<SegmentFeatureOverride>>, ServiceError> {
     let _project = project::get_by_name(&mut conn, project_name).await?;
-    let overrides = segment::list_overridden_features(&mut conn, environment_id, segment_id).await?;
+    let overrides =
+        segment::list_overridden_features(&mut conn, environment_id, segment_id).await?;
 
     Ok(Json(overrides))
 }

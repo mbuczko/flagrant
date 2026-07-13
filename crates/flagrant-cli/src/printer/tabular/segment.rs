@@ -263,11 +263,7 @@ impl Tabular for Segment {
                 vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
             ];
             if !overrides_str.is_empty() {
-                rows.push(vec![
-                    "OVERRIDES".to_string(),
-                    overrides_str,
-                    String::new(),
-                ]);
+                rows.push(vec!["OVERRIDES".to_string(), overrides_str, String::new()]);
             }
             rows
         } else {
@@ -591,7 +587,7 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
         .map(|w| {
             let (_, bare) = w.value.decompose();
             let first_line = bare.lines().next().unwrap_or(bare);
-            let marker = if w.is_control { "★ " } else { "" };
+            let marker = if w.is_control { "★" } else { "" };
             format!("{marker}{first_line} → {}", format!("{}%", w.weight).bold())
         })
         .collect()

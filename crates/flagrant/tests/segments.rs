@@ -149,11 +149,7 @@ async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sql
         .unwrap();
 
     assert_eq!(overridden.len(), 2);
-    assert!(
-        !overridden
-            .iter()
-            .any(|f| f.feature_id == untouched.id)
-    );
+    assert!(!overridden.iter().any(|f| f.feature_id == untouched.id));
 
     for feature_id in [feature_a.id, feature_b.id] {
         let entry = overridden

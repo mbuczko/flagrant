@@ -163,7 +163,8 @@ pub async fn list_overridden_features(
     environment_id: i32,
     segment_id: i32,
 ) -> anyhow::Result<Vec<SegmentFeatureOverride>> {
-    let rows = variant::get_features_overridden_by_segment(conn, segment_id, environment_id).await?;
+    let rows =
+        variant::get_features_overridden_by_segment(conn, segment_id, environment_id).await?;
 
     let mut result: Vec<SegmentFeatureOverride> = Vec::new();
     for (feature_id, feature_name, ov) in rows {

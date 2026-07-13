@@ -162,7 +162,7 @@ impl Tabular for Feature {
             {
                 variant_lines.push(line.yellow().to_string());
                 let label = if e.value_modified || e.weight_modified {
-                    "▪ modified"
+                    "▪ updated"
                 } else {
                     "▪ adjusted"
                 };
@@ -214,9 +214,9 @@ impl Tabular for Feature {
                 format!("{}: {}", "identities".dimmed(), line)
             };
             if ctx.identity_pending.is_some() {
-                // TODO: Generic "modified" annotation for now.
+                // TODO: Generic "updated" annotation for now.
                 // Later we may distinct between different actions (like override being added/removed).
-                overrides_stages.push("▪ modified".yellow().to_string());
+                overrides_stages.push("▪ updated".yellow().to_string());
             }
             overrides_lines.push(content);
         }
@@ -247,7 +247,7 @@ impl Tabular for Feature {
                             )
                             .yellow()
                             .to_string();
-                            (line, "▪ modified".yellow().to_string())
+                            (line, "▪ updated".yellow().to_string())
                         }
                         Some((_, None)) => {
                             let parts = segment_weight_parts(weights, &self.variants);

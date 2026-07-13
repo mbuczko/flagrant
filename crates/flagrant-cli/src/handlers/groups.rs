@@ -86,7 +86,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// Expected args: `<label>`
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let label = args.get(1).ok_or_else(|| {
-        anyhow::anyhow!("No group label provided. Expected: GROUP describe <label>")
+        anyhow::anyhow!("No group label provided. Use: `GROUP describe <label>`.")
     })?;
 
     let ctx = session.context.read().unwrap();
@@ -111,7 +111,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let segment = segment_from_ctx(session)?;
     let Some(label) = args.get(1) else {
-        bail!("No group label provided. Expected: GROUP delete <label> (e.g. group-1)");
+        bail!("No group label provided. Use: `GROUP delete <label>` (e.g. group-1 as the label).");
     };
 
     if !segment.groups.iter().any(|g| g.label == label.as_ref()) {
