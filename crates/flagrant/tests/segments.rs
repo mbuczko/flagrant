@@ -58,6 +58,7 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
         .unwrap();
     let organic_alt = organic.iter().find(|v| v.id == alt.id).unwrap();
     assert_eq!(organic_alt.weight, 40);
+
     let organic_control = organic.iter().find(|v| v.is_control()).unwrap();
     assert_eq!(organic_control.weight, 60);
 
@@ -67,15 +68,31 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
         .unwrap();
     let scoped_alt = scoped.iter().find(|v| v.id == alt.id).unwrap();
     assert_eq!(scoped_alt.weight, 30);
+
     let scoped_control = scoped.iter().find(|v| v.is_control()).unwrap();
     assert_eq!(scoped_control.weight, 70);
 
-    // The override listing (used by the CLI/API) only surfaces the explicit override,
+    // get_segment_weights (backs the editor prefill) only surfaces the explicit override,
     // not the control variant's auto-balanced remainder.
     let overrides = variant::get_segment_weights(&mut conn, segment.id, feature.id, environment.id)
         .await
         .unwrap();
     assert_eq!(overrides, vec![(alt.id, 30)]);
+
+    // list_overrides_for_feature (backs "FEATURE describe") includes the control variant's
+    // remainder too, so users can see where the rest of the percentages go.
+    let control = organic.iter().find(|v| v.is_control()).unwrap();
+    let displayed = segment::list_overrides_for_feature(&mut conn, feature.id, environment.id)
+        .await
+        .unwrap();
+    let (_, weights) = displayed.iter().find(|(name, _)| name == "vip").unwrap();
+    let mut by_id: Vec<(i32, u8)> = weights.iter().map(|w| (w.variant_id, w.weight)).collect();
+    let mut expected = vec![(alt.id, 30), (control.id, 70)];
+
+    by_id.sort();
+    expected.sort();
+
+    assert_eq!(by_id, expected);
 }
 
 /// Distributing with `Some(segment_id)` should converge to that segment's weights and must

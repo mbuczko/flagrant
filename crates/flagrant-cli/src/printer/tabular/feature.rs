@@ -236,7 +236,9 @@ impl Tabular for Feature {
                     pending_seg_shown = true;
                     let (line, stage) = match &ctx.segment_pending {
                         Some((_, Some(pending_weights))) => {
-                            let parts = segment_weight_parts(pending_weights, &self.variants);
+                            let with_control =
+                                with_control_remainder(pending_weights, &self.variants);
+                            let parts = segment_weight_parts(&with_control, &self.variants);
                             let line = format!(
                                 "{} {}: {}",
                                 "(segment)".dimmed(),
@@ -245,7 +247,7 @@ impl Tabular for Feature {
                             )
                             .yellow()
                             .to_string();
-                            (line, "▪ adjusted".yellow().to_string())
+                            (line, "▪ modified".yellow().to_string())
                         }
                         Some((_, None)) => {
                             let parts = segment_weight_parts(weights, &self.variants);
@@ -279,7 +281,8 @@ impl Tabular for Feature {
         // Pending segment set for a segment not yet in committed — show as new added line.
         if !pending_seg_shown && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
         {
-            let parts = segment_weight_parts(pending_weights, &self.variants);
+            let with_control = with_control_remainder(pending_weights, &self.variants);
+            let parts = segment_weight_parts(&with_control, &self.variants);
             let line = format!(
                 "{} {}: {}",
                 "(segment)".dimmed(),
@@ -366,6 +369,28 @@ impl Tabular for Feature {
         table.render(rows);
         println!("  {} control variant\n", "★".dimmed());
     }
+}
+
+/// Synthesizes the control variant's remainder (100 - sum of the given weights) for a
+/// staged/pending override, which only carries the explicit non-control entries the user
+/// provided. Mirrors the auto-balanced control row `list_overrides_for_feature` already
+/// returns for committed overrides, so pending changes show the same "where does the rest
+/// go" picture before they're committed.
+fn with_control_remainder(
+    weights: &[SegmentVariantWeight],
+    variants: &[Variant],
+) -> Vec<SegmentVariantWeight> {
+    let Some(control) = variants.iter().find(|v| v.is_control()) else {
+        return weights.to_vec();
+    };
+    let sum: u32 = weights.iter().map(|w| w.weight as u32).sum();
+    let mut result = vec![SegmentVariantWeight {
+        variant_id: control.id,
+        weight: 100u32.saturating_sub(sum) as u8,
+    }];
+
+    result.extend(weights.iter().cloned());
+    result
 }
 
 fn segment_weight_parts(weights: &[SegmentVariantWeight], variants: &[Variant]) -> Vec<String> {

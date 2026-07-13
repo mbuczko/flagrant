@@ -24,6 +24,7 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
+        features,
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
@@ -58,7 +59,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         )?
     };
     segment.describe(None, &());
-    session.context.write().unwrap().segment = Some(segment);
+
+    let mut ctx = session.context.write().unwrap();
+    ctx.segment = Some(segment);
+    ctx.identity = None;
+
     Ok(())
 }
 
@@ -452,6 +457,18 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         _ => return Ok(()),
     };
 
+    // Collected before the patch is moved into the request below — doesn't depend on
+    // the server response, only on which ops we're about to send.
+    let overridden_feature_ids: std::collections::HashSet<i32> = patch
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            SegmentPatchOp::SetFeatureOverride { feature_id, .. }
+            | SegmentPatchOp::UnsetFeatureOverride { feature_id, .. } => Some(*feature_id),
+            _ => None,
+        })
+        .collect();
+
     let path = ctx
         .project_resource()
         .subpath(format!("/segments/{segment_id}"));
@@ -463,6 +480,15 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     updated.describe(None, &());
     ctx.segment_patch = None;
     ctx.segment = Some(updated);
+    drop(ctx);
+
+    // If this commit touched a feature's overrides, that feature's OVERRIDES section
+    // just changed even though the feature itself has no pending patch of its own —
+    // show it too, so the user doesn't have to run `FEATURE describe` separately.
+    for feature_id in overridden_feature_ids {
+        features::describe_by_id(feature_id, session)?;
+    }
+
     Ok(())
 }
 

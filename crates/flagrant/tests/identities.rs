@@ -641,7 +641,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
 }
 
 /// Regression test: when an identity is pinned to a non-control variant,
-/// `list_variant_assignments` must return the pinned variant's value and id —
+/// `list_variant_assignments` must return the pinned variant's value and id -
 /// not the control variant's values.
 ///
 /// The original `fetch_variants_for_identity` query used `GROUP BY f.feature_id`

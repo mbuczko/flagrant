@@ -325,20 +325,53 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, Feature>(path, patch)
         .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
 
-    let overrides_path = ctx
-        .env_resource()
-        .subpath(format!("/features/{}/overrides", updated.id));
+    // If a segment override for this same feature is about to be committed too (as part of
+    // the same top-level COMMIT), skip printing here - `segments::describe_by_id` will show
+    // the feature afterward with the up-to-date overrides, so we don't print it twice.
+    let defer_to_segment_commit = ctx.segment_patch.as_ref().is_some_and(|p| {
+        p.ops.iter().any(|op| {
+            matches!(op,
+                SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. }
+                | SegmentPatchOp::UnsetFeatureOverride { feature_id: fid, .. }
+                if *fid == feature_id
+            )
+        })
+    });
 
-    let overrides = ctx
-        .client
-        .get::<Vec<FeatureOverride>>(overrides_path)
-        .unwrap_or_default();
+    if !defer_to_segment_commit {
+        let overrides_path = ctx
+            .env_resource()
+            .subpath(format!("/features/{}/overrides", updated.id));
 
-    updated.describe(None, &OverridesContext::committed_only(overrides));
+        let overrides = ctx
+            .client
+            .get::<Vec<FeatureOverride>>(overrides_path)
+            .unwrap_or_default();
+
+        updated.describe(None, &OverridesContext::committed_only(overrides));
+    }
 
     ctx.feature_patch = None;
     ctx.feature = Some(updated);
 
+    Ok(())
+}
+
+/// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
+///
+/// Used after a segment commit that touched a feature's overrides: the feature itself
+/// has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
+/// section just changed and is worth showing. Refreshes the current feature context too,
+/// if it still refers to this feature.
+pub(crate) fn describe_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
+    let updated = fetch_feature(&feature_id.to_string(), session)?;
+    let overrides = fetch_overrides(updated.id, session);
+    updated.describe(None, &OverridesContext::committed_only(overrides));
+
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.as_ref().is_some_and(|f| f.id == feature_id) {
+        ctx.feature = Some(updated);
+    }
     Ok(())
 }
 
