@@ -372,8 +372,10 @@ fn build_segment_override_editor_content(
         } else {
             ""
         };
+        let (_, bare) = ev.value.decompose();
+        let first_line = bare.lines().next().unwrap_or(bare);
         content.push_str(&format!(
-            "# variant {idx} ({}%){}\n{weight}\n\n",
+            "# variant {idx}: {first_line} ({}%){}\n{weight}\n\n",
             ev.weight, staged
         ));
     }

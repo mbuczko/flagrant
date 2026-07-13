@@ -306,7 +306,7 @@ impl Tabular for Feature {
 
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),
@@ -326,7 +326,7 @@ impl Tabular for Feature {
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),
@@ -362,7 +362,7 @@ impl Tabular for Feature {
                 vec!["DESCRIPTION".to_string(), desc_str],
             ];
             if !overrides_str.is_empty() {
-                rows.push(vec!["OVERRIDES".to_string(), overrides_str]);
+                rows.push(vec!["OVERRIDDEN-BY".to_string(), overrides_str]);
             }
             rows
         };

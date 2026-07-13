@@ -199,7 +199,7 @@ impl Tabular for Segment {
 
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),
@@ -220,7 +220,7 @@ impl Tabular for Segment {
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),

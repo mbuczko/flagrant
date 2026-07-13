@@ -140,7 +140,7 @@ impl Tabular for IdentityWithTraits {
 
         if has_staged_traits || has_staged_variants {
             let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(100),
@@ -168,7 +168,7 @@ impl Tabular for IdentityWithTraits {
             table.render(rows);
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(14), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(120),
