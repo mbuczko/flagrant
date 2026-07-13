@@ -117,15 +117,17 @@ WHERE segment_id = $1 AND environment_id = $3
   AND variant_id IN (SELECT variant_id FROM variants WHERE feature_id = $2)
 
 -- :name fetch_segment_overrides_with_weights :<> :*
--- :doc Returns (segment_name, variant_id, weight) for all segments overriding feature+environment.
--- Includes the control variant's auto-balanced remainder row (listed first per segment) so
--- callers can display where the rest of the percentages go.
-SELECT s.name, vw.variant_id, vw.weight
+-- :doc Returns (segment_id, segment_name, variant_id, weight) for all segments overriding
+-- feature+environment. Includes the control variant's auto-balanced remainder row (listed
+-- first per segment) so callers can display where the rest of the percentages go, or (for
+-- the rule evaluator) run a full weighted distribution once a segment matches. Ordered by
+-- segment_id ascending (creation order) so callers grouping these rows don't need to re-sort.
+SELECT vw.segment_id, s.name, vw.variant_id, vw.weight
 FROM variant_weights vw
 JOIN segments s USING(segment_id)
 JOIN variants v ON v.variant_id = vw.variant_id
 WHERE v.feature_id = $1 AND vw.environment_id = $2 AND vw.segment_id IS NOT NULL
-ORDER BY s.name, (v.environment_id IS NULL), vw.variant_id
+ORDER BY vw.segment_id, (v.environment_id IS NULL), vw.variant_id
 
 -- :name fetch_segment_variant_weights :<> :*
 -- :doc Returns variant_id + weight overrides for a given segment+feature+environment.

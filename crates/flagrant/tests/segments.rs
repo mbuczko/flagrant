@@ -85,7 +85,7 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     let displayed = segment::list_overrides_for_feature(&mut conn, environment.id, feature.id)
         .await
         .unwrap();
-    let (_, weights) = displayed.iter().find(|(name, _)| name == "vip").unwrap();
+    let (_, _, weights) = displayed.iter().find(|(_, name, _)| name == "vip").unwrap();
     let mut by_id: Vec<(i32, u8)> = weights.iter().map(|w| (w.variant_id, w.weight)).collect();
     let mut expected = vec![(alt.id, 30), (control.id, 70)];
 

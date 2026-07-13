@@ -133,24 +133,31 @@ pub async fn get_variant_weights(
     variant::get_segment_weights(conn, segment_id, feature_id, environment_id).await
 }
 
-/// Returns per-segment weight overrides for the given feature + environment.
+/// Returns every segment overriding this feature+environment as `(segment_id, segment_name,
+/// weights)`, in segment_id ascending order (creation order — the query itself is ordered
+/// this way, so no re-sort is needed here). `weights` includes the control variant's
+/// auto-balanced remainder.
 ///
-/// Each entry is `(segment_name, weights)`. The query returns one row per
-/// (segment, variant); this function groups them by segment name.
+/// Backs both "FEATURE describe"/`get_overrides` (display, via `name`) and the rule
+/// evaluator's priority-ordered lookup (via `segment_id`, first match wins) - there's no
+/// need for overrides to be listed alphabetically, so segment-id order serves both.
 pub async fn list_overrides_for_feature(
     conn: &mut SqliteConnection,
     environment_id: i32,
     feature_id: i32,
-) -> anyhow::Result<Vec<(String, Vec<SegmentVariantWeight>)>> {
+) -> anyhow::Result<Vec<(i32, String, Vec<SegmentVariantWeight>)>> {
     let rows =
         variant::get_segment_overrides_with_weights(conn, feature_id, environment_id).await?;
 
-    let mut result: Vec<(String, Vec<SegmentVariantWeight>)> = Vec::new();
-    for (name, variant_id, weight) in rows {
-        if let Some(entry) = result.iter_mut().find(|(n, _)| n == &name) {
-            entry.1.push(SegmentVariantWeight { variant_id, weight });
-        } else {
-            result.push((name, vec![SegmentVariantWeight { variant_id, weight }]));
+    let mut result: Vec<(i32, String, Vec<SegmentVariantWeight>)> = Vec::new();
+    for (segment_id, name, variant_id, weight) in rows {
+        match result.iter_mut().find(|(id, _, _)| *id == segment_id) {
+            Some((_, _, weights)) => weights.push(SegmentVariantWeight { variant_id, weight }),
+            None => result.push((
+                segment_id,
+                name,
+                vec![SegmentVariantWeight { variant_id, weight }],
+            )),
         }
     }
     Ok(result)

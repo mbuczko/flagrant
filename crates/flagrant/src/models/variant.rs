@@ -370,13 +370,13 @@ pub async fn get_segment_weights(
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment variant weights", e).into())
 }
 
-/// Returns `(segment_name, variant_id, weight)` for all segments overriding a feature+environment
-/// (excludes the control variant's auto-balanced remainder row).
+/// Returns `(segment_id, segment_name, variant_id, weight)` for all segments overriding a
+/// feature+environment (includes the control variant's auto-balanced remainder row).
 pub async fn get_segment_overrides_with_weights(
     conn: &mut SqliteConnection,
     feature_id: i32,
     environment_id: i32,
-) -> anyhow::Result<Vec<(String, i32, u8)>> {
+) -> anyhow::Result<Vec<(i32, String, i32, u8)>> {
     SQLVariants::fetch_segment_overrides_with_weights(conn, params![feature_id, environment_id])
         .await
         .map_err(|e| {

@@ -282,7 +282,7 @@ pub async fn get_overrides(
     overrides.extend(
         seg_overrides
             .into_iter()
-            .map(|(name, weights)| FeatureOverride::Segment { name, weights }),
+            .map(|(_, name, weights)| FeatureOverride::Segment { name, weights }),
     );
     Ok(Json(overrides))
 }
