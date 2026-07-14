@@ -10,7 +10,11 @@ Flagrant also doubles as a real-world showcase for a few other libraries of mine
 
 ## Demo
 
-A recording of a sample CLI session is available at [`recording/session.mov`](recording/session.mov).
+A recording of a sample CLI session:
+
+https://github.com/user-attachments/assets/33ca446d-c03a-488c-8c76-369a20bc2237
+
+
 
 ## What's there today
 
