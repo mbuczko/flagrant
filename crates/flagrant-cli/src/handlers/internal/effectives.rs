@@ -1,4 +1,4 @@
-//! Helpers for computing the effective (committed + staged) variant and identity state.
+//! Helpers for computing the effective (committed + staged) segment/rule, variant and identity/trait state.
 
 use std::collections::{HashMap, HashSet};
 
@@ -341,8 +341,8 @@ pub(crate) fn effective_segment(
         } = op
         {
             max_n += 1;
-            let label = format!("group-{max_n}");
 
+            let label = format!("group-{max_n}");
             let rules = staged_rules_by_label
                 .get(label.as_str())
                 .map(|staged| {

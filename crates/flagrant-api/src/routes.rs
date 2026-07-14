@@ -39,6 +39,10 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         )
         // Variants
         .route(
+            "/envs/:environment/features/:feature_id/overrides",
+            get(features::get_overrides),
+        )
+        .route(
             "/envs/:environment/features/:feature_id/variants",
             get(variants::list),
         )
@@ -100,6 +104,14 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route(
             "/segments/:segment_id/groups/:group_id/rules/:rule_id",
             delete(segments::delete_rule),
+        )
+        .route(
+            "/segments/:segment_id/features/:feature_id/overrides/:environment_id",
+            get(segments::get_feature_override_weights),
+        )
+        .route(
+            "/segments/:segment_id/overrides/:environment_id",
+            get(segments::get_overridden_features),
         );
 
     Router::new()

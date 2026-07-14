@@ -3,18 +3,18 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler          | Description                                      |
-//! |----------------------|------------------|--------------------------------------------------|
-//! | `FEATURE list`       | [`list`]         | List features in the current environment.        |
-//! | `FEATURE add`        | [`add`]          | Create a new feature with a default value.       |
-//! | `FEATURE use`        | [`r#use`]        | Switch into a feature context.                   |
-//! | `FEATURE describe`   | [`describe`]     | Print details of a feature.                      |
-//! | `FEATURE delete`     | [`delete`]       | Delete a feature.                                |
-//! | `SET state`          | [`state`]        | Stage a feature state change (`on` / `off`).     |
-//! | `SET archived`       | [`set_archived`] | Stage a feature archivisation (`yes` / `no`).    |
-//! | `SET value`          | [`set_value`]    | Stage a default value change.                    |
-//! | `COMMIT`             | [`commit`]       | Send all staged changes to the API.              |
-//! | `DISCARD`            | [`discard`]      | Drop all staged changes for the current feature. |
+//! | Command              | Handler             | Description                                         |
+//! |----------------------|---------------------|-----------------------------------------------------|
+//! | `FEATURE list`       | [`list`]            | List features in the current environment.           |
+//! | `FEATURE add`        | [`add`]             | Create a new feature with a default value.          |
+//! | `FEATURE use`        | [`r#use`]           | Switch into a feature context.                      |
+//! | `FEATURE describe`   | [`describe`]        | Print details of a feature.                         |
+//! | `FEATURE delete`     | [`delete`]          | Delete a feature.                                   |
+//! | `SET status`         | [`set_status`]      | Stage a feature status (`on` / `off` / 'archived'). |
+//! | `SET value`          | [`set_value`]       | Stage a default value change.                       |
+//! | `SET description`    | [`set_description`] | Stage a feature description.                        |
+//! | `COMMIT`             | [`commit`]          | Send all staged changes to the API.                 |
+//! | `DISCARD`            | [`discard`]         | Drop all staged changes for the current feature.    |
 
 use std::{collections::BTreeSet, ops::Deref};
 
@@ -22,8 +22,8 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue,
-    payload::{NewFeaturePayload, VariantPatchOp},
+    Feature, FeatureOverride, FeatureValue,
+    payload::{NewFeaturePayload, SegmentPatchOp, VariantPatchOp},
 };
 
 use crate::{
@@ -32,8 +32,9 @@ use crate::{
         internal::{index, stage},
         open_in_editor,
     },
-    printer::tabular::Tabular,
+    printer::tabular::{Tabular, feature::OverridesContext},
 };
+
 use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
@@ -41,6 +42,15 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
     let res = ctx.env_resource();
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
+}
+
+fn fetch_overrides(feature_id: i32, session: &Session<Connection>) -> Vec<FeatureOverride> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.env_resource();
+
+    ctx.client
+        .get::<Vec<FeatureOverride>>(res.subpath(format!("/features/{feature_id}/overrides")))
+        .unwrap_or_default()
 }
 
 /// Create a new feature in the current environment.
@@ -53,6 +63,7 @@ fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Fe
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         stage::ensure_no_pending(session)?;
+
         let feature = {
             let ctx = session.context.read().unwrap();
             let res = ctx.env_resource();
@@ -72,9 +83,12 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             )?
         };
 
-        feature.describe(None, &());
+        let overrides = fetch_overrides(feature.id, session);
+        feature.describe(None, &OverridesContext::committed_only(overrides));
+
         let mut ctx = session.context.write().unwrap();
         ctx.feature = Some(feature);
+
         index::rebuild(&mut ctx);
         return Ok(());
     }
@@ -101,7 +115,9 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         let feature = fetch_feature(feature_name, session)
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
-        feature.describe(None, &());
+
+        let overrides = fetch_overrides(feature.id, session);
+        feature.describe(None, &OverridesContext::committed_only(overrides));
         {
             let mut ctx = session.context.write().unwrap();
             ctx.feature = Some(feature);
@@ -124,17 +140,72 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// describes the feature in the current context, overlaying any pending staged changes.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        fetch_feature(name, session)?.describe(None, &());
+        let feature = fetch_feature(name, session)?;
+        let overrides = fetch_overrides(feature.id, session);
+
+        feature.describe(None, &OverridesContext::committed_only(overrides));
     } else {
-        {
-            let ctx = session.context.read().unwrap();
-            match ctx.feature.as_ref() {
-                Some(f) => f.describe(ctx.feature_patch.as_ref().filter(|p| !p.is_empty()), &()),
-                None => bail!(
-                    "Not in a feature context. Set the context with: \"FEATURE use\" command."
-                ),
+        let ctx = session.context.read().unwrap();
+        let feature = ctx.feature.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Not in a feature context. Set the context with: \"FEATURE use\" command."
+            )
+        })?;
+        let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
+        let overrides = fetch_overrides(feature.id, session);
+
+        let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
+            let identity_value = ctx.identity.as_ref()?.value.clone();
+
+            // Any recent unpins (discarded overrides)?
+            if ipatch.unpins.contains(&feature.name) {
+                return Some(identity_value);
             }
-        }
+
+            // ...or newly added overrides?
+            if ipatch
+                .overrides
+                .iter()
+                .find(|o| o.feature_name == feature.name)
+                .is_some()
+            {
+                return Some(identity_value);
+            }
+            None
+        });
+
+        let segment_pending = ctx.segment_patch.as_ref().and_then(|spatch| {
+            let seg_name = ctx.segment.as_ref()?.name.clone();
+            for op in &spatch.ops {
+                match op {
+                    SegmentPatchOp::SetFeatureOverride {
+                        feature_id,
+                        variant_weights,
+                        ..
+                    } if *feature_id == feature.id => {
+                        return Some((seg_name, Some(variant_weights.clone())));
+                    }
+                    SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
+                        if *feature_id == feature.id =>
+                    {
+                        return Some((seg_name, None));
+                    }
+                    _ => {}
+                }
+            }
+            None
+        });
+
+        feature.describe(
+            patch,
+            &OverridesContext {
+                committed: overrides,
+                identity_pending,
+                segment_pending,
+            },
+        );
+        drop(ctx);
+
         index::rebuild(&mut session.context.write().unwrap());
     }
     Ok(())
@@ -173,8 +244,9 @@ pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
 pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
     let mut ctx = session.context.write().unwrap();
+
     if ctx.feature.is_none() {
-        bail!("Not in a feature context.");
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
     ctx.get_or_init_pending().description = Some(desc.clone());
     println!(
@@ -230,19 +302,15 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
         println!("Staged: value = {display}");
         return Ok(());
     }
-    bail!("Not within a feature context.")
+    bail!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
 }
 
 /// Commits all staged changes for the current feature to the API atomically.
 pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-
-    let feature_id = ctx
-        .feature
-        .as_ref()
-        .map(|f| f.id)
-        .ok_or_else(|| anyhow::anyhow!("Not within a feature context."))?;
-
+    let feature_id = ctx.feature.as_ref().map(|f| f.id).ok_or_else(|| {
+        anyhow::anyhow!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
+    })?;
     let patch = match &ctx.feature_patch {
         Some(p) if !p.is_empty() => p.clone(),
         _ => return Ok(()),
@@ -257,9 +325,53 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, Feature>(path, patch)
         .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
 
-    updated.describe(None, &());
+    // If a segment override for this same feature is about to be committed too (as part of
+    // the same top-level COMMIT), skip printing here - `segments::describe_by_id` will show
+    // the feature afterward with the up-to-date overrides, so we don't print it twice.
+    let defer_to_segment_commit = ctx.segment_patch.as_ref().is_some_and(|p| {
+        p.ops.iter().any(|op| {
+            matches!(op,
+                SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. }
+                | SegmentPatchOp::UnsetFeatureOverride { feature_id: fid, .. }
+                if *fid == feature_id
+            )
+        })
+    });
+
+    if !defer_to_segment_commit {
+        let overrides_path = ctx
+            .env_resource()
+            .subpath(format!("/features/{}/overrides", updated.id));
+
+        let overrides = ctx
+            .client
+            .get::<Vec<FeatureOverride>>(overrides_path)
+            .unwrap_or_default();
+
+        updated.describe(None, &OverridesContext::committed_only(overrides));
+    }
+
     ctx.feature_patch = None;
     ctx.feature = Some(updated);
+
+    Ok(())
+}
+
+/// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
+///
+/// Used after a segment commit that touched a feature's overrides: the feature itself
+/// has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
+/// section just changed and is worth showing. Refreshes the current feature context too,
+/// if it still refers to this feature.
+pub(crate) fn describe_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
+    let updated = fetch_feature(&feature_id.to_string(), session)?;
+    let overrides = fetch_overrides(updated.id, session);
+    updated.describe(None, &OverridesContext::committed_only(overrides));
+
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.as_ref().is_some_and(|f| f.id == feature_id) {
+        ctx.feature = Some(updated);
+    }
     Ok(())
 }
 
@@ -327,6 +439,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
             if in_context {
                 let mut ctx = session.context.write().unwrap();
+
                 ctx.feature = None;
                 ctx.feature_patch = None;
                 ctx.variant_index = vec![];

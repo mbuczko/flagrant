@@ -1,3 +1,11 @@
+//! REPL command handlers for segment rule management.
+//!
+//! | Command                              | Handler      | Description                                        |
+//! |--------------------------------------|--------------|----------------------------------------------------|
+//! | `RULE add <label> <driver> <cmp> <v>`| [`add`]      | Stage a new rule on a group in the current segment.|
+//! | `RULE delete <label> <index>`        | [`delete`]   | Stage a rule deletion by 1-based index.            |
+//! | `RULE describe <label> <index>`      | [`describe`] | Print details of a single rule within a group.     |
+
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use flagrant_types::{
-    GroupConnector, Project, Segment, SegmentGroup, SegmentRule,
-    payload::{SegmentPatch, SegmentPatchOp},
+    GroupConnector, Project, Segment, SegmentFeatureOverride, SegmentGroup, SegmentRule,
+    payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
-use super::rule;
+use super::{environment, rule, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -121,6 +121,71 @@ pub async fn update(
         .map_err(|e| FlagrantError::QueryFailed("Could not update segment", e))?;
 
     Ok(())
+}
+
+/// Returns the stored variant weight overrides for a given segment + feature + environment.
+pub async fn get_variant_weights(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    feature_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<Vec<(i32, u8)>> {
+    variant::get_segment_weights(conn, segment_id, feature_id, environment_id).await
+}
+
+/// Returns every segment overriding this feature+environment as `(segment_id, segment_name,
+/// weights)`, in segment_id ascending order (creation order — the query itself is ordered
+/// this way, so no re-sort is needed here). `weights` includes the control variant's
+/// auto-balanced remainder.
+///
+/// Backs both "FEATURE describe"/`get_overrides` (display, via `name`) and the rule
+/// evaluator's priority-ordered lookup (via `segment_id`, first match wins) - there's no
+/// need for overrides to be listed alphabetically, so segment-id order serves both.
+pub async fn list_overrides_for_feature(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<Vec<(i32, String, Vec<SegmentVariantWeight>)>> {
+    let rows =
+        variant::get_segment_overrides_with_weights(conn, feature_id, environment_id).await?;
+
+    let mut result: Vec<(i32, String, Vec<SegmentVariantWeight>)> = Vec::new();
+    for (segment_id, name, variant_id, weight) in rows {
+        match result.iter_mut().find(|(id, _, _)| *id == segment_id) {
+            Some((_, _, weights)) => weights.push(SegmentVariantWeight { variant_id, weight }),
+            None => result.push((
+                segment_id,
+                name,
+                vec![SegmentVariantWeight { variant_id, weight }],
+            )),
+        }
+    }
+    Ok(result)
+}
+
+/// Returns every feature this segment overrides within the given environment, each with
+/// its full weight breakdown (including the control variant's auto-balanced remainder).
+pub async fn list_overridden_features(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    segment_id: i32,
+) -> anyhow::Result<Vec<SegmentFeatureOverride>> {
+    let rows =
+        variant::get_features_overridden_by_segment(conn, segment_id, environment_id).await?;
+
+    let mut result: Vec<SegmentFeatureOverride> = Vec::new();
+    for (feature_id, feature_name, ov) in rows {
+        if let Some(entry) = result.iter_mut().find(|f| f.feature_id == feature_id) {
+            entry.weights.push(ov);
+        } else {
+            result.push(SegmentFeatureOverride {
+                feature_id,
+                feature_name,
+                weights: vec![ov],
+            });
+        }
+    }
+    Ok(result)
 }
 
 /// Deletes a segment and all its associated groups and rules.
@@ -285,6 +350,52 @@ pub async fn patch(
             SegmentPatchOp::DeleteRule { rule_id } => {
                 rule::delete(conn, rule_id).await?;
                 rule::remove_from_groups(&mut segment.groups, rule_id);
+            }
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id,
+                environment_id,
+                variant_weights,
+            } => {
+                let environment = environment::get_by_id(&mut *conn, environment_id).await?;
+
+                variant::delete_segment_weights_for_feature(
+                    &mut *conn,
+                    segment.id,
+                    feature_id,
+                    environment_id,
+                )
+                .await?;
+                for vw in &variant_weights {
+                    variant::set_segment_weight(
+                        &mut *conn,
+                        &environment,
+                        segment.id,
+                        vw.variant_id,
+                        vw.weight,
+                    )
+                    .await?;
+                }
+                // Balance the control variant's remainder within this segment, mirroring
+                // how organic weights always sum to 100.
+                variant::balance_segment_control_weight(
+                    &mut *conn,
+                    &environment,
+                    segment.id,
+                    feature_id,
+                )
+                .await?;
+            }
+            SegmentPatchOp::UnsetFeatureOverride {
+                feature_id,
+                environment_id,
+            } => {
+                variant::delete_segment_weights_for_feature(
+                    &mut *conn,
+                    segment.id,
+                    feature_id,
+                    environment_id,
+                )
+                .await?;
             }
         }
     }

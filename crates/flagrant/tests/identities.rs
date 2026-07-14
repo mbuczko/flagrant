@@ -146,7 +146,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         8
     );
 
-    let variant = variant::get_by_id(&mut conn, &environment, variant.id)
+    let variant = variant::get_by_id(&mut conn, &environment, variant.id, None)
         .await
         .unwrap();
 
@@ -167,7 +167,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         1
     );
 
-    let variant = variant::get_by_id(&mut conn, &environment, variant.id)
+    let variant = variant::get_by_id(&mut conn, &environment, variant.id, None)
         .await
         .unwrap();
 
@@ -227,7 +227,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         8
     );
 
-    let variant = variant::get_by_id(&mut conn, &environment, variant.id)
+    let variant = variant::get_by_id(&mut conn, &environment, variant.id, None)
         .await
         .unwrap();
 
@@ -246,7 +246,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         1
     );
 
-    let variant = variant::get_by_id(&mut conn, &environment, variant.id)
+    let variant = variant::get_by_id(&mut conn, &environment, variant.id, None)
         .await
         .unwrap();
 
@@ -491,7 +491,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         .unwrap();
 
     // Drop alt variant weight to 0 — this migrates all non-pinned identities away from it
-    let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id)
+    let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id, None)
         .await
         .unwrap();
     variant::update_one(
@@ -641,7 +641,7 @@ async fn deleting_trait_removes_it_from_identities(mut conn: PoolConnection<Sqli
 }
 
 /// Regression test: when an identity is pinned to a non-control variant,
-/// `list_variant_assignments` must return the pinned variant's value and id —
+/// `list_variant_assignments` must return the pinned variant's value and id -
 /// not the control variant's values.
 ///
 /// The original `fetch_variants_for_identity` query used `GROUP BY f.feature_id`

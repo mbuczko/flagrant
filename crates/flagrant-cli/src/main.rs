@@ -96,6 +96,10 @@ fn has_feature_or_identity_ctx(session: &Session<Connection>) -> bool {
 fn has_segment_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().segment.is_some()
 }
+fn has_feature_and_segment_ctx(session: &Session<Connection>) -> bool {
+    let ctx = session.context.read().unwrap();
+    ctx.feature.is_some() && ctx.segment.is_some()
+}
 fn has_any_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     ctx.feature.is_some() || ctx.identity.is_some() || ctx.segment.is_some()
@@ -251,7 +255,14 @@ fn main() -> anyhow::Result<()> {
             handlers::segments::set_description,
             has_segment_ctx,
         ),
-        Command::Set.args_in_context("name · description", has_segment_ctx),
+        // Segment override (only when both feature and segment are in context)
+        Command::Set.op_in_context(
+            "override",
+            "[variant-index weight]",
+            handlers::segments::set_override,
+            has_feature_and_segment_ctx,
+        ),
+        Command::Set.args_in_context("name · description · override", has_segment_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",
@@ -266,6 +277,13 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Unset.args_in_context("trait · override", has_identity_ctx),
+        // Segment unset override (only when both feature and segment are in context)
+        Command::Unset.op_in_context(
+            "override",
+            "",
+            handlers::segments::unset_override,
+            has_feature_and_segment_ctx,
+        ),
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
         Command::Segment.op("list", "", handlers::segments::list),

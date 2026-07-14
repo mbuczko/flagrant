@@ -88,7 +88,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             )?
         };
         identity.describe(None, &vec![]);
-        session.context.write().unwrap().identity = Some(identity);
+
+        let mut ctx = session.context.write().unwrap();
+        ctx.identity = Some(identity);
+        ctx.segment = None;
+
         return Ok(());
     }
     bail!("No identity provided.")
@@ -218,14 +222,14 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     // Gather everything under a read lock, including opening the editor if needed.
     let (feature_name, identity_value, raw) = {
         let ctx = session.context.read().unwrap();
-        let feature = ctx
-            .feature
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not in a feature context."))?;
-        let identity = ctx
-            .identity
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not in an identity context."))?;
+        let feature = ctx.feature.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+        })?;
+        let identity = ctx.identity.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Not in an identity context. Use \"IDENTITY use ...\" to set a context."
+            )
+        })?;
 
         let raw = if let Some(val) = args.get(1) {
             val.to_string()

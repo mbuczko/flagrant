@@ -1,7 +1,8 @@
 use chrono::{NaiveDateTime, Utc};
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
-    Environment, FeatureValue, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits,
+    Environment, FeatureOverride, FeatureValue, Identity, IdentityTrait, IdentityVariant,
+    IdentityWithTraits,
 };
 
 use super::feature;
@@ -221,7 +222,7 @@ pub async fn patch(
             .parse()
             .unwrap_or_else(|_| FeatureValue::build(&ovr.variant_value));
 
-        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv)
+        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv, None)
             .await?
             .ok_or(FlagrantError::BadRequest(
                 "No variant with given value found for this feature",
@@ -313,9 +314,13 @@ pub async fn get_identity_variants(
         let attach_to_variant = if var.pinned_at.is_some() {
             None
         } else if let Some(id) = var.migrated_id {
-            variant::get_by_id(&mut tx, environment, id).await.ok()
+            variant::get_by_id(&mut tx, environment, id, None)
+                .await
+                .ok()
         } else if var.identity_id.is_none() {
-            Some(distributor::distribute(&mut tx, environment, var.feature_id).await?)
+            // TODO: resolve the identity's matching segment via the rule evaluator once
+            // it exists, and pass its id here instead of None.
+            Some(distributor::distribute(&mut tx, environment, var.feature_id, None).await?)
         } else {
             None
         };
@@ -385,6 +390,24 @@ pub async fn override_variant(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
     Ok(())
+}
+
+/// Returns the overrides (pinned identities) for a given feature as typed `FeatureOverride` values.
+pub async fn list_overrides(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<Vec<FeatureOverride>> {
+    let rows = SQLIdentities::fetch_overrides_for_feature::<_, (String,)>(
+        conn,
+        params![environment_id, feature_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch overrides for feature", e))?;
+    Ok(rows
+        .into_iter()
+        .map(|(s,)| FeatureOverride::Identity(s))
+        .collect())
 }
 
 pub async fn detach_identities(

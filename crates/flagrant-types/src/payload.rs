@@ -154,6 +154,12 @@ pub struct NewRulePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SegmentVariantWeight {
+    pub variant_id: i32,
+    pub weight: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum SegmentPatchOp {
     SetName(String),
     SetDescription(Option<String>),
@@ -172,6 +178,17 @@ pub enum SegmentPatchOp {
     },
     DeleteRule {
         rule_id: i32,
+    },
+    /// Stores per-environment weight overrides for a feature's variants within this segment.
+    SetFeatureOverride {
+        feature_id: i32,
+        environment_id: i32,
+        variant_weights: Vec<SegmentVariantWeight>,
+    },
+    /// Removes all weight overrides for a feature within this segment and environment.
+    UnsetFeatureOverride {
+        feature_id: i32,
+        environment_id: i32,
     },
 }
 

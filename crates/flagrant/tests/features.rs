@@ -513,10 +513,10 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
     .await
     .unwrap();
 
-    let variant_env1 = variant::get_by_id(&mut conn, &environment1, variant.id)
+    let variant_env1 = variant::get_by_id(&mut conn, &environment1, variant.id, None)
         .await
         .unwrap();
-    let variant_env2 = variant::get_by_id(&mut conn, &environment2, variant.id)
+    let variant_env2 = variant::get_by_id(&mut conn, &environment2, variant.id, None)
         .await
         .unwrap();
 
@@ -968,6 +968,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment1,
         feature.id,
         &FeatureValue::build("control-env1"),
+        None,
     )
     .await
     .unwrap();
@@ -979,6 +980,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment2,
         feature.id,
         &FeatureValue::build("control-env2"),
+        None,
     )
     .await
     .unwrap();
@@ -990,6 +992,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment1,
         feature.id,
         &FeatureValue::build("control-env2"),
+        None,
     )
     .await
     .unwrap();
@@ -1001,6 +1004,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment2,
         feature.id,
         &FeatureValue::build("control-env1"),
+        None,
     )
     .await
     .unwrap();
@@ -1012,6 +1016,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment1,
         feature.id,
         &FeatureValue::build("shared"),
+        None,
     )
     .await
     .unwrap();
@@ -1020,6 +1025,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &environment2,
         feature.id,
         &FeatureValue::build("shared"),
+        None,
     )
     .await
     .unwrap();

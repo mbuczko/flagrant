@@ -3,7 +3,9 @@ use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::errors::FlagrantError;
-use flagrant_types::{Environment, Feature, FeatureValue, IdentityVariant, Variant};
+use flagrant_types::{
+    Environment, Feature, FeatureValue, IdentityVariant, OverriddenVariant, Variant,
+};
 
 use super::identity;
 
@@ -154,15 +156,18 @@ pub async fn update_one(
 /// Returns variant of given id.
 ///
 /// Variant is returned along with its value and weight. Control variant weight is auto-calculated
-/// based on sum of other feature variants within given environment.
+/// based on sum of other feature variants within given environment. `segment_id` scopes which
+/// weight/accumulator row is attached (`None` = organic default weights).
 pub async fn get_by_id(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant_id: i32,
+    segment_id: Option<i32>,
 ) -> anyhow::Result<Variant> {
-    let variant = SQLVariants::fetch_variant_by_id(conn, params![environment.id, variant_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+    let variant =
+        SQLVariants::fetch_variant_by_id(conn, params![environment.id, variant_id, segment_id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variant)
 }
@@ -170,17 +175,21 @@ pub async fn get_by_id(
 /// Returns the variant for a feature matching the given value, or `None` if not found.
 ///
 /// Matches both non-control variants (environment_id IS NULL) and the environment's
-/// control variant.
+/// control variant. `segment_id` scopes which weight/accumulator row is attached
+/// (`None` = organic default weights).
 pub async fn get_by_value(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
     value: &FeatureValue,
+    segment_id: Option<i32>,
 ) -> anyhow::Result<Option<Variant>> {
-    let variant =
-        SQLVariants::fetch_variant_by_value(conn, params![environment.id, feature_id, value])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+    let variant = SQLVariants::fetch_variant_by_value(
+        conn,
+        params![environment.id, feature_id, value, segment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variant)
 }
@@ -191,25 +200,33 @@ pub async fn get_by_identity<T: AsRef<str>>(
     environment: &Environment,
     identity: T,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
-    let variants =
-        SQLVariants::fetch_variants_for_identity(conn, params![environment.id, identity.as_ref()])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
+    let variants = SQLVariants::fetch_variants_for_identity(
+        conn,
+        params![environment.project_id, environment.id, identity.as_ref()],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could fetch a variant", e))?;
 
     Ok(variants)
 }
 
 /// Returns all variants for a feature in the given environment, including values and weights.
+/// `segment_id` scopes which weight/accumulator row is attached to each variant (`None` =
+/// organic default weights; `Some(id)` = that segment's override weights, sparse — variants
+/// without an explicit override resolve to weight 0 / accumulator 0).
 /// Errors if the feature has no default value set in this environment (which should never happen).
 pub async fn get_for_feature(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
+    segment_id: Option<i32>,
 ) -> anyhow::Result<Vec<Variant>> {
-    let variants =
-        SQLVariants::fetch_variants_for_feature(conn, params![environment.id, feature_id])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
+    let variants = SQLVariants::fetch_variants_for_feature(
+        conn,
+        params![environment.id, feature_id, segment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
 
     // Ensure the feature has a default value set in the given environment.
     // Without a default value, any additional variants are pointless, even if they
@@ -282,12 +299,148 @@ pub(crate) async fn update_accumulator(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
+    segment_id: Option<i32>,
     accumulator: i32,
 ) -> anyhow::Result<()> {
-    SQLVariants::update_variant_accumulator(conn, params![environment.id, variant.id, accumulator])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not update variant accumulator", e))?;
+    SQLVariants::update_variant_accumulator(
+        conn,
+        params![environment.id, variant.id, segment_id, accumulator],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not update variant accumulator", e))?;
 
+    Ok(())
+}
+
+/// Sets a segment-scoped weight for an existing non-control variant, similarly to how
+/// organic weights are set via [`set_weight`].
+pub(crate) async fn set_segment_weight(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    segment_id: i32,
+    variant_id: i32,
+    weight: u8,
+) -> anyhow::Result<()> {
+    SQLVariants::upsert_segment_variant_weight(
+        conn,
+        params![environment.id, variant_id, segment_id, weight],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not set segment variant weight", e))?;
+    Ok(())
+}
+
+/// Recalculates and persists the control variant's remainder weight within a segment,
+/// mirroring [`recalculate_control_weight`] for the organic case. Should be called after
+/// all of a segment's explicit override weights have been written via [`set_segment_weight`].
+///
+/// Unlike the organic path, this does not migrate already-assigned identities — segment-scoped
+/// identity assignment tracking doesn't exist yet.
+pub(crate) async fn balance_segment_control_weight(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    segment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<(i32, u8)> {
+    Ok(
+        SQLVariants::upsert_segment_control_variant_weight::<_, (i32, u8)>(
+            conn,
+            params![environment.id, feature_id, segment_id],
+        )
+        .await
+        .map_err(|e| {
+            FlagrantError::QueryFailed("Could not recalculate segment control variant weight", e)
+        })?,
+    )
+}
+
+/// Returns the stored explicit weight overrides for a given segment+feature+environment
+/// (excludes the control variant's auto-balanced remainder row).
+pub async fn get_segment_weights(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    feature_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<Vec<(i32, u8)>> {
+    SQLVariants::fetch_segment_variant_weights(
+        conn,
+        params![segment_id, feature_id, environment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment variant weights", e).into())
+}
+
+/// Returns `(segment_id, segment_name, variant_id, weight)` for all segments overriding a
+/// feature+environment (includes the control variant's auto-balanced remainder row).
+pub async fn get_segment_overrides_with_weights(
+    conn: &mut SqliteConnection,
+    feature_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<Vec<(i32, String, i32, u8)>> {
+    SQLVariants::fetch_segment_overrides_with_weights(conn, params![feature_id, environment_id])
+        .await
+        .map_err(|e| {
+            FlagrantError::QueryFailed("Could not fetch segment overrides for feature", e).into()
+        })
+}
+
+#[derive(sqlx::FromRow)]
+struct OverriddenFeatureRow {
+    feature_id: i32,
+    feature_name: String,
+    variant_id: i32,
+    is_control: bool,
+    value: FeatureValue,
+    weight: u8,
+}
+
+/// Returns every variant a segment overrides (including each feature's control-variant
+/// remainder), across all features, within a given environment - flat rows of
+/// `(feature_id, feature_name, weight-info)`. Group by `feature_id` to build a per-feature
+/// view (see `segment::list_overridden_features`).
+pub async fn get_features_overridden_by_segment(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<Vec<(i32, String, OverriddenVariant)>> {
+    let rows = SQLVariants::fetch_features_overridden_by_segment::<_, OverriddenFeatureRow>(
+        conn,
+        params![segment_id, environment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch features overridden by segment", e))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.feature_id,
+                r.feature_name,
+                OverriddenVariant {
+                    variant_id: r.variant_id,
+                    value: r.value,
+                    is_control: r.is_control,
+                    weight: r.weight,
+                },
+            )
+        })
+        .collect())
+}
+
+/// Removes all segment-scoped weight overrides (including the control variant's remainder
+/// row) for a segment+feature+environment.
+pub(crate) async fn delete_segment_weights_for_feature(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    feature_id: i32,
+    environment_id: i32,
+) -> anyhow::Result<()> {
+    SQLVariants::delete_segment_variant_weights_for_feature(
+        conn,
+        params![segment_id, feature_id, environment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not clear segment overrides", e))?;
     Ok(())
 }
 

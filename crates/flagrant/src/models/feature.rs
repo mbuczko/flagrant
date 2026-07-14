@@ -134,7 +134,7 @@ pub async fn get_by_id(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_for_feature(&mut tx, environment, feature.id)
+    let variants = variant::get_for_feature(&mut tx, environment, feature.id, None)
         .await
         .unwrap_or_default();
 
@@ -158,7 +158,7 @@ pub async fn get_by_name(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch a feature", e))?;
 
-    let variants = variant::get_for_feature(conn, environment, feature.id)
+    let variants = variant::get_for_feature(conn, environment, feature.id, None)
         .await
         .unwrap_or_default();
 
@@ -247,10 +247,14 @@ pub async fn bump_up_accumulators(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
+    segment_id: Option<i32>,
 ) -> anyhow::Result<()> {
-    SQLFeatures::update_feature_variants_accumulators(conn, params![environment.id, feature_id])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
+    SQLFeatures::update_feature_variants_accumulators(
+        conn,
+        params![environment.id, feature_id, segment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not bump up variants accumulators", e))?;
 
     Ok(())
 }
@@ -300,7 +304,7 @@ pub async fn patch(
     // Apply deletes
     for op in deletes {
         if let VariantPatchOp::Delete { id } = op {
-            let var = variant::get_by_id(&mut tx, environment, id).await?;
+            let var = variant::get_by_id(&mut tx, environment, id, None).await?;
 
             // Control variant cannot be deleted via PATCH operation - the only way
             // to delete it is a DELETE request to remove the entire feature.
@@ -324,7 +328,7 @@ pub async fn patch(
         }
     }
     for (id, (new_value, new_weight)) in update_map {
-        let var = variant::get_by_id(&mut tx, environment, id).await?;
+        let var = variant::get_by_id(&mut tx, environment, id, None).await?;
         let value = new_value.unwrap_or_else(|| var.value.clone());
         let weight = new_weight.unwrap_or(var.weight);
 
