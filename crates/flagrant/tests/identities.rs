@@ -596,6 +596,145 @@ async fn clear_matching_deletes_only_pattern_matches_within_environment(
     );
 }
 
+/// `clear_distribution_for_feature` should remove variant assignments only for the given
+/// feature and only for identities matching the LIKE pattern - leaving non-matching
+/// identities' assignments, other features' assignments, and the identities themselves intact.
+#[sqlx::test]
+async fn clear_distribution_for_feature_removes_only_matching_assignments(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    let feature_a = feature::create(
+        &mut conn,
+        &environment,
+        "feature_a".to_owned(),
+        None,
+        FeatureValue::build("control"),
+        true,
+    )
+    .await
+    .unwrap();
+    let variant_a = variant::create(
+        &mut conn,
+        &environment,
+        &feature_a,
+        FeatureValue::build("alt"),
+        50,
+    )
+    .await
+    .unwrap();
+
+    let feature_b = feature::create(
+        &mut conn,
+        &environment,
+        "feature_b".to_owned(),
+        None,
+        FeatureValue::build("control"),
+        true,
+    )
+    .await
+    .unwrap();
+    let variant_b = variant::create(
+        &mut conn,
+        &environment,
+        &feature_b,
+        FeatureValue::build("alt"),
+        50,
+    )
+    .await
+    .unwrap();
+
+    let tester_1 = identity::get_or_create_by_value(&mut conn, &environment, "tester-1".to_owned())
+        .await
+        .unwrap();
+    let tester_2 = identity::get_or_create_by_value(&mut conn, &environment, "tester-2".to_owned())
+        .await
+        .unwrap();
+    let someone_else =
+        identity::get_or_create_by_value(&mut conn, &environment, "someone-else".to_owned())
+            .await
+            .unwrap();
+
+    // Pin tester-1, tester-2 and someone-else to variant_a for feature_a, plus tester-1 to
+    // variant_b for feature_b.
+    identity::override_variant(
+        &mut conn,
+        &environment,
+        &tester_1,
+        feature_a.id,
+        variant_a.id,
+    )
+    .await
+    .unwrap();
+    identity::override_variant(
+        &mut conn,
+        &environment,
+        &tester_2,
+        feature_a.id,
+        variant_a.id,
+    )
+    .await
+    .unwrap();
+    identity::override_variant(
+        &mut conn,
+        &environment,
+        &someone_else,
+        feature_a.id,
+        variant_a.id,
+    )
+    .await
+    .unwrap();
+    identity::override_variant(
+        &mut conn,
+        &environment,
+        &tester_1,
+        feature_b.id,
+        variant_b.id,
+    )
+    .await
+    .unwrap();
+
+    identity::clear_distribution_for_feature(&mut conn, &environment, feature_a.id, "tester-%")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        identity::get_variant_for_identity(&mut conn, &environment, feature_a.id, &tester_1)
+            .await
+            .unwrap(),
+        None,
+        "matching identity's assignment for feature_a should be cleared"
+    );
+    assert_eq!(
+        identity::get_variant_for_identity(&mut conn, &environment, feature_a.id, &tester_2)
+            .await
+            .unwrap(),
+        None,
+        "matching identity's assignment for feature_a should be cleared"
+    );
+    assert_eq!(
+        identity::get_variant_for_identity(&mut conn, &environment, feature_a.id, &someone_else)
+            .await
+            .unwrap(),
+        Some(variant_a.id),
+        "non-matching identity should keep its assignment"
+    );
+    assert_eq!(
+        identity::get_variant_for_identity(&mut conn, &environment, feature_b.id, &tester_1)
+            .await
+            .unwrap(),
+        Some(variant_b.id),
+        "matching identity's assignment for a different feature should survive"
+    );
+    assert!(
+        identity::get_by_value(&mut conn, &environment, "tester-1".to_owned())
+            .await
+            .is_ok(),
+        "identity itself should not be deleted"
+    );
+}
+
 #[sqlx::test]
 async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) {
     let (_project_a, env_a) = create_context(&mut conn).await;

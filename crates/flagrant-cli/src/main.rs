@@ -263,6 +263,14 @@ fn main() -> anyhow::Result<()> {
             has_feature_and_segment_ctx,
         ),
         Command::Set.args_in_context("name · description · override", has_segment_ctx),
+        // Feature unsetters (only in feature context)
+        Command::Unset.op_in_context(
+            "distribution",
+            "pattern",
+            handlers::features::unset_distribution,
+            has_feature_ctx,
+        ),
+        Command::Unset.args_in_context("distribution", has_feature_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",

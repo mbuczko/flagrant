@@ -3,18 +3,19 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler             | Description                                         |
-//! |----------------------|---------------------|-----------------------------------------------------|
-//! | `FEATURE list`       | [`list`]            | List features in the current environment.           |
-//! | `FEATURE add`        | [`add`]             | Create a new feature with a default value.          |
-//! | `FEATURE use`        | [`r#use`]           | Switch into a feature context.                      |
-//! | `FEATURE describe`   | [`describe`]        | Print details of a feature.                         |
-//! | `FEATURE delete`     | [`delete`]          | Delete a feature.                                   |
-//! | `SET status`         | [`set_status`]      | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `SET value`          | [`set_value`]       | Stage a default value change.                       |
-//! | `SET description`    | [`set_description`] | Stage a feature description.                        |
-//! | `COMMIT`             | [`commit`]          | Send all staged changes to the API.                 |
-//! | `DISCARD`            | [`discard`]         | Drop all staged changes for the current feature.    |
+//! | Command              | Handler                | Description                                         |
+//! |----------------------|------------------------|-----------------------------------------------------|
+//! | `FEATURE list`       | [`list`]               | List features in the current environment.           |
+//! | `FEATURE add`        | [`add`]                | Create a new feature with a default value.          |
+//! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                      |
+//! | `FEATURE describe`   | [`describe`]           | Print details of a feature.                         |
+//! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
+//! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
+//! | `SET value`          | [`set_value`]          | Stage a default value change.                       |
+//! | `SET description`    | [`set_description`]    | Stage a feature description.                        |
+//! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
+//! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
+//! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.    |
 
 use std::{collections::BTreeSet, ops::Deref};
 
@@ -458,6 +459,37 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("No such a feature.")
     }
     bail!("No feature name or value provided.")
+}
+
+/// Clears the current feature's variant assignments for every identity matching `pattern`,
+/// freeing them to be redistributed on the next evaluation.
+///
+/// Expected args: `<pattern>`
+///
+/// `pattern` uses `*` as a wildcard (e.g. "user-*", or "*" to clear every identity's
+/// assignment for this feature). Unlike `IDENTITY delete <pattern>`, this only removes the
+/// variant assignment - the identities themselves (and their traits) are left untouched.
+pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if let Some(pattern) = args.get(1) {
+        let ctx = session.context.read().unwrap();
+        let feature = ctx.feature.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Not within a feature context. Use \"FEATURE use ...\" to set a context."
+            )
+        })?;
+
+        ctx.client.delete(ctx.env_resource().subpath(format!(
+            "/features/{}/distribution?pattern={pattern}",
+            feature.id
+        )))?;
+
+        println!(
+            "Cleared variant assignments matching '{pattern}' for feature '{}'.",
+            feature.name
+        );
+        return Ok(());
+    }
+    bail!("No pattern provided.")
 }
 
 /// Extracts and concatenates all comma-separated values for a specific argument name.

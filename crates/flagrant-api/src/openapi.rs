@@ -15,6 +15,7 @@ use utoipa::OpenApi;
         crate::handlers::features::update,
         crate::handlers::features::delete,
         crate::handlers::features::patch,
+        crate::handlers::features::clear_distribution,
         crate::handlers::variants::list,
         crate::handlers::variants::fetch,
         crate::handlers::variants::create,

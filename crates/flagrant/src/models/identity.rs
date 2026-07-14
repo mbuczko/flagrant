@@ -297,6 +297,26 @@ pub async fn clear_matching(
     Ok(())
 }
 
+/// Clears variant assignments for `feature_id`, for every identity in `environment` whose
+/// value matches `pattern` (SQL LIKE pattern - `*` becomes `%`), freeing them to be
+/// redistributed on the next evaluation. Unlike [`clear_matching`], the identities themselves
+/// (and their traits) are left untouched - only their assignment to this feature is removed.
+pub async fn clear_distribution_for_feature(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    pattern: &str,
+) -> anyhow::Result<()> {
+    SQLIdentities::delete_identity_variants_for_feature_pattern(
+        conn,
+        params![feature_id, environment.id, pattern],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not clear variant assignments", e))?;
+
+    Ok(())
+}
+
 /// Returns the variant_id currently assigned to the given identity for the given
 /// feature+environment, or None if no assignment exists.
 pub async fn get_variant_for_identity(
