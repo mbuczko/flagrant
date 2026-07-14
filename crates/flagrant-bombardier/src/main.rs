@@ -83,12 +83,10 @@ pub fn main() -> anyhow::Result<()> {
     IDX.store(args.named_idents, Ordering::SeqCst);
 
     println!(
-        "Seeded {} named identities for manual testing:",
-        named.len()
+        "Seeded {} named identities for manual testing: {}",
+        named.len(),
+        named.join(", ")
     );
-    for name in &named {
-        println!("  {name}");
-    }
     println!();
 
     let buckets = Arc::new(RwLock::new(HashMap::new()));
