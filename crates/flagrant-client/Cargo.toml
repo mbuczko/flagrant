@@ -11,7 +11,7 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.6"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.7"}
 
 # common dependencies
 serde = {workspace = true}
