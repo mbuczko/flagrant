@@ -225,6 +225,12 @@ fn main() -> anyhow::Result<()> {
             handlers::features::set_description,
             has_feature_ctx,
         ),
+        Command::Set.op_in_context(
+            "tags",
+            "tag1[, tag2, ...]",
+            handlers::features::set_tags,
+            has_feature_ctx,
+        ),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "trait",
@@ -239,7 +245,7 @@ fn main() -> anyhow::Result<()> {
             has_identity_ctx,
         ),
         Command::Set.args_in_context(
-            "status · value · description · override · trait",
+            "status · value · description · tags · override · trait",
             has_feature_or_identity_ctx,
         ),
         // Segment setters (only in segment context)
@@ -270,7 +276,13 @@ fn main() -> anyhow::Result<()> {
             handlers::features::unset_distribution,
             has_feature_ctx,
         ),
-        Command::Unset.args_in_context("distribution", has_feature_ctx),
+        Command::Unset.op_in_context(
+            "tags",
+            "tag1[, tag2, ...]",
+            handlers::features::unset_tags,
+            has_feature_ctx,
+        ),
+        Command::Unset.args_in_context("distribution · tags", has_feature_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",

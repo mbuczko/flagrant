@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use flagrant_types::{
     Environment, Feature, FeatureValue, Project, TagList, Variant,
-    payload::{FeaturePatch, VariantPatchOp},
+    payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
@@ -291,6 +291,20 @@ pub async fn patch(
         SQLFeatures::archive_feature(&mut *tx, params![feature.id, ts])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
+    }
+    for op in patch.tags {
+        match op {
+            TagPatchOp::Add(tag) => {
+                SQLFeatures::insert_tag_for_feature(&mut *tx, params![feature.id, tag])
+                    .await
+                    .map_err(|e| FlagrantError::QueryFailed("Could not add feature tag", e))?;
+            }
+            TagPatchOp::Remove(tag) => {
+                SQLFeatures::delete_tag_for_feature(&mut *tx, params![feature.id, tag])
+                    .await
+                    .map_err(|e| FlagrantError::QueryFailed("Could not remove feature tag", e))?;
+            }
+        }
     }
     // Partition variant ops: deletes first, then updates, then adds
     let (deletes, rest): (Vec<_>, Vec<_>) = patch

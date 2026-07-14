@@ -3,7 +3,7 @@ use flagrant::errors::FlagrantError;
 use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{
     FeatureValue,
-    payload::{FeaturePatch, VariantPatchOp},
+    payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
 use sqlx::{Sqlite, pool::PoolConnection};
 
@@ -1031,4 +1031,104 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
     .unwrap();
     assert!(v1.is_some_and(|v| !v.is_control()));
     assert!(v2.is_some_and(|v| !v.is_control()));
+}
+
+#[sqlx::test]
+async fn patch_tags_adds_without_clearing_existing(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let patch = FeaturePatch {
+        tags: vec![TagPatchOp::Add("beta".to_owned())],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &feature, patch)
+        .await
+        .unwrap();
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.tags.to_string(), "beta");
+
+    let patch = FeaturePatch {
+        tags: vec![TagPatchOp::Add("experimental".to_owned())],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &feature, patch)
+        .await
+        .unwrap();
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    let mut tags: Vec<_> = feature.tags.0.iter().map(|t| t.name.clone()).collect();
+    tags.sort();
+    assert_eq!(tags, vec!["beta", "experimental"]);
+}
+
+#[sqlx::test]
+async fn patch_tags_add_is_idempotent(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    for _ in 0..2 {
+        let patch = FeaturePatch {
+            tags: vec![TagPatchOp::Add("beta".to_owned())],
+            ..Default::default()
+        };
+        feature::patch(&mut conn, &environment, &feature, patch)
+            .await
+            .unwrap();
+    }
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.tags.0.len(), 1);
+    assert_eq!(feature.tags.to_string(), "beta");
+}
+
+#[sqlx::test]
+async fn patch_tags_removes_only_given_tag(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let patch = FeaturePatch {
+        tags: vec![
+            TagPatchOp::Add("beta".to_owned()),
+            TagPatchOp::Add("experimental".to_owned()),
+        ],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &feature, patch)
+        .await
+        .unwrap();
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+
+    let patch = FeaturePatch {
+        tags: vec![TagPatchOp::Remove("beta".to_owned())],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &feature, patch)
+        .await
+        .unwrap();
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.tags.to_string(), "experimental");
+
+    // Removing an already-absent tag is a harmless no-op.
+    let patch = FeaturePatch {
+        tags: vec![TagPatchOp::Remove("beta".to_owned())],
+        ..Default::default()
+    };
+    assert!(
+        feature::patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_ok()
+    );
 }

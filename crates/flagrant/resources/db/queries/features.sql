@@ -93,3 +93,15 @@ DELETE FROM identity_variants WHERE feature_id = $1
 -- :name delete_tags_for_feature :<> :!
 -- :doc Removes a feature tags.
 DELETE FROM feature_tags WHERE feature_id = $1
+
+-- :name insert_tag_for_feature :<> :!
+-- :doc Adds a single tag for a feature, unless it is already present.
+INSERT INTO feature_tags(feature_id, tag)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM feature_tags WHERE feature_id = $1 AND tag = $2
+)
+
+-- :name delete_tag_for_feature :<> :!
+-- :doc Removes a single tag from a feature.
+DELETE FROM feature_tags WHERE feature_id = $1 AND tag = $2

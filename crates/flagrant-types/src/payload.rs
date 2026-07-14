@@ -29,6 +29,12 @@ pub enum TraitPatchOp {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TagPatchOp {
+    Add(String),
+    Remove(String),
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewProjectPayload {
     pub name: String,
@@ -83,6 +89,7 @@ pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_archived: Option<bool>,
     pub description: Option<String>,
+    pub tags: Vec<TagPatchOp>,
     pub variants: Vec<VariantPatchOp>,
 }
 
@@ -107,6 +114,7 @@ impl FeaturePatch {
         self.is_enabled.is_none()
             && self.is_archived.is_none()
             && self.description.is_none()
+            && self.tags.is_empty()
             && self.variants.is_empty()
     }
 }

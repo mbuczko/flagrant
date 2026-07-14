@@ -56,6 +56,17 @@ impl AutoCompleter for ArgCompleter<'_> {
 
                 Ok(match op {
                     "status" => filter_by_prefix(&["on", "off", "archived"], prefix),
+                    "tags" if arg_n >= 2 => {
+                        let ctx = self.session.context.read().unwrap();
+                        let res = ctx.env_resource();
+                        let clean_prefix = prefix.trim_start_matches(',').trim();
+
+                        ctx.client
+                            .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={clean_prefix}")))?
+                            .into_iter()
+                            .map(|t| t.name)
+                            .collect::<Vec<_>>()
+                    }
                     "trait" if arg_n == 2 && !prefix.contains(':') => {
                         let ctx = self.session.context.read().unwrap();
                         let res = ctx.project.as_base_resource();
@@ -82,6 +93,22 @@ impl AutoCompleter for ArgCompleter<'_> {
                             .into_iter()
                             .map(|t| t.name)
                             .collect::<Vec<_>>()
+                    }
+                    "tags" if arg_n >= 2 => {
+                        let ctx = self.session.context.read().unwrap();
+                        let clean_prefix = prefix.trim_start_matches(',').trim();
+
+                        ctx.feature
+                            .as_ref()
+                            .map(|f| {
+                                f.tags
+                                    .0
+                                    .iter()
+                                    .map(|t| t.name.clone())
+                                    .filter(|n| n.starts_with(clean_prefix))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default()
                     }
                     _ => vec![],
                 })
