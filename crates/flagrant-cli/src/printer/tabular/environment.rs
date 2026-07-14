@@ -1,4 +1,4 @@
-use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign};
+use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::Environment;
 
 use super::Tabular;
@@ -22,7 +22,7 @@ impl Tabular for Environment {
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
             .rseparator(None)
-            .width(100)
+            .width(Width::Percentage(100))
             .build()
             .render(rows);
     }
