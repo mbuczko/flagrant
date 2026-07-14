@@ -54,17 +54,23 @@ async fn no_segment_overriding_feature_returns_none(mut conn: PoolConnection<Sql
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_none());
 }
 
 #[sqlx::test]
-async fn matching_segment_returns_its_full_variant_weight_breakdown(
-    mut conn: PoolConnection<Sqlite>,
-) {
+async fn matching_segment_returns_its_id(mut conn: PoolConnection<Sqlite>) {
     let (project, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "control").await;
     let alt = variant::create(
@@ -77,7 +83,6 @@ async fn matching_segment_returns_its_full_variant_weight_breakdown(
     .await
     .unwrap();
 
-    let control_id = feature.get_default_variant().id;
     let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
         .await
         .unwrap();
@@ -110,17 +115,19 @@ async fn matching_segment_returns_its_full_variant_weight_breakdown(
         .await
         .unwrap();
 
-    let mut result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap()
-        .expect("segment should match");
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
-    let mut expected = vec![(alt.id, 30), (control_id, 70)];
-
-    result.sort();
-    expected.sort();
-
-    assert_eq!(result, expected);
+    assert_eq!(result, Some(segment.id));
 }
 
 #[sqlx::test]
@@ -174,9 +181,17 @@ async fn segment_with_non_matching_rule_returns_none(mut conn: PoolConnection<Sq
     .await
     .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_none());
 }
@@ -259,19 +274,22 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap()
-        .expect("second segment should match");
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
-    assert!(
-        result
-            .iter()
-            .any(|(id, weight)| *id == alt.id && *weight == 30)
-    );
+    assert_eq!(result, Some(second.id));
 }
 
-/// Two segments override the same feature and both match the identity — the first-created
+/// Two segments override the same feature and both match the identity - the first-created
 /// (lower segment_id) wins.
 #[sqlx::test]
 async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection<Sqlite>) {
@@ -350,17 +368,19 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap()
-        .expect("a segment should match");
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
-    // The older segment's weight (15), not the newer one's (45).
-    assert!(
-        result
-            .iter()
-            .any(|(id, weight)| *id == alt.id && *weight == 15)
-    );
+    assert_eq!(result, Some(older.id));
 }
 
 /// A group's rules are OR-ed: only one of two rules needs to match for the group (and, with
@@ -417,9 +437,17 @@ async fn rules_within_a_group_are_or_ed(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_some());
 }
@@ -487,9 +515,17 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_some());
 }
@@ -535,7 +571,7 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
         segment,
         vec![
             add_group(Some(GroupConnector::And)),
-            // group-2 has no rules — AND with an always-false group.
+            // group-2 has no rules - AND with an always-false group.
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
                 environment_id: environment.id,
@@ -552,9 +588,17 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_none());
 }
@@ -598,14 +642,22 @@ async fn segment_with_zero_groups_never_matches(mut conn: PoolConnection<Sqlite>
         .await
         .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_none());
 }
 
-/// A `Trait` driver rule matches against a trait loaded from the DB — exercising the real
+/// A `Trait` driver rule matches against a trait loaded from the DB - exercising the real
 /// `IdentityWithTraits` shape (not the synthetic one used by evaluator.rs's unit tests).
 #[sqlx::test]
 async fn trait_driver_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>) {
@@ -661,9 +713,17 @@ async fn trait_driver_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>
     .await
     .unwrap();
 
-    let result = evaluator::evaluate(&mut conn, &environment, &identity, feature.id)
-        .await
-        .unwrap();
+    let result = evaluator::evaluate(
+        &mut conn,
+        &environment,
+        &evaluator::IdentityContext {
+            value: &identity.value,
+            traits: &identity.traits,
+        },
+        feature.id,
+    )
+    .await
+    .unwrap();
 
     assert!(result.is_some());
 }

@@ -206,7 +206,7 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
 
 /// Stage variant weight overrides for the current feature within this segment.
 ///
-/// **Editor mode** (`SET override` — no args):
+/// **Editor mode** (`SET override` - no args):
 /// Opens an editor pre-filled with all non-control variants. Lines starting with `#`
 /// are comments; each non-comment line is parsed as a weight (0–100) in display order.
 ///
@@ -487,7 +487,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         _ => return Ok(()),
     };
 
-    // Collected before the patch is moved into the request below — doesn't depend on
+    // Collected before the patch is moved into the request below - doesn't depend on
     // the server response, only on which ops we're about to send.
     let overridden_feature_ids: std::collections::HashSet<i32> = patch
         .ops
@@ -520,7 +520,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     drop(ctx);
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section
-    // just changed even though the feature itself has no pending patch of its own —
+    // just changed even though the feature itself has no pending patch of its own -
     // show it too, so the user doesn't have to run `FEATURE describe` separately.
     for feature_id in overridden_feature_ids {
         features::describe_by_id(feature_id, session)?;

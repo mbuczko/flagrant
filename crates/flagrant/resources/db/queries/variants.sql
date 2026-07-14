@@ -131,7 +131,7 @@ ORDER BY vw.segment_id, (v.environment_id IS NULL), vw.variant_id
 
 -- :name fetch_segment_variant_weights :<> :*
 -- :doc Returns variant_id + weight overrides for a given segment+feature+environment.
--- Excludes the control variant's auto-balanced remainder row — only explicit overrides are shown.
+-- Excludes the control variant's auto-balanced remainder row - only explicit overrides are shown.
 SELECT vw.variant_id, vw.weight
 FROM variant_weights vw
 JOIN variants v ON v.variant_id = vw.variant_id

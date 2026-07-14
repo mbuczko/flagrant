@@ -280,7 +280,7 @@ impl Tabular for Segment {
 
         let has_visible = eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add);
         if !has_visible {
-            println!("{}", "(no groups — use GROUP add to create one)".dimmed());
+            println!("{}", "(no groups - use GROUP add to create one)".dimmed());
         }
     }
 }

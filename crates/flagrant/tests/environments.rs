@@ -16,7 +16,7 @@ async fn create_environment_inherits_from_sole_existing_env(mut conn: PoolConnec
         .await
         .unwrap();
 
-    // env1 is the only environment — env2 should auto-clone from it.
+    // env1 is the only environment - env2 should auto-clone from it.
     let env2 = create_environment(&mut conn, &project).await;
 
     let feature_env2 = feature::get_by_id(&mut conn, &env2, feature.id)

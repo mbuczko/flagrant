@@ -286,3 +286,40 @@ pub async fn get_overrides(
     );
     Ok(Json(overrides))
 }
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct ClearDistributionParams {
+    /// Pattern matching identities whose assignment to this feature's variants should be
+    /// cleared. Use `*` as a wildcard (e.g. "user-*", or "*" to clear every identity).
+    pattern: String,
+}
+
+/// Clears this feature's variant assignments for every identity matching `pattern`, freeing
+/// them to be redistributed on the next evaluation. Identities themselves (and their traits)
+/// are left untouched - only their assignment to this feature's variants is removed.
+#[utoipa::path(
+    delete,
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/distribution",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("feature_id" = i32, Path, description = "Feature ID"),
+        ClearDistributionParams
+    ),
+    responses(
+        (status = 200, description = "Matching identities' variant assignments cleared for this feature")
+    ),
+    tag = "features"
+)]
+pub async fn clear_distribution(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Query(params): Query<ClearDistributionParams>,
+) -> Result<Json<()>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let like_pattern = params.pattern.replace('*', "%");
+
+    identity::clear_distribution_for_feature(&mut conn, &env, feature_id, &like_pattern).await?;
+    Ok(Json(()))
+}

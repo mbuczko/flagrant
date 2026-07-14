@@ -43,7 +43,7 @@ pub async fn delete(conn: &mut SqliteConnection, rule_id: i32) -> anyhow::Result
     Ok(())
 }
 
-/// Removes rules from each group's in-memory list — mirrors a committed `DeleteRule` op
+/// Removes rules from each group's in-memory list - mirrors a committed `DeleteRule` op
 /// without hitting the DB again.
 pub(crate) fn remove_from_groups(groups: &mut [SegmentGroup], rule_id: i32) {
     for g in groups {

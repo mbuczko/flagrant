@@ -9,7 +9,7 @@ use super::feature;
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
-use crate::{distributor, errors::FlagrantError};
+use crate::{distributor, errors::FlagrantError, evaluator};
 
 use super::traits::upsert;
 use super::variant;
@@ -181,7 +181,7 @@ pub async fn update_traits(
     get_by_value_with_traits(conn, environment, identity.value).await
 }
 
-/// Applies a patch to an identity — applies granular trait operations
+/// Applies a patch to an identity - applies granular trait operations
 /// and pins the identity to specific variants (overrides) per feature.
 pub async fn patch(
     conn: &mut SqliteConnection,
@@ -268,6 +268,55 @@ pub async fn delete(conn: &mut SqliteConnection, identity: Identity) -> anyhow::
     Ok(())
 }
 
+/// Deletes every identity (and its traits/variant assignments) in `environment` whose value
+/// matches `pattern`. Pattern translates to SQL LIKE pattern - `*` becomes `%`.
+pub async fn clear_matching(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    pattern: &str,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    SQLIdentities::delete_identity_traits_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+    SQLIdentities::delete_identity_variants_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+    SQLIdentities::delete_identities_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Clears variant assignments for `feature_id`, for every identity in `environment` whose
+/// value matches `pattern` (SQL LIKE pattern - `*` becomes `%`), freeing them to be
+/// redistributed on the next evaluation. Unlike [`clear_matching`], the identities themselves
+/// (and their traits) are left untouched - only their assignment to this feature is removed.
+pub async fn clear_distribution_for_feature(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    pattern: &str,
+) -> anyhow::Result<()> {
+    SQLIdentities::delete_identity_variants_for_feature_pattern(
+        conn,
+        params![feature_id, environment.id, pattern],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not clear variant assignments", e))?;
+
+    Ok(())
+}
+
 /// Returns the variant_id currently assigned to the given identity for the given
 /// feature+environment, or None if no assignment exists.
 pub async fn get_variant_for_identity(
@@ -308,6 +357,12 @@ pub async fn get_identity_variants(
     let mut tx = conn.begin().await?;
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
+    // Only needed to evaluate segment rules for identities not yet distributed; loaded at
+    // most once (on first use below) and reused across every feature in this call. Kept as
+    // just the traits (not a full IdentityWithTraits) so evaluator::evaluate can borrow
+    // `identity.value` directly instead of every caller cloning it.
+    let mut identity_traits: Option<Vec<IdentityTrait>> = None;
+
     for var in variants.iter_mut() {
         // Resolve the variant to attach to: skip pinned identities, follow a pending
         // migration if one exists, or distribute a fresh identity for the first time.
@@ -318,9 +373,17 @@ pub async fn get_identity_variants(
                 .await
                 .ok()
         } else if var.identity_id.is_none() {
-            // TODO: resolve the identity's matching segment via the rule evaluator once
-            // it exists, and pass its id here instead of None.
-            Some(distributor::distribute(&mut tx, environment, var.feature_id, None).await?)
+            if identity_traits.is_none() {
+                identity_traits = Some(load_traits(&mut tx, identity.id).await?);
+            }
+            let ctx = evaluator::IdentityContext {
+                value: &identity.value,
+                traits: identity_traits.as_ref().unwrap(),
+            };
+            let segment_id =
+                evaluator::evaluate(&mut tx, environment, &ctx, var.feature_id).await?;
+
+            Some(distributor::distribute(&mut tx, environment, var.feature_id, segment_id).await?)
         } else {
             None
         };

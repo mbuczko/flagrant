@@ -63,7 +63,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// List groups — shows the current committed segment state.
+/// List groups - shows the current committed segment state.
 pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (segment_id, fresh) = {
         let ctx = session.context.read().unwrap();

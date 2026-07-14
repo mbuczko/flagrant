@@ -97,7 +97,7 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
 
 /// `list_overridden_features` (backs "SEGMENT describe") should return one entry per
 /// feature the segment overrides, each with its explicit weights plus the control
-/// variant's auto-balanced remainder — and nothing for features it doesn't touch.
+/// variant's auto-balanced remainder - and nothing for features it doesn't touch.
 #[sqlx::test]
 async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sqlite>) {
     let (project, environment) = create_context(&mut conn).await;
@@ -227,6 +227,6 @@ async fn distributor_scopes_by_segment_id(mut conn: PoolConnection<Sqlite>) {
         "expected ~30 segment-scoped picks for alt, got {segment_alt_count}"
     );
 
-    // The two scopes converged to different ratios — confirms they're tracked independently.
+    // The two scopes converged to different ratios - confirms they're tracked independently.
     assert_ne!(organic_alt_count, segment_alt_count);
 }

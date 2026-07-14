@@ -305,7 +305,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     println!("Staged: variant delete id={variant_id}");
     ops.push(VariantPatchOp::Delete { id: variant_id });
 
-    // If there's a staged identity override pointing at this variant, remove it —
+    // If there's a staged identity override pointing at this variant, remove it -
     // committing it after the variant is deleted would leave a dangling reference.
     if let Some(val) = deleted_variant_value {
         let feature_name = ctx.feature.as_ref().unwrap().name.clone();

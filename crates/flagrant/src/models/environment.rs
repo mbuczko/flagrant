@@ -18,7 +18,7 @@ struct SQLEnvironments {}
 /// - If `base_env` name is provided, it is used explicitly.
 /// - If there is exactly one existing environment, it is used automatically.
 /// - If there are two or more existing environments and no `base_env` is given, an error
-///   is returned — the caller must be explicit about which environment to inherit from.
+///   is returned - the caller must be explicit about which environment to inherit from.
 /// - On the very first environment in a project there is nothing to inherit, so no
 ///   cloning takes place.
 ///

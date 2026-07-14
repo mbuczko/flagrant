@@ -51,6 +51,31 @@ DELETE FROM identity_variants WHERE identity_id = $1
 -- :doc Removes an identity record
 DELETE FROM identities WHERE identity_id = $1
 
+-- :name delete_identity_traits_for_environment_pattern :<> :!
+-- :doc Removes trait entries for every identity in an environment matching a LIKE pattern
+DELETE FROM identity_traits
+WHERE identity_id IN (
+    SELECT identity_id FROM identities WHERE environment_id = $1 AND identity LIKE $2
+)
+
+-- :name delete_identity_variants_for_environment_pattern :<> :!
+-- :doc Removes variant assignments for every identity in an environment matching a LIKE pattern
+DELETE FROM identity_variants
+WHERE identity_id IN (
+    SELECT identity_id FROM identities WHERE environment_id = $1 AND identity LIKE $2
+)
+
+-- :name delete_identity_variants_for_feature_pattern :<> :!
+-- :doc Removes variant assignments for a single feature, for every identity in an environment matching a LIKE pattern
+DELETE FROM identity_variants
+WHERE feature_id = $1 AND environment_id = $2 AND identity_id IN (
+    SELECT identity_id FROM identities WHERE environment_id = $2 AND identity LIKE $3
+)
+
+-- :name delete_identities_for_environment_pattern :<> :!
+-- :doc Removes identity records in an environment matching a LIKE pattern
+DELETE FROM identities WHERE environment_id = $1 AND identity LIKE $2
+
 -- :name upsert_identity :<> :1
 -- :doc Creates or updates an identity scoped to the given environment
 INSERT INTO identities(environment_id, identity)

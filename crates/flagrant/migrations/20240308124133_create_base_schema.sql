@@ -106,7 +106,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_variant_weights_segment
 -- Plain (non-partial) covering index for lookups. Every read/update against this table
 -- filters on all three columns via a bound parameter (`segment_id IS ?`), and SQLite
 -- cannot use a partial index when matching its WHERE clause depends on a bound
--- parameter's runtime value rather than a literal NULL/NOT NULL — so without this index,
+-- parameter's runtime value rather than a literal NULL/NOT NULL - so without this index,
 -- those queries fall back to a full table scan on every single feature-flag evaluation.
 CREATE INDEX IF NOT EXISTS idx_variant_weights_lookup
   ON variant_weights(variant_id, environment_id, segment_id);
