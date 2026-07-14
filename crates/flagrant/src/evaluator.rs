@@ -1,17 +1,30 @@
 //! Rule-based segment evaluator.
 //!
 //! Resolves which (if any) segment overriding a given feature matches a request context
-//! (environment + identity), and returns that segment's variant weight overrides.
+//! (environment + identity), and returns that segment's id for the caller to pass into
+//! `distributor::distribute` (which scopes the weighted pick, and its accumulator state,
+//! to that segment).
 
 use std::{borrow::Cow, cmp::Ordering};
 
 use flagrant_types::{
-    Comparator, Environment, GroupConnector, IdentityWithTraits, Project, Segment, SegmentDriver,
+    Comparator, Environment, GroupConnector, IdentityTrait, Project, Segment, SegmentDriver,
     SegmentGroup, SegmentRule, TraitValue,
 };
 use sqlx::SqliteConnection;
 
 use crate::models::segment;
+
+/// A borrowed view of just the identity data the evaluator needs (value + traits).
+///
+/// Deliberately not `flagrant_types::IdentityWithTraits`: that type owns its `value: String`,
+/// which would force callers to clone it on every evaluation. This runs on the
+/// feature-resolution hot path (once per undistributed feature per request), so callers
+/// build this from data they already hold, borrowed for the duration of one evaluation.
+pub struct IdentityContext<'a> {
+    pub value: &'a str,
+    pub traits: &'a [IdentityTrait],
+}
 
 /// The value a rule's driver resolves to, for comparison against `SegmentRule.value`.
 ///
@@ -24,7 +37,7 @@ use crate::models::segment;
 ///
 /// Borrows rather than owns (`Str(&'a str)`, not `Str(String)`) so resolving a driver never
 /// needs to clone the identity's value, the environment's name, or a trait's string -
-/// everything it points at already lives in `Environment`/`IdentityWithTraits`/`SegmentRule`
+/// everything it points at already lives in `Environment`/`IdentityContext`/`SegmentRule`
 /// for at least as long as one rule evaluation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ActualValue<'a> {
@@ -46,25 +59,24 @@ impl<'a> From<&'a TraitValue> for ActualValue<'a> {
 }
 
 /// Evaluates every segment overriding `feature_id` in `environment`, in priority order
-/// (oldest segment first), and returns the variant weight overrides of the first segment
-/// whose rules match `identity`. Returns `None` if no segment overrides this feature, or
-/// none of them match.
+/// (oldest segment first), and returns the id of the first segment whose rules match
+/// `identity`. Returns `None` if no segment overrides this feature, or none of them match.
 pub async fn evaluate(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    identity: &IdentityWithTraits,
+    identity: &IdentityContext<'_>,
     feature_id: i32,
-) -> anyhow::Result<Option<Vec<(i32, u8)>>> {
+) -> anyhow::Result<Option<i32>> {
     let candidates = segment::list_overrides_for_feature(conn, environment.id, feature_id).await?;
     let project = Project {
         id: environment.project_id,
         ..Default::default()
     };
 
-    for (segment_id, _name, weights) in candidates {
+    for (segment_id, _name, _weights) in candidates {
         let seg = segment::get_by_id(conn, &project, segment_id).await?;
         if segment_matches(&seg, environment, identity) {
-            return Ok(Some(weights.into_iter().map(|w| (w.variant_id, w.weight)).collect()));
+            return Ok(Some(segment_id));
         }
     }
     Ok(None)
@@ -73,7 +85,11 @@ pub async fn evaluate(
 /// Folds groups left-to-right: the first group is the base predicate; each subsequent
 /// group ANDs or AND-NOTs the running result per its `connector`. A segment with no
 /// groups never matches.
-fn segment_matches(segment: &Segment, environment: &Environment, identity: &IdentityWithTraits) -> bool {
+fn segment_matches(
+    segment: &Segment,
+    environment: &Environment,
+    identity: &IdentityContext<'_>,
+) -> bool {
     let mut acc: Option<bool> = None;
     for group in &segment.groups {
         let group_match = group_matches(group, environment, identity);
@@ -90,7 +106,11 @@ fn segment_matches(segment: &Segment, environment: &Environment, identity: &Iden
 
 /// A group matches if ANY of its rules match (rules within a group are OR-ed). A group
 /// with no rules never matches (`any()` over an empty iterator is `false`).
-fn group_matches(group: &SegmentGroup, environment: &Environment, identity: &IdentityWithTraits) -> bool {
+fn group_matches(
+    group: &SegmentGroup,
+    environment: &Environment,
+    identity: &IdentityContext<'_>,
+) -> bool {
     group
         .rules
         .iter()
@@ -100,7 +120,11 @@ fn group_matches(group: &SegmentGroup, environment: &Environment, identity: &Ide
 /// Resolves `rule.driver` to an actual value, then dispatches to `comparator_matches`.
 /// Fail-closed: a `Trait(name)` driver whose trait is absent from `identity` (or present
 /// with `value: None`) never matches, regardless of comparator polarity.
-fn rule_matches(rule: &SegmentRule, environment: &Environment, identity: &IdentityWithTraits) -> bool {
+fn rule_matches(
+    rule: &SegmentRule,
+    environment: &Environment,
+    identity: &IdentityContext<'_>,
+) -> bool {
     let Some(actual) = resolve_actual(&rule.driver, environment, identity) else {
         return false;
     };
@@ -113,10 +137,10 @@ fn rule_matches(rule: &SegmentRule, environment: &Environment, identity: &Identi
 fn resolve_actual<'a>(
     driver: &SegmentDriver,
     environment: &'a Environment,
-    identity: &'a IdentityWithTraits,
+    identity: &IdentityContext<'a>,
 ) -> Option<ActualValue<'a>> {
     match driver {
-        SegmentDriver::Identity => Some(ActualValue::Str(&identity.value)),
+        SegmentDriver::Identity => Some(ActualValue::Str(identity.value)),
         SegmentDriver::Environment => Some(ActualValue::Str(&environment.name)),
         SegmentDriver::Trait(name) => identity
             .traits
@@ -227,9 +251,24 @@ mod tests {
         }
     }
 
-    fn identity(value: &str, traits: Vec<(&str, Option<TraitValue>)>) -> IdentityWithTraits {
-        IdentityWithTraits {
-            id: 1,
+    /// Owns the value/traits so tests can build one, then borrow an `IdentityContext` from
+    /// it as many times as needed via `.ctx()`.
+    struct TestIdentity {
+        value: String,
+        traits: Vec<IdentityTrait>,
+    }
+
+    impl TestIdentity {
+        fn ctx(&self) -> IdentityContext<'_> {
+            IdentityContext {
+                value: &self.value,
+                traits: &self.traits,
+            }
+        }
+    }
+
+    fn identity(value: &str, traits: Vec<(&str, Option<TraitValue>)>) -> TestIdentity {
+        TestIdentity {
             value: value.to_string(),
             traits: traits
                 .into_iter()
@@ -389,27 +428,38 @@ mod tests {
     #[test]
     fn identity_driver_matches_against_identity_value() {
         let id = identity("user-42", vec![]);
-        let r = rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "user-42");
-        assert!(rule_matches(&r, &env("prod"), &id));
+        let r = rule(
+            SegmentDriver::Identity,
+            Comparator::ExactlyMatches,
+            "user-42",
+        );
+        assert!(rule_matches(&r, &env("prod"), &id.ctx()));
     }
 
     #[test]
     fn environment_driver_matches_against_environment_name() {
         let id = identity("user-42", vec![]);
-        let r = rule(SegmentDriver::Environment, Comparator::ExactlyMatches, "prod");
-        assert!(rule_matches(&r, &env("prod"), &id));
-        assert!(!rule_matches(&r, &env("staging"), &id));
+        let r = rule(
+            SegmentDriver::Environment,
+            Comparator::ExactlyMatches,
+            "prod",
+        );
+        assert!(rule_matches(&r, &env("prod"), &id.ctx()));
+        assert!(!rule_matches(&r, &env("staging"), &id.ctx()));
     }
 
     #[test]
     fn trait_driver_matches_named_trait_value() {
-        let id = identity("user-42", vec![("plan", Some(TraitValue::Str("premium".into())))]);
+        let id = identity(
+            "user-42",
+            vec![("plan", Some(TraitValue::Str("premium".into())))],
+        );
         let r = rule(
             SegmentDriver::Trait("plan".into()),
             Comparator::ExactlyMatches,
             "premium",
         );
-        assert!(rule_matches(&r, &env("prod"), &id));
+        assert!(rule_matches(&r, &env("prod"), &id.ctx()));
     }
 
     #[test]
@@ -425,8 +475,8 @@ mod tests {
             Comparator::DoesNotMatch,
             "premium",
         );
-        assert!(!rule_matches(&matches_rule, &env("prod"), &id));
-        assert!(!rule_matches(&does_not_match_rule, &env("prod"), &id));
+        assert!(!rule_matches(&matches_rule, &env("prod"), &id.ctx()));
+        assert!(!rule_matches(&does_not_match_rule, &env("prod"), &id.ctx()));
     }
 
     #[test]
@@ -437,7 +487,7 @@ mod tests {
             Comparator::DoesNotMatch,
             "premium",
         );
-        assert!(!rule_matches(&does_not_match_rule, &env("prod"), &id));
+        assert!(!rule_matches(&does_not_match_rule, &env("prod"), &id.ctx()));
     }
 
     // -- group_matches (OR over rules) -----------------------------------------------------
@@ -449,17 +499,21 @@ mod tests {
             None,
             vec![
                 rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "nope"),
-                rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "user-42"),
+                rule(
+                    SegmentDriver::Identity,
+                    Comparator::ExactlyMatches,
+                    "user-42",
+                ),
             ],
         );
-        assert!(group_matches(&g, &env("prod"), &id));
+        assert!(group_matches(&g, &env("prod"), &id.ctx()));
     }
 
     #[test]
     fn empty_group_never_matches() {
         let id = identity("user-42", vec![]);
         let g = group(None, vec![]);
-        assert!(!group_matches(&g, &env("prod"), &id));
+        assert!(!group_matches(&g, &env("prod"), &id.ctx()));
     }
 
     // -- segment_matches (AND / AND-NOT fold over groups) ----------------------------------
@@ -467,7 +521,7 @@ mod tests {
     #[test]
     fn segment_with_no_groups_never_matches() {
         let id = identity("user-42", vec![]);
-        assert!(!segment_matches(&segment(vec![]), &env("prod"), &id));
+        assert!(!segment_matches(&segment(vec![]), &env("prod"), &id.ctx()));
     }
 
     #[test]
@@ -475,26 +529,38 @@ mod tests {
         let id = identity("user-42", vec![]);
         let head = group(
             None,
-            vec![rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "user-42")],
+            vec![rule(
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-42",
+            )],
         );
         let matching_tail = group(
             Some(GroupConnector::And),
-            vec![rule(SegmentDriver::Environment, Comparator::ExactlyMatches, "prod")],
+            vec![rule(
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                "prod",
+            )],
         );
         let non_matching_tail = group(
             Some(GroupConnector::And),
-            vec![rule(SegmentDriver::Environment, Comparator::ExactlyMatches, "staging")],
+            vec![rule(
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                "staging",
+            )],
         );
 
         assert!(segment_matches(
             &segment(vec![head.clone(), matching_tail]),
             &env("prod"),
-            &id
+            &id.ctx()
         ));
         assert!(!segment_matches(
             &segment(vec![head, non_matching_tail]),
             &env("prod"),
-            &id
+            &id.ctx()
         ));
     }
 
@@ -503,26 +569,38 @@ mod tests {
         let id = identity("user-42", vec![]);
         let head = group(
             None,
-            vec![rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "user-42")],
+            vec![rule(
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-42",
+            )],
         );
         let non_matching_tail = group(
             Some(GroupConnector::AndNot),
-            vec![rule(SegmentDriver::Environment, Comparator::ExactlyMatches, "staging")],
+            vec![rule(
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                "staging",
+            )],
         );
         let matching_tail = group(
             Some(GroupConnector::AndNot),
-            vec![rule(SegmentDriver::Environment, Comparator::ExactlyMatches, "prod")],
+            vec![rule(
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                "prod",
+            )],
         );
 
         assert!(segment_matches(
             &segment(vec![head.clone(), non_matching_tail]),
             &env("prod"),
-            &id
+            &id.ctx()
         ));
         assert!(!segment_matches(
             &segment(vec![head, matching_tail]),
             &env("prod"),
-            &id
+            &id.ctx()
         ));
     }
 
@@ -531,9 +609,17 @@ mod tests {
         let id = identity("user-42", vec![]);
         let head = group(
             None,
-            vec![rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "user-42")],
+            vec![rule(
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-42",
+            )],
         );
         let empty_tail = group(Some(GroupConnector::And), vec![]);
-        assert!(!segment_matches(&segment(vec![head, empty_tail]), &env("prod"), &id));
+        assert!(!segment_matches(
+            &segment(vec![head, empty_tail]),
+            &env("prod"),
+            &id.ctx()
+        ));
     }
 }
