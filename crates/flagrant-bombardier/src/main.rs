@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         Arc, RwLock,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
     time::Duration,
@@ -10,7 +10,7 @@ use std::{
 
 use argh::FromArgs;
 use flagrant_client::{connection::Connection, http::Auth};
-use flagrant_types::{FeatureResponse, FeatureValue};
+use flagrant_types::{Feature, FeatureResponse, FeatureValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, rngs::ThreadRng};
 use ulid::Ulid;
@@ -82,7 +82,10 @@ pub fn main() -> anyhow::Result<()> {
     }
     IDX.store(args.named_idents, Ordering::SeqCst);
 
-    println!("Seeded {} named identities for manual testing:", named.len());
+    println!(
+        "Seeded {} named identities for manual testing:",
+        named.len()
+    );
     for name in &named {
         println!("  {name}");
     }
@@ -96,16 +99,32 @@ pub fn main() -> anyhow::Result<()> {
         args.environment,
     )?);
 
+    // Flipped to `false` by the watcher thread below only on an unrecoverable error (the
+    // feature got deleted, the API is unreachable, ...), so every loop (workers, the watcher
+    // itself, and the progress renderer) winds down and `main` can report why the run stopped.
+    let running = Arc::new(AtomicBool::new(true));
+
+    // Tracks whether the feature is currently enabled. Starts `false` so workers wait for the
+    // watcher's first check rather than assuming enabled; toggled as the feature is enabled/
+    // disabled over the run instead of ending the whole process on a disabled feature.
+    let enabled = Arc::new(AtomicBool::new(false));
+
     thread::scope(|s| {
         for _ in 0..args.threads {
             let idents = Arc::clone(&idents);
             let buckets = Arc::clone(&buckets);
             let conn = Arc::clone(&connection);
+            let running = Arc::clone(&running);
+            let enabled = Arc::clone(&enabled);
             let feature_name = args.feature.as_str();
 
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
-                loop {
+                while running.load(Ordering::Relaxed) {
+                    if !enabled.load(Ordering::Relaxed) {
+                        thread::sleep(Duration::from_millis(200));
+                        continue;
+                    }
                     // TODO: fetch idents_count idents from the pool and generate new ones if needed
                     if let Some(ident) = get_or_generate_ident(&idents, idents_count, &mut rng)
                         && let Some(response) = conn.get_features(&ident)
@@ -136,8 +155,51 @@ pub fn main() -> anyhow::Result<()> {
             .progress_chars("##-");
 
         let m = MultiProgress::new();
+
+        // Re-fetches the feature every couple seconds for the lifetime of the run - not just
+        // once at startup - so bombardier reacts as soon as someone enables/disables the
+        // feature mid-run, instead of only ever checking before the first request.
+        {
+            let conn = Arc::clone(&connection);
+            let running = Arc::clone(&running);
+            let enabled = Arc::clone(&enabled);
+            let m = m.clone();
+            let feature_name = args.feature.as_str();
+            let feature_path = conn
+                .env_resource()
+                .subpath(format!("/features/{feature_name}"));
+
+            s.spawn(move || {
+                let mut last_enabled = None;
+                while running.load(Ordering::Relaxed) {
+                    match conn.client.get::<Feature>(feature_path.clone()) {
+                        Ok(feature) => {
+                            if last_enabled != Some(feature.is_enabled) {
+                                let msg = if feature.is_enabled {
+                                    format!("Feature '{feature_name}' is enabled - distributing.")
+                                } else {
+                                    format!(
+                                        "Feature '{feature_name}' is disabled - waiting for it to be enabled (e.g. via the CLI)..."
+                                    )
+                                };
+                                let _ = m.println(msg);
+                                last_enabled = Some(feature.is_enabled);
+                            }
+                            enabled.store(feature.is_enabled, Ordering::Relaxed);
+                            thread::sleep(Duration::from_secs(2));
+                        }
+                        Err(err) => {
+                            let _ =
+                                m.println(format!("Could not fetch feature '{feature_name}': {err}"));
+                            running.store(false, Ordering::Relaxed);
+                        }
+                    }
+                }
+            });
+        }
+
         let mut pbs = HashMap::<String, ProgressBar>::new();
-        loop {
+        while running.load(Ordering::Relaxed) {
             let guard = buckets.read().unwrap();
             for (val, set) in guard.iter() {
                 if set.is_empty() {
@@ -160,6 +222,13 @@ pub fn main() -> anyhow::Result<()> {
             }
         }
     });
+
+    if !running.load(Ordering::Relaxed) {
+        anyhow::bail!(
+            "Stopped: feature '{}' is no longer available.",
+            args.feature
+        );
+    }
     Ok(())
 }
 
