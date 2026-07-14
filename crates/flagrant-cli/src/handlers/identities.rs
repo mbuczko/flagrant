@@ -27,6 +27,7 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
+        features,
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
@@ -247,7 +248,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 current_variant_id,
             );
             let edited = open_in_editor(&content)?;
-            strip_comments(&edited)
+            extract_single_value(&edited)?
         };
 
         (feature.name.clone(), identity.value.clone(), raw)
@@ -353,6 +354,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .env_resource()
         .subpath(format!("/identities/{identity}"));
 
+    // Overrides/unpins always target the feature currently in context - `ensure_no_pending`
+    // forbids switching away from it while either is staged.
+    let touched_feature = (!patch.overrides.is_empty() || !patch.unpins.is_empty())
+        .then(|| ctx.feature.as_ref().map(|f| f.id))
+        .flatten();
+
     let updated = ctx
         .client
         .patch::<_, IdentityWithTraits>(path, patch)
@@ -361,6 +368,15 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     updated.describe(None, &fetch_variant_assignments(&ctx, &updated));
     ctx.identity_patch = None;
     ctx.identity = Some(updated);
+    drop(ctx);
+
+    // The feature's OVERRIDES section just changed even though the feature itself may have
+    // no pending patch of its own (or had one that was already committed and printed before
+    // this override existed) - show it again, so the user doesn't have to run `FEATURE
+    // describe` separately.
+    if let Some(feature_id) = touched_feature {
+        features::describe_by_id(feature_id, session)?;
+    }
 
     Ok(())
 }
@@ -405,13 +421,32 @@ fn resolve_identity(
     )
 }
 
-fn strip_comments(text: &str) -> String {
-    text.lines()
+/// Strips comment lines from editor content and returns the single remaining
+/// paragraph (a run of non-blank lines). Values may legitimately span several
+/// lines (e.g. pretty-printed JSON), so a paragraph - not a single line - is
+/// the unit of a value. Errors if the content yields zero or more than one
+/// paragraph, which happens e.g. when the editor is closed unedited and all
+/// listed variants remain uncommented.
+fn extract_single_value(text: &str) -> anyhow::Result<String> {
+    let stripped = text
+        .lines()
         .filter(|line| !line.starts_with('#'))
         .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_owned()
+        .join("\n");
+    let paragraphs: Vec<&str> = stripped
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    match paragraphs.as_slice() {
+        [] => bail!("No value provided."),
+        [value] => Ok(value.to_string()),
+        _ => bail!(
+            "Expected a single variant value, found {}. Leave exactly one variant's value uncommented.",
+            paragraphs.len()
+        ),
+    }
 }
 
 fn build_override_editor_content(

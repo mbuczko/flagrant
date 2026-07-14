@@ -338,7 +338,15 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         })
     });
 
-    if !defer_to_segment_commit {
+    // Same reasoning, but for an identity override/unpin about to be committed for this
+    // feature right after this - `identities::commit` will show the feature afterward with
+    // the up-to-date overrides.
+    let defer_to_identity_commit = ctx
+        .identity_patch
+        .as_ref()
+        .is_some_and(|p| !p.overrides.is_empty() || !p.unpins.is_empty());
+
+    if !defer_to_segment_commit && !defer_to_identity_commit {
         let overrides_path = ctx
             .env_resource()
             .subpath(format!("/features/{}/overrides", updated.id));
@@ -359,8 +367,8 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
 /// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
 ///
-/// Used after a segment commit that touched a feature's overrides: the feature itself
-/// has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
+/// Used after a segment or identity commit that touched a feature's overrides: the feature
+/// itself has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
 /// section just changed and is worth showing. Refreshes the current feature context too,
 /// if it still refers to this feature.
 pub(crate) fn describe_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
@@ -369,7 +377,7 @@ pub(crate) fn describe_by_id(feature_id: i32, session: &Session<Connection>) -> 
     updated.describe(None, &OverridesContext::committed_only(overrides));
 
     let mut ctx = session.context.write().unwrap();
-    if ctx.feature.as_ref().is_some_and(|f| f.id == feature_id) {
+    if ctx.feature.as_ref().is_some_and(|f| f.id == updated.id) {
         ctx.feature = Some(updated);
     }
     Ok(())
