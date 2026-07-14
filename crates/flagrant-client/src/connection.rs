@@ -18,6 +18,41 @@ pub enum VariantRef {
     Staged(usize),
 }
 
+/// An environment reference used to build the connection URL - either a
+/// numeric id or a name, both of which the API resolves interchangeably.
+#[derive(Debug, Clone)]
+pub enum EnvironmentRef {
+    Id(i32),
+    Name(String),
+}
+
+impl std::fmt::Display for EnvironmentRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EnvironmentRef::Id(id) => write!(f, "{id}"),
+            EnvironmentRef::Name(name) => write!(f, "{name}"),
+        }
+    }
+}
+
+impl From<i32> for EnvironmentRef {
+    fn from(id: i32) -> Self {
+        Self::Id(id)
+    }
+}
+
+impl From<String> for EnvironmentRef {
+    fn from(name: String) -> Self {
+        Self::Name(name)
+    }
+}
+
+impl From<&str> for EnvironmentRef {
+    fn from(name: &str) -> Self {
+        Self::Name(name.to_string())
+    }
+}
+
 #[derive(Debug)]
 pub struct Connection {
     pub client: HttpClient,
@@ -44,15 +79,16 @@ impl Connection {
         api_host: String,
         auth: Auth,
         project_name: String,
-        environment_id: i32,
+        environment: impl Into<EnvironmentRef>,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_name}");
+        let environment = environment.into();
 
         Self::build(
             client.get::<Project>(path.clone()).ok(),
             client
-                .get::<Environment>(format!("{path}/envs/{environment_id}"))
+                .get::<Environment>(format!("{path}/envs/{environment}"))
                 .ok(),
             client,
         )
@@ -62,15 +98,16 @@ impl Connection {
     pub async fn init(
         api_host: String,
         project_name: String,
-        environment_id: i32,
+        environment: impl Into<EnvironmentRef>,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, Auth::None);
         let path = format!("/projects/{project_name}");
+        let environment = environment.into();
 
         Self::build(
             client.get::<Project>(path.clone()).await.ok(),
             client
-                .get::<Environment>(format!("{path}/envs/{environment_id}"))
+                .get::<Environment>(format!("{path}/envs/{environment}"))
                 .await
                 .ok(),
             client,

@@ -268,6 +268,35 @@ pub async fn delete(conn: &mut SqliteConnection, identity: Identity) -> anyhow::
     Ok(())
 }
 
+/// Deletes every identity (and its traits/variant assignments) in `environment` whose value
+/// matches `pattern`. Pattern translates to SQL LIKE pattern - `*` becomes `%`.
+pub async fn clear_matching(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    pattern: &str,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    SQLIdentities::delete_identity_traits_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+    SQLIdentities::delete_identity_variants_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+    SQLIdentities::delete_identities_for_environment_pattern(
+        &mut *tx,
+        params![environment.id, pattern],
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Returns the variant_id currently assigned to the given identity for the given
 /// feature+environment, or None if no assignment exists.
 pub async fn get_variant_for_identity(

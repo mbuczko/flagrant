@@ -537,6 +537,65 @@ async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
     );
 }
 
+/// `clear_matching` should delete only identities (traits included) matching the given
+/// LIKE pattern within the given environment - leaving non-matching identities and
+/// identities in other environments untouched.
+#[sqlx::test]
+async fn clear_matching_deletes_only_pattern_matches_within_environment(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, env_a) = create_context(&mut conn).await;
+    let env_b = crate::common::create_environment(&mut conn, &project).await;
+
+    identity::create(
+        &mut conn,
+        &env_a,
+        "tester-1".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "plan".to_owned(),
+            value: Some(TraitValue::Str("premium".to_owned())),
+        }],
+    )
+    .await
+    .unwrap();
+    identity::create(&mut conn, &env_a, "tester-2".to_owned(), vec![])
+        .await
+        .unwrap();
+    identity::create(&mut conn, &env_a, "someone-else".to_owned(), vec![])
+        .await
+        .unwrap();
+    identity::create(&mut conn, &env_b, "tester-1".to_owned(), vec![])
+        .await
+        .unwrap();
+
+    identity::clear_matching(&mut conn, &env_a, "tester-%")
+        .await
+        .unwrap();
+
+    assert!(
+        identity::get_by_value(&mut conn, &env_a, "tester-1".to_owned())
+            .await
+            .is_err()
+    );
+    assert!(
+        identity::get_by_value(&mut conn, &env_a, "tester-2".to_owned())
+            .await
+            .is_err()
+    );
+    assert!(
+        identity::get_by_value(&mut conn, &env_a, "someone-else".to_owned())
+            .await
+            .is_ok(),
+        "non-matching identity should survive"
+    );
+    assert!(
+        identity::get_by_value(&mut conn, &env_b, "tester-1".to_owned())
+            .await
+            .is_ok(),
+        "identity with the same value in a different environment should survive"
+    );
+}
+
 #[sqlx::test]
 async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) {
     let (_project_a, env_a) = create_context(&mut conn).await;

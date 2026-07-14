@@ -5,7 +5,7 @@
 //! | `IDENTITY add`                 | [`add`]         | Create or upsert an identity with optional traits.  |
 //! | `IDENTITY list`                | [`list`]        | List up to 10 identities, optionally filtered.      |
 //! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
-//! | `IDENTITY delete`              | [`delete`]      | Delete an identity by its string value.             |
+//! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
 //! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
 //! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
@@ -115,22 +115,24 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Delete an identity by its exact string value.
+/// Delete identities matching a pattern, within the current project/environment.
 ///
-/// Expected args: `<identity>`
+/// Expected args: `<pattern>`
+///
+/// `pattern` uses `*` as a wildcard (e.g. "user-*", or "*" to delete every identity in the
+/// environment). A pattern without `*` deletes only the identity with that exact value.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(identity_str) = args.get(1) {
+    if let Some(pattern) = args.get(1) {
         let ctx = session.context.read().unwrap();
-        let identity = resolve_identity(&ctx, identity_str)?;
         ctx.client.delete(
             ctx.env_resource()
-                .subpath(format!("/identities/{}", identity.value)),
+                .subpath(format!("/identities?pattern={pattern}")),
         )?;
 
-        println!("Identity removed.");
+        println!("Identities matching '{pattern}' removed.");
         return Ok(());
     }
-    bail!("No identity provided.")
+    bail!("No pattern provided.")
 }
 
 /// Switch into an identity context.

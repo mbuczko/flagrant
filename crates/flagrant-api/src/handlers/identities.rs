@@ -189,3 +189,38 @@ pub async fn delete(
     identity::delete(&mut conn, identity).await?;
     Ok(Json(()))
 }
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub(crate) struct ClearIdentitiesParams {
+    /// Pattern matching identities to delete. Use `*` as a wildcard (e.g. "user-*", or "*"
+    /// to match every identity in the environment).
+    pattern: String,
+}
+
+/// Deletes every identity (and its traits/variant assignments) in this environment whose
+/// value matches `pattern`.
+#[utoipa::path(
+    delete,
+    path = "/projects/{project}/envs/{environment}/identities",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ClearIdentitiesParams
+    ),
+    responses(
+        (status = 200, description = "Matching identities deleted")
+    ),
+    tag = "identities"
+)]
+pub async fn clear(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name)): Path<(String, String)>,
+    Query(params): Query<ClearIdentitiesParams>,
+) -> Result<Json<()>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let like_pattern = params.pattern.replace('*', "%");
+
+    identity::clear_matching(&mut conn, &env, &like_pattern).await?;
+    Ok(Json(()))
+}

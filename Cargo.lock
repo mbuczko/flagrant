@@ -708,6 +708,7 @@ name = "flagrant-bombardier"
 version = "0.0.6"
 dependencies = [
  "anyhow",
+ "argh",
  "flagrant-client",
  "flagrant-types",
  "indicatif",

@@ -65,6 +65,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         // Identities
         .route("/envs/:environment/identities", get(identities::list))
         .route("/envs/:environment/identities", post(identities::create))
+        .route("/envs/:environment/identities", delete(identities::clear))
         .route(
             "/envs/:environment/identities/:identity",
             get(identities::fetch),
