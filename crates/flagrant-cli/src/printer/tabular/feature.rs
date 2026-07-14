@@ -278,7 +278,7 @@ impl Tabular for Feature {
             }
         }
 
-        // Pending segment set for a segment not yet in committed — show as new added line.
+        // Pending segment set for a segment not yet in committed - show as new added line.
         if !pending_seg_shown && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
         {
             let with_control = with_control_remainder(pending_weights, &self.variants);

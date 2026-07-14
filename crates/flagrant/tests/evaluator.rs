@@ -271,7 +271,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
     );
 }
 
-/// Two segments override the same feature and both match the identity — the first-created
+/// Two segments override the same feature and both match the identity - the first-created
 /// (lower segment_id) wins.
 #[sqlx::test]
 async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection<Sqlite>) {
@@ -535,7 +535,7 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
         segment,
         vec![
             add_group(Some(GroupConnector::And)),
-            // group-2 has no rules — AND with an always-false group.
+            // group-2 has no rules - AND with an always-false group.
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
                 environment_id: environment.id,
@@ -605,7 +605,7 @@ async fn segment_with_zero_groups_never_matches(mut conn: PoolConnection<Sqlite>
     assert!(result.is_none());
 }
 
-/// A `Trait` driver rule matches against a trait loaded from the DB — exercising the real
+/// A `Trait` driver rule matches against a trait loaded from the DB - exercising the real
 /// `IdentityWithTraits` shape (not the synthetic one used by evaluator.rs's unit tests).
 #[sqlx::test]
 async fn trait_driver_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>) {

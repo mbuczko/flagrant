@@ -271,7 +271,7 @@ pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<
         let raw: String = if let Some(raw) = args.get(1) {
             raw.to_string()
         } else {
-            // No value provided — open editor with current bare value (without type prefix).
+            // No value provided - open editor with current bare value (without type prefix).
             // Prefer any already-staged value over the committed one.
             let current_fv = ctx
                 .feature_patch

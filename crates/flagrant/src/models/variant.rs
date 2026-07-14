@@ -90,7 +90,7 @@ pub async fn create(
 }
 
 /// Updates a variant's value (shared across environments) and weight (environment-specific).
-/// Rejects updates to control variants — use `feature::update` to change the control value.
+/// Rejects updates to control variants - use `feature::update` to change the control value.
 /// Returns the variant's `feature_id` for use in post-update weight balancing.
 async fn update(
     conn: &mut SqliteConnection,
@@ -212,7 +212,7 @@ pub async fn get_by_identity<T: AsRef<str>>(
 
 /// Returns all variants for a feature in the given environment, including values and weights.
 /// `segment_id` scopes which weight/accumulator row is attached to each variant (`None` =
-/// organic default weights; `Some(id)` = that segment's override weights, sparse — variants
+/// organic default weights; `Some(id)` = that segment's override weights, sparse - variants
 /// without an explicit override resolve to weight 0 / accumulator 0).
 /// Errors if the feature has no default value set in this environment (which should never happen).
 pub async fn get_for_feature(
@@ -334,7 +334,7 @@ pub(crate) async fn set_segment_weight(
 /// mirroring [`recalculate_control_weight`] for the organic case. Should be called after
 /// all of a segment's explicit override weights have been written via [`set_segment_weight`].
 ///
-/// Unlike the organic path, this does not migrate already-assigned identities — segment-scoped
+/// Unlike the organic path, this does not migrate already-assigned identities - segment-scoped
 /// identity assignment tracking doesn't exist yet.
 pub(crate) async fn balance_segment_control_weight(
     conn: &mut SqliteConnection,

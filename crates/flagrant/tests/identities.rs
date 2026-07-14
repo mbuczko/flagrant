@@ -379,7 +379,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
         .unwrap();
 
     // No override yet → get_variant_for_identity may return Some (naturally distributed) or None
-    // (before first request) — either way we check after the override below.
+    // (before first request) - either way we check after the override below.
 
     // Pin alice to the non-control variant explicitly
     identity::override_variant(&mut conn, &environment, &alice, feature.id, variant.id)
@@ -469,7 +469,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
     .await
     .unwrap();
 
-    // Distribute 10 identities — roughly half will land on each variant
+    // Distribute 10 identities - roughly half will land on each variant
     for n in 1..=10 {
         let ident = identity::get_or_create_by_value(&mut conn, &environment, format!("ident_{n}"))
             .await
@@ -490,7 +490,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         .await
         .unwrap();
 
-    // Drop alt variant weight to 0 — this migrates all non-pinned identities away from it
+    // Drop alt variant weight to 0 - this migrates all non-pinned identities away from it
     let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id, None)
         .await
         .unwrap();
@@ -504,7 +504,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
     .await
     .unwrap();
 
-    // alice is pinned — get_identity_variants must NOT redistribute her
+    // alice is pinned - get_identity_variants must NOT redistribute her
     let iv = identity::get_identity_variants(&mut conn, &environment, &alice)
         .await
         .unwrap();
@@ -689,7 +689,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
     .await
     .unwrap();
 
-    // list_variant_assignments is what IDENTITY describe calls — it must surface the
+    // list_variant_assignments is what IDENTITY describe calls - it must surface the
     // pinned variant's value, not fall back to the control variant.
     let assignments = identity::list_variant_assignments(&mut conn, &environment, &alice)
         .await

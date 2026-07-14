@@ -78,7 +78,7 @@ async fn same_control_value_is_allowed_across_environments(mut conn: PoolConnect
 
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
-    // Both environments set the same control value — this must not violate the unique constraint.
+    // Both environments set the same control value - this must not violate the unique constraint.
     feature::update_one(&mut conn, &environment1, &feature)
         .value(value.clone())
         .update()
@@ -287,7 +287,7 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
 async fn delete_feature_with_multiple_environments(mut conn: PoolConnection<Sqlite>) {
     // Feature creation seeds a control variant per environment. Deletion from one
     // environment must still remove all control variants (and their weights) across
-    // every environment — otherwise the FK on variant_weights blocks variants deletion.
+    // every environment - otherwise the FK on variant_weights blocks variants deletion.
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
     let feature = create_feature(&mut conn, &environment1, "foo").await;

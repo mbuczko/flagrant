@@ -54,6 +54,7 @@ pub async fn create(
         description: row.description,
         groups: vec![],
     };
+
     segment.validate()?;
     Ok(segment)
 }
@@ -134,7 +135,7 @@ pub async fn get_variant_weights(
 }
 
 /// Returns every segment overriding this feature+environment as `(segment_id, segment_name,
-/// weights)`, in segment_id ascending order (creation order — the query itself is ordered
+/// weights)`, in segment_id ascending order (creation order - the query itself is ordered
 /// this way, so no re-sort is needed here). `weights` includes the control variant's
 /// auto-balanced remainder.
 ///
@@ -218,7 +219,7 @@ pub async fn add_group(
 
     let next_position = existing.iter().map(|g| g.position).max().unwrap_or(-1) + 1;
 
-    // Labels are never reused — pick MAX(N) + 1 across all existing labels.
+    // Labels are never reused - pick MAX(N) + 1 across all existing labels.
     let max_label_num = existing
         .iter()
         .filter_map(|g| g.label.strip_prefix("group-"))

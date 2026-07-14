@@ -225,7 +225,7 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 
 /// Resets both feature and identity contexts, clearing all state.
 ///
-/// Refuses to run if there are any uncommitted staged changes — run `COMMIT` or
+/// Refuses to run if there are any uncommitted staged changes - run `COMMIT` or
 /// `DISCARD` first to avoid losing work.
 pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     {

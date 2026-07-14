@@ -83,7 +83,7 @@ impl<'a> FeatureUpdate<'a> {
 ///
 /// The default value is seeded as a control variant in every environment that already
 /// exists in the project, so the feature is immediately usable everywhere. Each
-/// environment owns its control variant independently — subsequent value changes
+/// environment owns its control variant independently - subsequent value changes
 /// affect only the environment they are applied to.
 pub async fn create(
     conn: &mut SqliteConnection,
@@ -179,7 +179,7 @@ pub async fn get_all(
     let has_excluded = tags_excluded.as_ref().map(|t| !t.is_empty());
     let has_pattern = pattern.is_some();
 
-    // One row per (feature, variant) — aggregate into features below.
+    // One row per (feature, variant) - aggregate into features below.
     let rows = SQLFeatures::fetch_features_for_environment(
         conn,
         |cond_id| match cond_id {

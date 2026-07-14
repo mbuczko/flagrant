@@ -17,13 +17,13 @@ use crate::models::segment;
 ///
 /// Distinct from `flagrant_types::TraitValue` on purpose: `TraitValue` is the domain type
 /// for an *identity trait's* stored value. `Identity`/`Environment` drivers don't resolve to
-/// a trait at all — they read the identity's own value / the environment's name — so
+/// a trait at all - they read the identity's own value / the environment's name - so
 /// wrapping them in `TraitValue` would misrepresent them as trait data. `ActualValue` is the
 /// evaluator's own "comparable value" shape; a `Trait(name)` driver converts the identity's
 /// `TraitValue` into one.
 ///
 /// Borrows rather than owns (`Str(&'a str)`, not `Str(String)`) so resolving a driver never
-/// needs to clone the identity's value, the environment's name, or a trait's string —
+/// needs to clone the identity's value, the environment's name, or a trait's string -
 /// everything it points at already lives in `Environment`/`IdentityWithTraits`/`SegmentRule`
 /// for at least as long as one rule evaluation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -108,7 +108,7 @@ fn rule_matches(rule: &SegmentRule, environment: &Environment, identity: &Identi
 }
 
 /// Resolves the driver to the concrete value from the request context. `Identity` and
-/// `Environment` are plain contextual strings, not trait data — only `Trait(name)` involves
+/// `Environment` are plain contextual strings, not trait data - only `Trait(name)` involves
 /// an actual `TraitValue`, converted here into the evaluator's own `ActualValue`.
 fn resolve_actual<'a>(
     driver: &SegmentDriver,
@@ -170,7 +170,7 @@ fn parse_as<'a>(actual: &ActualValue, raw: &'a str) -> Option<ActualValue<'a>> {
     }
 }
 
-/// Ordering between two `ActualValue`s — only Int/Int and Float/Float are comparable; every
+/// Ordering between two `ActualValue`s - only Int/Int and Float/Float are comparable; every
 /// other pairing (including Str/Str, Bool/Bool) returns `None`, so `GreaterThan`/`LowerThan`
 /// variants never match on `Str` or `Bool` actual values.
 fn values_cmp(a: &ActualValue, b: &ActualValue) -> Option<Ordering> {
@@ -181,7 +181,7 @@ fn values_cmp(a: &ActualValue, b: &ActualValue) -> Option<Ordering> {
     }
 }
 
-/// Plain string form for `Contains`/`DoesNotContain` — not `TraitValue`'s `Display` (which
+/// Plain string form for `Contains`/`DoesNotContain` - not `TraitValue`'s `Display` (which
 /// prefixes with `"int::"`/`"bool::"`/etc). E.g. `Int(42)` -> `"42"`. Borrows for the `Str`
 /// case (the common one); only `Int`/`Float`/`Bool` need to allocate a formatted string.
 fn as_plain_string<'a>(actual: &ActualValue<'a>) -> Cow<'a, str> {

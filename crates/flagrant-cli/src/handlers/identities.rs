@@ -270,7 +270,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     let variant_value = match existing_value {
         Some(v) => v,
         None => {
-            // No matching variant — stage a new one with 0% weight.
+            // No matching variant - stage a new one with 0% weight.
             let mut ctx = session.context.write().unwrap();
             ctx.get_or_init_pending()
                 .variants
@@ -287,7 +287,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         }
     };
 
-    // Stage the pin — replaces any existing override for this feature.
+    // Stage the pin - replaces any existing override for this feature.
     let mut ctx = session.context.write().unwrap();
     let pending = ctx.get_or_init_identity_patch();
 

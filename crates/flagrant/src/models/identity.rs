@@ -181,7 +181,7 @@ pub async fn update_traits(
     get_by_value_with_traits(conn, environment, identity.value).await
 }
 
-/// Applies a patch to an identity — applies granular trait operations
+/// Applies a patch to an identity - applies granular trait operations
 /// and pins the identity to specific variants (overrides) per feature.
 pub async fn patch(
     conn: &mut SqliteConnection,
