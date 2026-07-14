@@ -8,6 +8,10 @@ Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day thr
 
 Flagrant also doubles as a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
 
+## Demo
+
+A recording of a sample CLI session is available at [`recording/session.mov`](recording/session.mov).
+
 ## What's there today
 
 - **Multiple environments** per project (prod, dev, staging, ...), each with its own control values and weights
