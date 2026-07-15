@@ -271,9 +271,9 @@ impl Tabular for Feature {
                 .collect::<Vec<_>>()
                 .join(", ");
             let content = if rest > 0 {
-                format!("{}: {} (+{} more)", "identities".bright_blue(), line, rest)
+                format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
             } else {
-                format!("{}: {}", "identities".bright_blue(), line)
+                format!("{} › {}", "identity".bright_blue(), line)
             };
             // overrides_lines and overrides_stages must stay in lockstep (one stage entry
             // per content line) since they're joined by "\n" and rendered as aligned rows
@@ -309,8 +309,8 @@ impl Tabular for Feature {
                                 with_control_remainder(pending_weights, &self.variants);
                             let parts = segment_weight_parts(&with_control, &self.variants);
                             let line = format!(
-                                "{} {}: {}",
-                                "(segment)".dimmed(),
+                                "{}  › {} {}",
+                                "segment".bright_blue(),
                                 name.dimmed(),
                                 parts.join(", ")
                             )
@@ -321,7 +321,7 @@ impl Tabular for Feature {
                         Some((_, None)) => {
                             let parts = segment_weight_parts(weights, &self.variants);
                             let line = format!(
-                                "{}: {} {}",
+                                "{}  › {} {}",
                                 "segment".bright_blue(),
                                 name.dimmed(),
                                 parts.join(", ")
@@ -337,7 +337,7 @@ impl Tabular for Feature {
                 } else {
                     let parts = segment_weight_parts(weights, &self.variants);
                     overrides_lines.push(format!(
-                        "{}: {} {}",
+                        "{}  › {} {}",
                         "segment".bright_blue(),
                         name.dimmed(),
                         parts.join(", ")
@@ -353,7 +353,7 @@ impl Tabular for Feature {
             let with_control = with_control_remainder(pending_weights, &self.variants);
             let parts = segment_weight_parts(&with_control, &self.variants);
             let line = format!(
-                "{}: {} {}",
+                "{}  › {} {}",
                 "segment".bright_blue(),
                 seg_name.green(),
                 parts.join(", ")

@@ -285,6 +285,7 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
 ///
 /// **Inline mode** (`SET override <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
+///
 /// Missing entries are stored absent, which the server treats as weight=0.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Collect everything we need under the read lock, then release before writing.

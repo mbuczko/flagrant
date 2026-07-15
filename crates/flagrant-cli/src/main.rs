@@ -142,11 +142,7 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.args("add · list · use"),
         // Features
-        Command::Feature.op(
-            "list",
-            "status|tag|[pattern]",
-            handlers::features::list,
-        ),
+        Command::Feature.op("list", "status|tag|[pattern]", handlers::features::list),
         Command::Feature.op("add", "feature value", handlers::features::add),
         Command::Feature.op("describe", "feature", handlers::features::describe),
         Command::Feature.op("delete", "feature", handlers::features::delete),
@@ -305,7 +301,7 @@ fn main() -> anyhow::Result<()> {
         Command::Unset.args_in_context("distribution · tags", in_context!(feature_ctx)),
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
-        Command::Segment.op("list", "", handlers::segments::list),
+        Command::Segment.op("list", "[pattern]", handlers::segments::list),
         Command::Segment.op("describe", "[name]", handlers::segments::describe),
         Command::Segment.op("delete", "name", handlers::segments::delete),
         Command::Segment.op("use", "name", handlers::segments::r#use),
@@ -317,7 +313,6 @@ fn main() -> anyhow::Result<()> {
             handlers::groups::add,
             in_context!(segment_ctx),
         ),
-        Command::Group.op_in_context("list", "", handlers::groups::list, in_context!(segment_ctx)),
         Command::Group.op_in_context(
             "describe",
             "label",
@@ -330,7 +325,7 @@ fn main() -> anyhow::Result<()> {
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
-        Command::Group.args_in_context("add · list · describe · delete", in_context!(segment_ctx)),
+        Command::Group.args_in_context("add · describe · delete", in_context!(segment_ctx)),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
