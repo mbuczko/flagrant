@@ -296,6 +296,12 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::unset_override,
             in_context!(identity_ctx),
         ),
+        Command::Unset.op_in_context(
+            "override",
+            "",
+            handlers::segments::unset_override,
+            in_context!(segment_ctx),
+        ),
         Command::Unset.args_in_context(
             "distribution · tags · override",
             in_context!(feature_ctx, segment_ctx),
