@@ -372,7 +372,6 @@ impl Tabular for Feature {
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
                 vec!["TAGS".to_string(), tags_str, tags_stage],
-                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec![
@@ -381,17 +380,18 @@ impl Tabular for Feature {
                     overrides_stage_str,
                 ]);
             }
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
             rows
         } else {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
                 vec!["TAGS".to_string(), tags_str],
-                vec!["DESCRIPTION".to_string(), desc_str],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec!["OVERRIDDEN-BY".to_string(), overrides_str]);
             }
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
             rows
         };
         table.render(rows);

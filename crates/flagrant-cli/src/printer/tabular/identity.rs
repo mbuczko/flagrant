@@ -160,7 +160,7 @@ impl Tabular for IdentityWithTraits {
             ]];
             if has_variants {
                 rows.push(vec![
-                    "OVERRIDES".to_string(),
+                    "VARIANTS".to_string(),
                     variants_str,
                     variants_stage_str,
                 ]);
@@ -182,7 +182,7 @@ impl Tabular for IdentityWithTraits {
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
             if has_variants {
-                rows.push(vec!["OVERRIDES".to_string(), variants_str]);
+                rows.push(vec!["VARIANTS".to_string(), variants_str]);
             }
             table.render(rows);
         }
@@ -190,7 +190,7 @@ impl Tabular for IdentityWithTraits {
         let has_any_override =
             ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
         if has_any_override {
-            println!("  {} variant overridden\n", "★".dimmed());
+            println!("  {} variant explicitly overridden\n", "★".dimmed());
         }
     }
 }
