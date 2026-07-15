@@ -190,7 +190,7 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
 /// The value is auto-typed (bool → i32 → f32 → str).
 pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(arg) = args.get(1)
-        && let Some((name, value)) = arg.split_once(':')
+        && let Some((name, value)) = arg.split_once('=')
     {
         let mut ctx = session.context.write().unwrap();
         if let Some(identity) = &ctx.identity {

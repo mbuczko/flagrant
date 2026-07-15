@@ -205,8 +205,8 @@ fn format_trait_value(trait_name: &str, value: &Option<TraitValue>, with_type: b
     };
     if with_type {
         let padded = format!("{:<6}", type_label);
-        format!("{} : {trait_name}:{val}", padded.dimmed())
+        format!("{} : {trait_name}={val}", padded.dimmed())
     } else {
-        format!("{}:{val}", trait_name.bright_blue())
+        format!("{}={val}", trait_name.bright_blue())
     }
 }

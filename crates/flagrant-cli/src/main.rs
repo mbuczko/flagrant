@@ -234,7 +234,7 @@ fn main() -> anyhow::Result<()> {
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "trait",
-            "name:value",
+            "name=value",
             handlers::identities::set_trait,
             has_identity_ctx,
         ),
