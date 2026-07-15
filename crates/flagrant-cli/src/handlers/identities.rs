@@ -475,6 +475,11 @@ fn build_override_editor_content(
     let variants = effective::effective_variants(feature, patch);
     let mut content = String::new();
 
+    content.push_str(
+        "# Leave exactly ONE variant's value uncommented below (or type a brand new value)\n\
+         # to pin this identity to it. Comment out or delete the rest.\n\n",
+    );
+
     for (idx, e) in (1..).zip(variants.iter().filter(|e| !e.is_control && !e.is_deleted)) {
         let staged = if e.value_modified || e.is_staged_add {
             " (staged)"
