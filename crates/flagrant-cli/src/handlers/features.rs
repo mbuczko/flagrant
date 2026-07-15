@@ -433,15 +433,14 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
 /// List features in the current environment.
 ///
-/// Accepts optional filter arguments of the form `tag:a,b`, `status:active`,
-/// and `state:on`, plus a bare pattern string for name matching.
+/// Accepts optional filter arguments of the form `tag:a,b` and `status:on|off|archived`,
+/// plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx: std::sync::RwLockReadGuard<'_, Connection> = session.context.read().unwrap();
     let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);
-    let archived: String = concat_values_for_arg("archived", args);
-    let enabled = concat_values_for_arg("enabled", args);
+    let status = concat_values_for_arg("status", args);
     let pat = args[1..]
         .iter()
         .find(|a| !a.contains(":"))
@@ -451,7 +450,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Feature::list(
         ctx.client
             .get::<Vec<Feature>>(res.subpath(format!(
-                "/features?tags={tags}&archived={archived}&enabled={enabled}&pattern={pat}"
+                "/features?tags={tags}&status={status}&pattern={pat}"
             )))?
             .as_ref(),
     );

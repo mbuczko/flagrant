@@ -144,7 +144,7 @@ fn main() -> anyhow::Result<()> {
         // Features
         Command::Feature.op(
             "list",
-            "archived|enabled|tag|[pattern]",
+            "status|tag|[pattern]",
             handlers::features::list,
         ),
         Command::Feature.op("add", "feature value", handlers::features::add),

@@ -198,7 +198,11 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 })
                                 .collect::<Vec<_>>()
                         }
-                        None => filter_by_prefix(&["tag", "enabled", "archived"], prefix),
+                        Some(("status", val)) => filter_by_prefix(&["on", "off", "archived"], val)
+                            .into_iter()
+                            .map(|v| format!("status:{v}"))
+                            .collect::<Vec<_>>(),
+                        None => filter_by_prefix(&["tag", "status"], prefix),
                         _ => vec![],
                     },
                     _ => vec![],

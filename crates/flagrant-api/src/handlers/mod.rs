@@ -26,13 +26,6 @@ pub fn parse_pattern(pattern: Option<String>, prefix: Option<String>) -> Option<
     }
 }
 
-/// Parses status parameter: converts non-empty string to bool (true if "active").
-pub fn parse_bool(status: Option<String>) -> Option<bool> {
-    status
-        .filter(|s| !s.is_empty())
-        .map(|s| s == "true" || s == "on" || s == "yes" || s == "t")
-}
-
 /// Parses a comma-separated parameter (e.g. tags or trait names) into included and
 /// excluded lists. Entries prefixed with '-' are excluded, others are included.
 pub fn parse_included_excluded<'a>(values: Option<&'a String>) -> IncludedExcludedTuple<'a> {
