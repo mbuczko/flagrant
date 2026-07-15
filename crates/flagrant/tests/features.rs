@@ -5,6 +5,7 @@ use flagrant_types::{
     FeatureValue,
     payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
+use smallvec::smallvec;
 use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::common::create_feature;
@@ -1131,4 +1132,66 @@ async fn patch_tags_removes_only_given_tag(mut conn: PoolConnection<Sqlite>) {
             .await
             .is_ok()
     );
+}
+
+#[sqlx::test]
+async fn get_all_filters_by_included_and_excluded_tags(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    let ui_beta = create_feature(&mut conn, &environment, "a").await;
+    let patch = FeaturePatch {
+        tags: vec![
+            TagPatchOp::Add("ui".to_owned()),
+            TagPatchOp::Add("beta".to_owned()),
+        ],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &ui_beta, patch)
+        .await
+        .unwrap();
+
+    let ui_only = create_feature(&mut conn, &environment, "b").await;
+    let patch = FeaturePatch {
+        tags: vec![TagPatchOp::Add("ui".to_owned())],
+        ..Default::default()
+    };
+    feature::patch(&mut conn, &environment, &ui_only, patch)
+        .await
+        .unwrap();
+
+    let untagged = create_feature(&mut conn, &environment, "c").await;
+
+    // Excluding "beta" should drop only the feature tagged with it, keeping the rest.
+    let results = feature::get_all(
+        &mut conn,
+        &environment,
+        None,
+        None,
+        None,
+        None,
+        Some(smallvec!["beta"]),
+    )
+    .await
+    .unwrap();
+    let names: Vec<_> = results.iter().map(|f| f.name.clone()).collect();
+    assert!(names.contains(&ui_only.name));
+    assert!(names.contains(&untagged.name));
+    assert!(!names.contains(&ui_beta.name));
+
+    // Including "ui" should return only features carrying that tag.
+    let results = feature::get_all(
+        &mut conn,
+        &environment,
+        None,
+        None,
+        None,
+        Some(smallvec!["ui"]),
+        None,
+    )
+    .await
+    .unwrap();
+    let names: Vec<_> = results.iter().map(|f| f.name.clone()).collect();
+    assert!(names.contains(&ui_beta.name));
+    assert!(names.contains(&ui_only.name));
+    assert!(!names.contains(&untagged.name));
 }

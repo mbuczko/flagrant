@@ -220,8 +220,6 @@ pub async fn get_all(
     let mut result: Vec<Feature> = Vec::new();
     let mut id_to_idx: HashMap<i32, usize> = HashMap::new();
 
-    print!("ROWS: {}", rows.len());
-
     for (feature, variant) in rows {
         if let Some(&idx) = id_to_idx.get(&feature.id) {
             if let Some(v) = variant {

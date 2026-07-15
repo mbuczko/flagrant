@@ -23,14 +23,7 @@ GROUP BY f.feature_id
 -- :doc Returns all features for given environment, each with all its variants.
 WITH feature_tag_groups AS (
   SELECT feature_id, GROUP_CONCAT(tag, ',') AS tags
-  FROM feature_tags AS ft
-  WHERE 1=1
---~{ tags_included
-  AND ft.tag IN (SELECT value FROM json_each($6))
---~}
---~{ tags_excluded
-  AND ft.tag NOT IN (SELECT value FROM json_each($7))
---~}
+  FROM feature_tags
   GROUP BY feature_id
 )
 SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.archived_at,
@@ -50,6 +43,18 @@ AND f.is_enabled = $4
 --~}
 --~{ pattern
 AND f.name LIKE($5)
+--~}
+--~{ tags_included
+AND EXISTS (
+  SELECT 1 FROM feature_tags ft, json_each($6) je
+  WHERE ft.feature_id = f.feature_id AND ft.tag = je.value
+)
+--~}
+--~{ tags_excluded
+AND NOT EXISTS (
+  SELECT 1 FROM feature_tags ft, json_each($7) je
+  WHERE ft.feature_id = f.feature_id AND ft.tag = je.value
+)
 --~}
 ORDER BY f.is_enabled DESC, f.archived_at ASC, f.name, weight DESC
 
