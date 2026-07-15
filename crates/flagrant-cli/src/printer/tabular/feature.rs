@@ -77,10 +77,10 @@ impl Tabular for Feature {
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
-                Layout::Expandable(30),
+                Layout::Expandable(40),
                 Align::Left,
             )
-            .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
+            .add_column_named_with_align("TAGS".into(), Layout::Expandable(30), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows)
@@ -108,7 +108,7 @@ impl Tabular for Feature {
                 effective.join(", ").yellow().to_string()
             }
         } else {
-            self.tags.to_string().bright_blue().to_string()
+            self.tags.to_string().blue().to_string()
         };
         let tags_stage = if has_tag_ops {
             "▪ updating".yellow().to_string()
@@ -321,8 +321,8 @@ impl Tabular for Feature {
                         Some((_, None)) => {
                             let parts = segment_weight_parts(weights, &self.variants);
                             let line = format!(
-                                "{} {}: {}",
-                                "(segment)".dimmed(),
+                                "{}: {} {}",
+                                "segment".bright_blue(),
                                 name.dimmed(),
                                 parts.join(", ")
                             )
@@ -337,8 +337,8 @@ impl Tabular for Feature {
                 } else {
                     let parts = segment_weight_parts(weights, &self.variants);
                     overrides_lines.push(format!(
-                        "{} {}: {}",
-                        "(segment)".dimmed(),
+                        "{}: {} {}",
+                        "segment".bright_blue(),
                         name.dimmed(),
                         parts.join(", ")
                     ));
@@ -353,8 +353,8 @@ impl Tabular for Feature {
             let with_control = with_control_remainder(pending_weights, &self.variants);
             let parts = segment_weight_parts(&with_control, &self.variants);
             let line = format!(
-                "{} {}: {}",
-                "(segment)".dimmed(),
+                "{}: {} {}",
+                "segment".bright_blue(),
                 seg_name.green(),
                 parts.join(", ")
             )
