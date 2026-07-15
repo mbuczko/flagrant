@@ -34,7 +34,10 @@ use crate::{
         internal::{concat_values_for_arg, index, stage},
         open_in_editor,
     },
-    printer::tabular::{Tabular, feature::OverridesContext},
+    printer::tabular::{
+        Tabular,
+        feature::{IdentityPending, OverridesContext},
+    },
 };
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
@@ -170,12 +173,12 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 
         // Any recent unpins (discarded overrides)?
         if ipatch.unpins.contains(&feature.name) {
-            return Some(identity_value);
+            return Some(IdentityPending::Unpin(identity_value));
         }
 
         // ...or newly added overrides?
         if ipatch.overrides.iter().any(|o| o.feature_name == feature.name) {
-            return Some(identity_value);
+            return Some(IdentityPending::Override(identity_value));
         }
         None
     });

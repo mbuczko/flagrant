@@ -109,19 +109,46 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         let overrides = fetch_overridden_features(segment.id, session);
         segment.describe(None, &SegmentContext { overrides });
     } else {
-        let (segment_id, patch) = {
+        let (segment_id, in_context_feature_id) = {
             let ctx = session.context.read().unwrap();
             let segment = ctx.segment.as_ref().ok_or_else(|| {
                 anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
             })?;
-            (segment.id, ctx.segment_patch.clone())
+            (segment.id, ctx.feature.as_ref().map(|f| f.id))
         };
-        let overrides = fetch_overridden_features(segment_id, session);
+        let mut overrides = fetch_overridden_features(segment_id, session);
 
+        // Nothing mutates the session between the lock above and the one below - just a
+        // read-only HTTP fetch - so it's safe to defer reading `segment_patch` to here
+        // rather than cloning it across the gap.
         let ctx = session.context.read().unwrap();
         let segment = ctx.segment.as_ref().unwrap();
+        let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+
+        // A brand new override (not yet committed) won't appear in `overrides` at all -
+        // add a placeholder (empty weights) so the printer can still show it as pending,
+        // rather than silently omitting it until COMMIT. `SET override` requires a
+        // feature+segment context and switching feature is blocked while this patch is
+        // pending, so the in-context feature is guaranteed to be the one it refers to -
+        // at most one such placeholder can ever be needed.
+        if let Some(feature_id) = in_context_feature_id
+            && !overrides.iter().any(|o| o.feature_id == feature_id)
+            && patch.iter().flat_map(|p| &p.ops).any(|op| {
+                matches!(op,
+                    SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. } if *fid == feature_id
+                )
+            })
+            && let Some(feature) = ctx.feature.as_ref()
+        {
+            overrides.push(SegmentFeatureOverride {
+                feature_id,
+                feature_name: feature.name.clone(),
+                weights: vec![],
+            });
+        }
+
         segment.describe(
-            patch.as_ref().filter(|p| !p.is_empty()),
+            patch,
             &SegmentContext { overrides },
         );
     }

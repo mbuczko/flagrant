@@ -74,7 +74,7 @@ impl Tabular for Segment {
             eff.description.as_deref().unwrap_or("").to_string()
         };
         let desc_stage = if eff.description_modified {
-            "▪ updated".yellow().to_string()
+            "▪ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -95,7 +95,7 @@ impl Tabular for Segment {
                 // Three separate pushes rather than one entry with embedded "\n"s: the
                 // stage column height is set to group_stage.len(), so every visual line
                 // must correspond to exactly one vector element. Otherwise the column is
-                // sized too small and trailing annotations (e.g. "- deleted") get cut off.
+                // sized too small and trailing annotations (e.g. "deleting") get cut off.
                 group_lines.push(String::new());
                 group_stage.push(String::new());
                 group_lines.push(format!(" {sym_colored}"));
@@ -118,9 +118,9 @@ impl Tabular for Segment {
                 .unwrap_or_default();
             group_lines.push(format!("{frame} {label_colored}{desc_part}"));
             group_stage.push(if group.is_deleted {
-                "- deleted".red().to_string()
+                "▪ deleting".red().to_string()
             } else if group.is_staged_add {
-                "+ added".green().to_string()
+                "▪ adding".green().to_string()
             } else {
                 String::new()
             });
@@ -156,7 +156,7 @@ impl Tabular for Segment {
                                 cmp.dimmed(),
                                 r.value.dimmed(),
                                 if r.is_deleted {
-                                    "- deleted".red().to_string()
+                                    "▪ deleting".red().to_string()
                                 } else {
                                     String::new()
                                 },
@@ -168,7 +168,7 @@ impl Tabular for Segment {
                                 driver.bright_blue(),
                                 cmp.dimmed(),
                                 r.value.green(),
-                                "+ added".green().to_string(),
+                                "▪ adding".green().to_string(),
                             )
                         } else {
                             (
@@ -206,22 +206,60 @@ impl Tabular for Segment {
 
         let groups_str = group_lines.join("\n");
 
-        let overrides_lines: Vec<String> = ctx
-            .overrides
-            .iter()
-            .map(|o| {
-                let parts = overridden_variant_parts(&o.weights);
-                format!(
-                    "{} {}: {}",
-                    "(feature)".dimmed(),
-                    o.feature_name.dimmed(),
-                    parts.join(", ")
-                )
-            })
-            .collect();
-        let overrides_str = overrides_lines.join("\n");
+        // overrides_lines and overrides_stages must stay in lockstep (one stage entry per
+        // content line) since they're joined by "\n" and rendered as aligned rows in
+        // adjacent table columns.
+        let mut overrides_lines: Vec<String> = Vec::new();
+        let mut overrides_stages: Vec<String> = Vec::new();
 
-        let has_staged = !desc_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
+        for o in &ctx.overrides {
+            let pending_op = patch.into_iter().flat_map(|p| &p.ops).find(|op| {
+                matches!(op,
+                    SegmentPatchOp::SetFeatureOverride { feature_id, .. }
+                    | SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
+                    if *feature_id == o.feature_id
+                )
+            });
+
+            let parts = overridden_variant_parts(&o.weights);
+            let plain_line = format!(
+                "{} {}: {}",
+                "(feature)".dimmed(),
+                o.feature_name.dimmed(),
+                parts.join(", ")
+            );
+
+            match pending_op {
+                Some(SegmentPatchOp::UnsetFeatureOverride { .. }) => {
+                    overrides_lines.push(plain_line.dimmed().to_string());
+                    overrides_stages.push("▪ removing".red().to_string());
+                }
+                Some(SegmentPatchOp::SetFeatureOverride { .. }) if o.weights.is_empty() => {
+                    // Newly staged override for a feature with no committed weights yet.
+                    let line = format!("{} {}: (pending)", "(feature)".dimmed(), o.feature_name)
+                        .green()
+                        .to_string();
+                    overrides_lines.push(line);
+                    overrides_stages.push("▪ adding".green().to_string());
+                }
+                Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
+                    overrides_lines.push(plain_line.yellow().to_string());
+                    overrides_stages.push("▪ updating".yellow().to_string());
+                }
+                _ => {
+                    overrides_lines.push(plain_line);
+                    overrides_stages.push(String::new());
+                }
+            }
+        }
+
+        let overrides_str = overrides_lines.join("\n");
+        let overrides_stage_str = overrides_stages.join("\n");
+        let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
+
+        let has_staged = !desc_stage.is_empty()
+            || group_stage.iter().any(|s| !s.is_empty())
+            || overrides_has_staged;
         let rules_stage_str = group_stage.join("\n");
 
         let table = if has_staged {
@@ -236,7 +274,7 @@ impl Tabular for Segment {
                 )
                 .add_column(
                     None,
-                    Layout::Fixed(12),
+                    Layout::Fixed(14),
                     Align::Left,
                     Overflow::Truncate,
                     group_stage.len().max(1),
@@ -267,7 +305,11 @@ impl Tabular for Segment {
                 vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
             ];
             if !overrides_str.is_empty() {
-                rows.push(vec!["OVERRIDES".to_string(), overrides_str, String::new()]);
+                rows.push(vec![
+                    "OVERRIDES".to_string(),
+                    overrides_str,
+                    overrides_stage_str,
+                ]);
             }
             rows
         } else {
@@ -347,7 +389,7 @@ impl Tabular for SegmentGroup {
         };
 
         let joiner_stage = if is_deleted {
-            "- deleted".red().to_string()
+            "▪ deleting".red().to_string()
         } else {
             String::new()
         };
@@ -369,7 +411,7 @@ impl Tabular for SegmentGroup {
 
         group_lines.push(format!("{frame} {label_colored}{desc_part}"));
         group_stage.push(if is_deleted {
-            "- deleted".red().to_string()
+            "▪ deleting".red().to_string()
         } else {
             String::new()
         });
@@ -410,7 +452,7 @@ impl Tabular for SegmentGroup {
                             cmp.dimmed(),
                             r.value.dimmed(),
                             if rule_deleted {
-                                "- deleted".red().to_string()
+                                "▪ deleting".red().to_string()
                             } else {
                                 String::new()
                             },
@@ -441,7 +483,7 @@ impl Tabular for SegmentGroup {
                     value.green(),
                     dw = max_driver,
                 ));
-                group_stage.push("+ added".green().to_string());
+                group_stage.push("▪ adding".green().to_string());
             }
         }
 
@@ -527,7 +569,7 @@ impl Tabular for SegmentRule {
                 format_driver(&rule.driver).dimmed(),
                 format_comparator(&rule.comparator).dimmed(),
                 rule.value.dimmed(),
-                "- deleted".red().to_string(),
+                "▪ deleting".red().to_string(),
             )
         } else {
             (
