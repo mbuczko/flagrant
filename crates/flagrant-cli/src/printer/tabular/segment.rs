@@ -10,9 +10,9 @@ use crate::handlers::internal::effectives as effective;
 
 use super::Tabular;
 
-const UTF_VERT_BAR: &'static str = "│";
-const UTF_TOP_CORNER: &'static str = "╭─";
-const UTF_BTM_CORNER: &'static str = "╰───";
+const UTF_VERT_BAR: &str = "│";
+const UTF_TOP_CORNER: &str = "╭─";
+const UTF_BTM_CORNER: &str = "╰───";
 
 /// Context passed to `Segment::describe` to show the features this segment overrides.
 #[derive(Default)]
