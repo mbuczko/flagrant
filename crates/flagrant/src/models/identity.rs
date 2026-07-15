@@ -413,6 +413,30 @@ pub async fn get_identity_variants(
     Ok(variants)
 }
 
+/// Gradually redirects a percentage of identities currently evaluating to `from_variant_id`
+/// so that they instead evaluate to `into_variant_id`, without touching identities that are
+/// pinned (`pinned_at IS NOT NULL`).
+///
+/// This is a no-op unless `from_variant_id != into_variant_id`. It's called whenever a
+/// variant's weight shifts (e.g. `variant::balance_control_weight`), so that only the delta
+/// in weight causes identities to move rather than the whole cohort being re-distributed
+/// and reshuffled.
+///
+/// Migration is lazy and cumulative: rather than rewriting `identity_variants.variant_id`
+/// directly, the target is recorded in `identity_variants.migrated_id` (see the
+/// `migrate_identities` SQL query). Readers resolve the effective variant by following
+/// `migrated_id` when present, falling back to `variant_id` otherwise (see the resolution
+/// logic in [`get_identity_variants`]). This means:
+///
+/// - Identities already migrated to `from_variant_id` (i.e. `migrated_id = from_variant_id`)
+///   are eligible to be migrated onward to `into_variant_id`, continuing the chain.
+/// - `by_percent` is a percentage of *all* identities in the environment (not just those
+///   currently attached to `from_variant_id`), rounded up, so repeated calls with
+///   increasing percentages progressively grow the migrated cohort - identities already
+///   migrated are prioritized to keep their assignment stable, and are never migrated back.
+/// - Only up to that many identities across the whole environment end up redirected to
+///   `into_variant_id` this way; older attachments (by `attached_at`) are preferred when
+///   picking who moves next, so migration is deterministic and repeatable.
 pub async fn migrate_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,

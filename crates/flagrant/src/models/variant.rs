@@ -13,6 +13,16 @@ use super::identity;
 #[queries = "resources/db/queries/variants.sql"]
 struct SQLVariants {}
 
+#[derive(sqlx::FromRow)]
+struct OverriddenFeatureRow {
+    feature_id: i32,
+    feature_name: String,
+    variant_id: i32,
+    is_control: bool,
+    value: FeatureValue,
+    weight: u8,
+}
+
 /// Creates or updates the control variant of the given feature.
 ///
 /// The control variant represents the environment-specific feature value returned when either
@@ -211,9 +221,11 @@ pub async fn get_by_identity<T: AsRef<str>>(
 }
 
 /// Returns all variants for a feature in the given environment, including values and weights.
+///
 /// `segment_id` scopes which weight/accumulator row is attached to each variant (`None` =
 /// organic default weights; `Some(id)` = that segment's override weights, sparse - variants
 /// without an explicit override resolve to weight 0 / accumulator 0).
+///
 /// Errors if the feature has no default value set in this environment (which should never happen).
 pub async fn get_for_feature(
     conn: &mut SqliteConnection,
@@ -292,6 +304,7 @@ pub(crate) async fn set_weight(
     SQLVariants::upsert_variant_weight(conn, params![environment.id, variant_id, weight])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set variant weight", e))?;
+
     Ok(())
 }
 
@@ -327,6 +340,7 @@ pub(crate) async fn set_segment_weight(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not set segment variant weight", e))?;
+
     Ok(())
 }
 
@@ -382,16 +396,6 @@ pub async fn get_segment_overrides_with_weights(
         .map_err(|e| {
             FlagrantError::QueryFailed("Could not fetch segment overrides for feature", e).into()
         })
-}
-
-#[derive(sqlx::FromRow)]
-struct OverriddenFeatureRow {
-    feature_id: i32,
-    feature_name: String,
-    variant_id: i32,
-    is_control: bool,
-    value: FeatureValue,
-    weight: u8,
 }
 
 /// Returns every variant a segment overrides (including each feature's control-variant
