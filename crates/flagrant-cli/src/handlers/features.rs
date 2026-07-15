@@ -136,78 +136,83 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 ///
 /// Expected args: `[feature]`
 ///
-/// If a feature argument is provided, fetches and describes that feature. Otherwise
-/// describes the feature in the current context, overlaying any pending staged changes.
+/// If a feature argument is provided that names a *different* feature than the one in
+/// context, fetches and describes that feature with committed overrides only. Otherwise
+/// (no argument, or naming the feature already in context) describes the feature in the
+/// current context, overlaying any pending staged changes - since pending state (feature
+/// patch, identity override, segment override) only exists for the in-context feature.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
+    let ctx = session.context.read().unwrap();
+    let in_context = match args.get(1) {
+        Some(name) => ctx.feature.as_ref().is_some_and(|f| f.name == name.as_ref()),
+        None => true,
+    };
+
+    if !in_context {
+        let name = args.get(1).unwrap();
+        drop(ctx);
+
         let feature = fetch_feature(name, session)?;
         let overrides = fetch_overrides(feature.id, session);
 
         feature.describe(None, &OverridesContext::committed_only(overrides));
-    } else {
-        let ctx = session.context.read().unwrap();
-        let feature = ctx.feature.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(
-                "Not in a feature context. Set the context with: \"FEATURE use\" command."
-            )
-        })?;
-        let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
-        let overrides = fetch_overrides(feature.id, session);
-
-        let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
-            let identity_value = ctx.identity.as_ref()?.value.clone();
-
-            // Any recent unpins (discarded overrides)?
-            if ipatch.unpins.contains(&feature.name) {
-                return Some(identity_value);
-            }
-
-            // ...or newly added overrides?
-            if ipatch
-                .overrides
-                .iter()
-                .find(|o| o.feature_name == feature.name)
-                .is_some()
-            {
-                return Some(identity_value);
-            }
-            None
-        });
-
-        let segment_pending = ctx.segment_patch.as_ref().and_then(|spatch| {
-            let seg_name = ctx.segment.as_ref()?.name.clone();
-            for op in &spatch.ops {
-                match op {
-                    SegmentPatchOp::SetFeatureOverride {
-                        feature_id,
-                        variant_weights,
-                        ..
-                    } if *feature_id == feature.id => {
-                        return Some((seg_name, Some(variant_weights.clone())));
-                    }
-                    SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
-                        if *feature_id == feature.id =>
-                    {
-                        return Some((seg_name, None));
-                    }
-                    _ => {}
-                }
-            }
-            None
-        });
-
-        feature.describe(
-            patch,
-            &OverridesContext {
-                committed: overrides,
-                identity_pending,
-                segment_pending,
-            },
-        );
-        drop(ctx);
-
-        index::rebuild(&mut session.context.write().unwrap());
+        return Ok(());
     }
+
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
+    })?;
+    let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
+    let overrides = fetch_overrides(feature.id, session);
+
+    let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
+        let identity_value = ctx.identity.as_ref()?.value.clone();
+
+        // Any recent unpins (discarded overrides)?
+        if ipatch.unpins.contains(&feature.name) {
+            return Some(identity_value);
+        }
+
+        // ...or newly added overrides?
+        if ipatch.overrides.iter().any(|o| o.feature_name == feature.name) {
+            return Some(identity_value);
+        }
+        None
+    });
+
+    let segment_pending = ctx.segment_patch.as_ref().and_then(|spatch| {
+        let seg_name = ctx.segment.as_ref()?.name.clone();
+        for op in &spatch.ops {
+            match op {
+                SegmentPatchOp::SetFeatureOverride {
+                    feature_id,
+                    variant_weights,
+                    ..
+                } if *feature_id == feature.id => {
+                    return Some((seg_name, Some(variant_weights.clone())));
+                }
+                SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
+                    if *feature_id == feature.id =>
+                {
+                    return Some((seg_name, None));
+                }
+                _ => {}
+            }
+        }
+        None
+    });
+
+    feature.describe(
+        patch,
+        &OverridesContext {
+            committed: overrides,
+            identity_pending,
+            segment_pending,
+        },
+    );
+    drop(ctx);
+
+    index::rebuild(&mut session.context.write().unwrap());
     Ok(())
 }
 
