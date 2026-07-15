@@ -19,7 +19,7 @@
 //! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
 //! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.    |
 
-use std::{collections::BTreeSet, ops::Deref};
+use std::ops::Deref;
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
@@ -32,7 +32,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         identities,
-        internal::{index, stage},
+        internal::{concat_values_for_arg, index, stage},
         open_in_editor,
     },
     printer::tabular::{Tabular, feature::OverridesContext},
@@ -564,39 +564,4 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
         return Ok(());
     }
     bail!("No pattern provided.")
-}
-
-/// Extracts and concatenates all comma-separated values for a specific argument name.
-///
-/// Searches through command arguments for entries matching the pattern `arg:value1,value2,...`,
-/// collects all unique values using a BTreeSet (which deduplicates and sorts them),
-/// and returns them as a single comma-separated string.
-///
-/// # Arguments
-/// * `arg_name` - The argument name to match (e.g., "tag", "status")
-/// * `cmd_args` - Slice of command-line arguments in the format "name:value1,value2,..."
-///
-/// # Returns
-/// A comma-separated string of all unique values found for the given argument.
-///
-/// # Example
-/// ```ignore
-/// let args = vec!["tag:foo,bar", "tag:baz,foo", "status:active"];
-/// let result = concat_values_for_arg("tag", &args);
-/// // result == "bar,baz,foo" (deduplicated and sorted)
-/// ```
-fn concat_values_for_arg(arg_name: &str, cmd_args: &[Arg]) -> String {
-    cmd_args
-        .iter()
-        .fold(BTreeSet::new(), |mut acc, arg| {
-            if let Some((arg, tags)) = arg.split_once(":")
-                && arg == arg_name
-            {
-                acc.extend(tags.split(","));
-            }
-            acc
-        })
-        .into_iter()
-        .collect::<Vec<_>>()
-        .join(",")
 }

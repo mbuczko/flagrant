@@ -14,6 +14,8 @@
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
 
+use std::ops::Deref;
+
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
@@ -28,7 +30,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         features,
-        internal::{effectives as effective, index, stage},
+        internal::{concat_values_for_arg, effectives as effective, index, stage},
         open_in_editor,
     },
     printer::tabular::Tabular,
@@ -99,17 +101,30 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     bail!("No identity provided.")
 }
 
-/// List identities, optionally filtered by pattern.
+/// List identities, optionally filtered by pattern and/or trait.
 ///
-/// Expected args: `[pattern]`
+/// Expected args: `[pattern] [trait:a] [trait:a=1] [trait:-b] [trait:-b=2] ...`
+///
+/// `trait:name` restricts results to identities carrying that trait, regardless of value.
+/// `trait:name=value` further restricts to identities whose trait value matches - `value`
+/// is coerced to whichever of bool/int/float/string it looks like, so `trait:vip=true`
+/// matches the trait however it was typed when stored. A leading `-` excludes instead:
+/// `trait:-name` drops identities that carry the trait at all, while `trait:-name=value`
+/// only drops identities where the trait has that specific value. Conditions may be given
+/// as separate `trait:` args or comma-separated within one, e.g. `trait:vip,-churned`.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    let pattern = args
-        .get(1)
-        .map(|a| format!("?pattern={a}"))
-        .unwrap_or_default();
+    let res = ctx.env_resource();
+
+    let traits = concat_values_for_arg("trait", args);
+    let pat = args[1..]
+        .iter()
+        .find(|a| !a.contains(":"))
+        .map(Deref::deref)
+        .unwrap_or("");
+
     let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
-        ctx.env_resource().subpath(format!("/identities{pattern}")),
+        res.subpath(format!("/identities?traits={traits}&pattern={pat}")),
     )?;
 
     IdentityWithTraits::list(&identities);

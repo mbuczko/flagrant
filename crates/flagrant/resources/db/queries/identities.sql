@@ -10,8 +10,30 @@ SELECT identity_id, identity, environment_id FROM identities WHERE environment_i
 -- :doc Lists up to 10 identities with their traits matching LIKE pattern (use '%' to match all)
 SELECT i.identity_id, i.identity, t.trait_id, t.name AS trait_name, it.value AS trait_value
 FROM (
-    SELECT identity_id, identity FROM identities
-    WHERE  environment_id = $2 and identity LIKE $3
+    SELECT identity_id, identity FROM identities id
+    WHERE id.environment_id = $2 AND id.identity LIKE $3
+--~{ traits_included
+    AND EXISTS (
+      SELECT 1 FROM identity_traits it2, traits t2, json_each($4) je
+      WHERE it2.identity_id = id.identity_id AND it2.trait_id = t2.trait_id
+        AND t2.project_id = $1 AND t2.name = json_extract(je.value, '$[0]')
+        AND (
+          json_extract(je.value, '$[1]') IS NULL
+          OR it2.value IN (SELECT value FROM json_each(json_extract(je.value, '$[1]')))
+        )
+    )
+--~}
+--~{ traits_excluded
+    AND NOT EXISTS (
+      SELECT 1 FROM identity_traits it2, traits t2, json_each($5) je
+      WHERE it2.identity_id = id.identity_id AND it2.trait_id = t2.trait_id
+        AND t2.project_id = $1 AND t2.name = json_extract(je.value, '$[0]')
+        AND (
+          json_extract(je.value, '$[1]') IS NULL
+          OR it2.value IN (SELECT value FROM json_each(json_extract(je.value, '$[1]')))
+        )
+    )
+--~}
     ORDER BY identity
     LIMIT 10
 ) i

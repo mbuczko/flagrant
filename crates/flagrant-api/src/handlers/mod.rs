@@ -9,9 +9,9 @@ pub mod variants;
 
 use smallvec::{SmallVec, smallvec};
 
-type TagsTuple<'a> = (
-    Option<SmallVec<[&'a str; 3]>>, // Tags included
-    Option<SmallVec<[&'a str; 3]>>, // Tags excluded
+type IncludedExcludedTuple<'a> = (
+    Option<SmallVec<[&'a str; 3]>>, // Included
+    Option<SmallVec<[&'a str; 3]>>, // Excluded
 );
 
 /// Parses pattern parameter: wraps non-empty string with SQL wildcards.
@@ -33,34 +33,35 @@ pub fn parse_bool(status: Option<String>) -> Option<bool> {
         .map(|s| s == "true" || s == "on" || s == "yes" || s == "t")
 }
 
-/// Parses tags parameter into included and excluded tag lists.
-/// Tags prefixed with '-' are excluded, others are included.
-pub fn parse_tags<'a>(tags: Option<&'a String>) -> TagsTuple<'a> {
-    tags.map(|tags| {
-        let (mut included, mut excluded) = (smallvec![], smallvec![]);
+/// Parses a comma-separated parameter (e.g. tags or trait names) into included and
+/// excluded lists. Entries prefixed with '-' are excluded, others are included.
+pub fn parse_included_excluded<'a>(values: Option<&'a String>) -> IncludedExcludedTuple<'a> {
+    values
+        .map(|values| {
+            let (mut included, mut excluded) = (smallvec![], smallvec![]);
 
-        for tag in tags.split(',') {
-            if let Some(tag) = tag.strip_prefix('-')
-                && !tag.is_empty()
-            {
-                excluded.push(tag);
-            } else if !tag.is_empty() {
-                included.push(tag);
+            for value in values.split(',') {
+                if let Some(value) = value.strip_prefix('-')
+                    && !value.is_empty()
+                {
+                    excluded.push(value);
+                } else if !value.is_empty() {
+                    included.push(value);
+                }
             }
-        }
 
-        (
-            if included.is_empty() {
-                None
-            } else {
-                Some(included)
-            },
-            if excluded.is_empty() {
-                None
-            } else {
-                Some(excluded)
-            },
-        )
-    })
-    .unwrap_or((None, None))
+            (
+                if included.is_empty() {
+                    None
+                } else {
+                    Some(included)
+                },
+                if excluded.is_empty() {
+                    None
+                } else {
+                    Some(excluded)
+                },
+            )
+        })
+        .unwrap_or((None, None))
 }

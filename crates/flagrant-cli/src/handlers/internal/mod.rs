@@ -9,4 +9,4 @@ pub(crate) mod helpers;
 pub(crate) mod index;
 pub(crate) mod stage;
 
-pub(crate) use helpers::open_in_editor;
+pub(crate) use helpers::{concat_values_for_arg, open_in_editor};

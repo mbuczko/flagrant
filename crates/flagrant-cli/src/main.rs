@@ -168,7 +168,7 @@ fn main() -> anyhow::Result<()> {
             "identity [trait:value ...]",
             handlers::identities::add,
         ),
-        Command::Identity.op("list", "[pattern]", handlers::identities::list),
+        Command::Identity.op("list", "trait|[pattern]", handlers::identities::list),
         Command::Identity.op("describe", "[identity]", handlers::identities::describe),
         Command::Identity.op("delete", "pattern", handlers::identities::delete),
         Command::Identity.op("use", "identity", handlers::identities::r#use),

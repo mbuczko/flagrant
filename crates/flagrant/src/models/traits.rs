@@ -1,5 +1,6 @@
 use flagrant_types::Trait;
 use hugsqlx::{HugSqlx, params};
+use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
 use crate::errors::FlagrantError;
@@ -9,12 +10,20 @@ use crate::errors::FlagrantError;
 struct SQLTraits {}
 
 /// Creates a new trait or returns it if one with the same name already exists.
+///
+/// Runs in its own transaction so an invalid name is rolled back rather than committed:
+/// the row is written first, then validated, and only committed if validation passes.
 pub async fn upsert(
     conn: &mut SqliteConnection,
     project_id: i32,
     name: String,
 ) -> anyhow::Result<Trait> {
-    let t = SQLTraits::upsert_trait::<_, Trait>(conn, params![project_id, name]).await?;
+    let mut tx = conn.begin().await?;
+    let t = SQLTraits::upsert_trait::<_, Trait>(&mut *tx, params![project_id, name]).await?;
+
+    t.validate()?;
+    tx.commit().await?;
+
     Ok(t)
 }
 
@@ -27,6 +36,7 @@ pub async fn get_by_id(conn: &mut SqliteConnection, trait_id: i32) -> anyhow::Re
 /// Returns all traits ordered by name.
 pub async fn get_all(conn: &mut SqliteConnection, project_id: i32) -> anyhow::Result<Vec<Trait>> {
     let traits = SQLTraits::fetch_all_traits::<_, Trait>(conn, params![project_id]).await?;
+
     Ok(traits)
 }
 
@@ -38,6 +48,7 @@ pub async fn get_by_prefix(
 ) -> anyhow::Result<Vec<Trait>> {
     let traits =
         SQLTraits::fetch_traits_by_prefix::<_, Trait>(conn, params![project_id, pattern]).await?;
+
     Ok(traits)
 }
 

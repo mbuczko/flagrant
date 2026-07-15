@@ -79,16 +79,27 @@ pub struct Identity {
     pub environment_id: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Validate, ToSchema)]
 pub struct Trait {
     #[sqlx(rename = "trait_id")]
     pub id: i32,
+    // Restricted to a safe charset (no quotes/commas/brackets) so names can be embedded,
+    // unescaped, into the JSON blobs `identity::list` builds to filter by trait via
+    // SQLite's json_each() - see flagrant::models::traits for the full rationale.
+    #[validate(pattern = r"^[A-Za-z0-9._@-]+$")]
+    #[validate(max_length = 255)]
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub enum TraitValue {
-    Str(String),
+    // Same charset restriction as `Trait::name`, and for the same reason: string trait
+    // values are embedded unescaped into the same hand-built JSON filter blobs.
+    Str(
+        #[validate(pattern = r"^[A-Za-z0-9._@-]*$")]
+        #[validate(max_length = 1024)]
+        String,
+    ),
     Int(i32),
     Float(f32),
     Bool(bool),

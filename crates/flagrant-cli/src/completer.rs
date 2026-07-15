@@ -48,6 +48,32 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .into_iter()
                         .map(|c| c.value)
                         .collect::<Vec<_>>(),
+                    // Auto-complete trait names for filtering, e.g. `trait:vip` or `trait:-vip`
+                    "list" => match prefix.split_once(':') {
+                        Some(("trait", val)) => {
+                            let (lhs, modifier, val) = strip_tag(val);
+
+                            ctx.client
+                                .get::<Vec<Trait>>(
+                                    project_res.subpath(format!("/traits?prefix={val}")),
+                                )?
+                                .into_iter()
+                                .map(|t| {
+                                    let mut name = String::with_capacity(t.name.len() + 2);
+                                    if !lhs.is_empty() {
+                                        name.push(',');
+                                    }
+                                    if let Some(m) = modifier {
+                                        name.push(m);
+                                    }
+                                    name.push_str(&t.name);
+                                    format!("trait:{lhs}{name}")
+                                })
+                                .collect::<Vec<_>>()
+                        }
+                        None => filter_by_prefix(&["trait"], prefix),
+                        _ => vec![],
+                    },
                     _ => vec![],
                 })
             }

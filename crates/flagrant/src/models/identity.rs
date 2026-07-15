@@ -2,15 +2,18 @@ use chrono::{NaiveDateTime, Utc};
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
     Environment, FeatureOverride, FeatureValue, Identity, IdentityTrait, IdentityVariant,
-    IdentityWithTraits,
+    IdentityWithTraits, TraitValue,
 };
 
 use super::feature;
 use hugsqlx::{HugSqlx, params};
+use serde_valid::Validate;
+use smallvec::SmallVec;
 use sqlx::{Connection, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError, evaluator};
 
+use super::surround_string;
 use super::traits::upsert;
 use super::variant;
 
@@ -27,6 +30,70 @@ struct IdentityWithTraitRow {
     trait_value: Option<String>,
 }
 
+/// A single trait filter condition used by [`list`]: matches identities carrying a trait
+/// named `name`. If constructed via [`TraitCondition::value`], only a value that coerces
+/// to the given raw string matches - trying every plausible type (bool/int/float) plus a
+/// plain-string fallback, so the caller doesn't need to know how the value was originally
+/// typed (e.g. `experimental=true` matches both `bool::true` and `str::true`). If
+/// constructed via [`TraitCondition::any_value`], any value matches - and for exclusions,
+/// this means "does not have this trait at all".
+pub struct TraitCondition<'a> {
+    name: &'a str,
+    /// Candidate type-encoded values (as produced by `TraitValue::to_string()`), any one
+    /// of which counts as a match. `None` means any value (or no value) matches.
+    values: Option<Vec<String>>,
+}
+
+impl<'a> TraitCondition<'a> {
+    pub fn any_value(name: &'a str) -> Self {
+        Self { name, values: None }
+    }
+
+    pub fn value(name: &'a str, raw: &str) -> Self {
+        let mut candidates = Vec::with_capacity(4);
+        if let Ok(b) = raw.parse::<bool>() {
+            candidates.push(TraitValue::Bool(b).to_string());
+        }
+        if let Ok(i) = raw.parse::<i32>() {
+            candidates.push(TraitValue::Int(i).to_string());
+        }
+        if let Ok(f) = raw.parse::<f32>() {
+            candidates.push(TraitValue::Float(f).to_string());
+        }
+        candidates.push(TraitValue::Str(raw.to_owned()).to_string());
+
+        Self {
+            name,
+            values: Some(candidates),
+        }
+    }
+}
+
+/// Encodes trait conditions as a JSON array of `[name, [value, ...] | null]` entries,
+/// suitable for SQLite's `json_each()`. Returns `None` when `conditions` is `None`.
+fn conditions_into_json_string(
+    conditions: Option<SmallVec<[TraitCondition<'_>; 3]>>,
+) -> Option<String> {
+    conditions.map(|conds| {
+        let items: Vec<String> = conds
+            .iter()
+            .map(|c| {
+                let values = match &c.values {
+                    Some(vals) => {
+                        let quoted: Vec<String> =
+                            vals.iter().map(|v| surround_string(v, '"', '"')).collect();
+                        surround_string(&quoted.join(","), '[', ']')
+                    }
+                    None => "null".to_owned(),
+                };
+                format!("[{},{values}]", surround_string(c.name, '"', '"'))
+            })
+            .collect();
+
+        surround_string(&items.join(","), '[', ']')
+    })
+}
+
 // Helper to load traits for an identity_id
 async fn load_traits(
     conn: &mut SqliteConnection,
@@ -37,16 +104,33 @@ async fn load_traits(
         .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity traits", e).into())
 }
 
-/// Lists up to 10 identities with their traits, optionally filtered by pattern
+/// Lists up to 10 identities with their traits, optionally filtered by pattern and/or by
+/// trait conditions. `traits_included` restricts results to identities matching at least
+/// one of the given conditions; `traits_excluded` drops identities matching any of them.
 pub async fn list(
     conn: &mut SqliteConnection,
     environment: &Environment,
     pattern: Option<String>,
+    traits_included: Option<SmallVec<[TraitCondition<'_>; 3]>>,
+    traits_excluded: Option<SmallVec<[TraitCondition<'_>; 3]>>,
 ) -> anyhow::Result<Vec<IdentityWithTraits>> {
     let like = pattern.unwrap_or_else(|| "%".to_string());
+    let has_included = traits_included.as_ref().is_some_and(|t| !t.is_empty());
+    let has_excluded = traits_excluded.as_ref().is_some_and(|t| !t.is_empty());
+
     let rows = SQLIdentities::fetch_identities_with_traits::<_, IdentityWithTraitRow>(
         conn,
-        params![environment.project_id, environment.id, like],
+        |cond_id| match cond_id {
+            FetchIdentitiesWithTraits::TraitsIncluded => has_included,
+            FetchIdentitiesWithTraits::TraitsExcluded => has_excluded,
+        },
+        params![
+            environment.project_id,
+            environment.id,
+            like,
+            conditions_into_json_string(traits_included),
+            conditions_into_json_string(traits_excluded)
+        ],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not list identities", e))?;
@@ -154,7 +238,16 @@ pub async fn create(
     let mut tx = conn.begin().await?;
     let identity = get_or_create_by_value(&mut tx, environment, identity).await?;
 
-    attach_traits(&mut tx, environment, &identity, &trait_payloads).await?;
+    for t in trait_payloads {
+        attach_trait(
+            &mut tx,
+            environment.project_id,
+            identity.id,
+            t.name,
+            t.value,
+        )
+        .await?;
+    }
     tx.commit().await?;
 
     let traits = load_traits(conn, identity.id).await?;
@@ -175,7 +268,16 @@ pub async fn update_traits(
     let mut tx = conn.begin().await?;
 
     SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
-    attach_traits(&mut tx, environment, &identity, &trait_payloads).await?;
+    for t in trait_payloads {
+        attach_trait(
+            &mut tx,
+            environment.project_id,
+            identity.id,
+            t.name,
+            t.value,
+        )
+        .await?;
+    }
 
     tx.commit().await?;
     get_by_value_with_traits(conn, environment, identity.value).await
@@ -194,13 +296,7 @@ pub async fn patch(
     for op in patch.traits {
         match op {
             TraitPatchOp::Add { name, value } | TraitPatchOp::SetValue { name, value } => {
-                let trait_rec = upsert(&mut tx, environment.project_id, name).await?;
-                SQLIdentities::upsert_identity_trait(
-                    &mut *tx,
-                    params![identity.id, trait_rec.id, value],
-                )
-                .await
-                .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
+                attach_trait(&mut tx, environment.project_id, identity.id, name, value).await?;
             }
             TraitPatchOp::Delete { name } => {
                 SQLIdentities::delete_identity_trait_by_name(
@@ -476,6 +572,7 @@ pub async fn override_variant(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
+
     Ok(())
 }
 
@@ -491,6 +588,7 @@ pub async fn list_overrides(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch overrides for feature", e))?;
+
     Ok(rows
         .into_iter()
         .map(|(s,)| FeatureOverride::Identity(s))
@@ -505,21 +603,21 @@ pub async fn detach_identities(
     Ok(())
 }
 
-// Internal helper: upserts traits and links them to identity
-async fn attach_traits(
+// Internal helper: validates, upserts the trait by name, and links it to the identity
+// with the given value. Shared by `attach_traits` and `patch`'s Add/SetValue handling.
+async fn attach_trait(
     conn: &mut SqliteConnection,
-    environment: &Environment,
-    identity: &Identity,
-    trait_payloads: &[IdentityTraitPayload],
+    project_id: i32,
+    identity_id: i32,
+    name: String,
+    value: Option<TraitValue>,
 ) -> anyhow::Result<()> {
-    for t in trait_payloads {
-        let trait_rec = upsert(&mut *conn, environment.project_id, t.name.clone()).await?;
-        SQLIdentities::upsert_identity_trait(
-            &mut *conn,
-            params![identity.id, trait_rec.id, t.value.clone()],
-        )
+    value.validate()?;
+
+    let trait_rec = upsert(&mut *conn, project_id, name).await?;
+    SQLIdentities::upsert_identity_trait(&mut *conn, params![identity_id, trait_rec.id, value])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not attach trait to identity", e))?;
-    }
+
     Ok(())
 }

@@ -70,16 +70,15 @@ impl Tabular for Feature {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if has_tag_ops {
-            let mut effective: Vec<String> =
-                self.tags.0.iter().map(|t| t.name.clone()).collect();
+            let mut effective: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
             for op in patch.into_iter().flat_map(|p| &p.tags) {
                 match op {
                     TagPatchOp::Add(t) => {
-                        if !effective.contains(t) {
-                            effective.push(t.clone());
+                        if !effective.contains(&t.as_str()) {
+                            effective.push(t.as_str());
                         }
                     }
-                    TagPatchOp::Remove(t) => effective.retain(|x| x != t),
+                    TagPatchOp::Remove(t) => effective.retain(|x| *x != t.as_str()),
                 }
             }
             effective.sort();

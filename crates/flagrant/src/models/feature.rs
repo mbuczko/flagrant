@@ -11,7 +11,7 @@ use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
-use super::variant;
+use super::{into_json_string, variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
@@ -428,19 +428,4 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }
-}
-
-fn surround_string(s: &str, open_ch: char, close_ch: char) -> String {
-    let mut buf = String::with_capacity(s.len() + 2);
-    buf.push(open_ch);
-    buf.push_str(s);
-    buf.push(close_ch);
-    buf
-}
-
-fn into_json_string(tags: Option<SmallVec<[&str; 3]>>) -> Option<String> {
-    tags.map(|vt| {
-        let quoted_tags: Vec<String> = vt.iter().map(|t| surround_string(t, '"', '"')).collect();
-        surround_string(&quoted_tags.join(","), '[', ']')
-    })
 }
