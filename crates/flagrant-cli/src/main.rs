@@ -206,12 +206,6 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Set.op_in_context(
-            "value",
-            "value",
-            handlers::features::set_value,
-            in_context!(feature_ctx),
-        ),
-        Command::Set.op_in_context(
             "description",
             "[description]",
             handlers::features::set_description,
@@ -249,7 +243,6 @@ fn main() -> anyhow::Result<()> {
             handlers::segments::set_description,
             in_context!(segment_ctx),
         ),
-        // Segment override (only when both feature and segment are in context)
         Command::Set.op_in_context(
             "override",
             "[variant-index weight]",
@@ -257,20 +250,17 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Set.args_in_context(
-            "status · value · description · tags · name · override",
+            "status · description · tags · name · override",
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Set.args_in_context(
-            "status · value · description · tags · trait · override",
+            "status · description · tags · trait · override",
             in_context!(feature_ctx, identity_ctx),
         ),
-        Command::Set.args_in_context(
-            "status · value · description · tags",
-            in_context!(feature_ctx),
-        ),
+        Command::Set.args_in_context("status · description · tags", in_context!(feature_ctx)),
         Command::Set.args_in_context("trait", in_context!(identity_ctx)),
         Command::Set.args_in_context("name · description", in_context!(segment_ctx)),
-        // Feature unsetters (only in feature context)
+        // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
             "pattern",
@@ -296,6 +286,7 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::unset_override,
             in_context!(identity_ctx),
         ),
+        // UNSET (only in segment context)
         Command::Unset.op_in_context(
             "override",
             "",

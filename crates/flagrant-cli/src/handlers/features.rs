@@ -11,7 +11,6 @@
 //! | `FEATURE describe`   | [`describe`]           | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
 //! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `SET value`          | [`set_value`]          | Stage a default value change.                       |
 //! | `SET description`    | [`set_description`]    | Stage a feature description.                        |
 //! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
@@ -26,7 +25,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureOverride, FeatureValue,
-    payload::{NewFeaturePayload, SegmentPatchOp, VariantPatchOp},
+    payload::{NewFeaturePayload, SegmentPatchOp},
 };
 
 use crate::{
@@ -37,8 +36,6 @@ use crate::{
     },
     printer::tabular::{Tabular, feature::OverridesContext},
 };
-
-use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
@@ -329,55 +326,6 @@ fn parse_tags(args: &[Arg]) -> Vec<String> {
     tags.sort();
     tags.dedup();
     tags
-}
-
-/// Stages a new value for the current feature (i.e. its control variant).
-///
-/// Expected args: `[value]`
-///
-/// When called without a value argument, opens `$EDITOR` (falling back to `vi`) pre-filled
-/// with the current value so the user can edit it interactively.
-pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-    if let Some(feature) = &ctx.feature {
-        let control_id = feature.get_default_variant().id;
-        let control_ref = VariantRef::Committed(control_id);
-
-        let raw: String = if let Some(raw) = args.get(1) {
-            raw.to_string()
-        } else {
-            // No value provided - open editor with current bare value (without type prefix).
-            // Prefer any already-staged value over the committed one.
-            let current_fv = ctx
-                .feature_patch
-                .as_ref()
-                .and_then(|p| {
-                    p.variants.iter().find_map(|op| match op {
-                        VariantPatchOp::SetValue { id, value } if *id == control_id => Some(value),
-                        _ => None,
-                    })
-                })
-                .unwrap_or_else(|| feature.get_default_value());
-            let (_, bare) = current_fv.decompose();
-            let edited = open_in_editor(bare)?;
-
-            // Type is inferred from the edited content, not the original.
-            let parsed = FeatureValue::build(&edited);
-
-            stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
-            return Ok(());
-        };
-
-        let parsed = raw
-            .parse()
-            .unwrap_or_else(|_| feature.get_default_value().clone_with(&raw));
-        let display = parsed.to_string();
-        stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
-
-        println!("Staged: value = {display}");
-        return Ok(());
-    }
-    bail!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
 }
 
 /// Commits all staged changes for the current feature to the API atomically.
