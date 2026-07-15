@@ -6,7 +6,7 @@ use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     FeatureValue, TraitValue,
-    payload::{FeaturePatch, IdentityPatch, TraitPatchOp, VariantPatchOp},
+    payload::{FeaturePatch, IdentityPatch, TagPatchOp, TraitPatchOp, VariantPatchOp},
 };
 
 use crate::handlers::{features, identities, segments};
@@ -141,6 +141,26 @@ pub(crate) fn discard_feature_patch(pending: &mut FeaturePatch, variant_ref: &Va
                 None => println!("Staged variant not found."),
             }
         }
+    }
+}
+
+/// Stages a tag addition or removal on a feature patch.
+///
+/// If a pending op for the same tag already exists, it is replaced - so staging
+/// `Remove` after a pending `Add` for the same tag cancels the addition out, and
+/// vice versa.
+pub(crate) fn stage_tag(pending: &mut FeaturePatch, tag: String, add: bool) {
+    let existing = pending.tags.iter_mut().find(|o| match o {
+        TagPatchOp::Add(t) | TagPatchOp::Remove(t) => *t == tag,
+    });
+    let op = if add {
+        TagPatchOp::Add(tag)
+    } else {
+        TagPatchOp::Remove(tag)
+    };
+    match existing {
+        Some(slot) => *slot = op,
+        None => pending.tags.push(op),
     }
 }
 

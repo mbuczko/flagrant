@@ -13,11 +13,13 @@
 //! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
 //! | `SET value`          | [`set_value`]          | Stage a default value change.                       |
 //! | `SET description`    | [`set_description`]    | Stage a feature description.                        |
+//! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
+//! | `UNSET tags`         | [`unset_tags`]         | Stage removing tags from a feature.                 |
 //! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
 //! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.    |
 
-use std::{collections::BTreeSet, ops::Deref};
+use std::ops::Deref;
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
@@ -30,7 +32,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         identities,
-        internal::{index, stage},
+        internal::{concat_values_for_arg, index, stage},
         open_in_editor,
     },
     printer::tabular::{Tabular, feature::OverridesContext},
@@ -255,6 +257,78 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
         if desc.is_empty() { "(cleared)" } else { &desc }
     );
     Ok(())
+}
+
+/// Stage adding one or more tags to the current feature.
+///
+/// Expected args: `tag1[, tag2, ...]`
+///
+/// Tags may be separated by commas, whitespace, or both (e.g. `SET tags beta, experimental`).
+/// Adds to the feature's existing tag set - use `UNSET tags <tag1, ...>` to remove tags.
+pub fn set_tags(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+
+    let tags = parse_tags(&args[1..]);
+    if tags.is_empty() {
+        bail!("No tags provided.");
+    }
+
+    let display = tags.join(", ");
+    let pending = ctx.get_or_init_pending();
+
+    for tag in tags {
+        stage::stage_tag(pending, tag, true);
+    }
+
+    println!("Staged: + tags {display}");
+    Ok(())
+}
+
+/// Stage removing one or more tags from the current feature.
+///
+/// Expected args: `tag1[, tag2, ...]`
+///
+/// Tags may be separated by commas, whitespace, or both (e.g. `UNSET tags beta, experimental`).
+pub fn unset_tags(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+
+    let tags = parse_tags(&args[1..]);
+    if tags.is_empty() {
+        bail!("No tags provided.");
+    }
+
+    let display = tags.join(", ");
+    let pending = ctx.get_or_init_pending();
+
+    for tag in tags {
+        stage::stage_tag(pending, tag, false);
+    }
+
+    println!("Staged: - tags {display}");
+    Ok(())
+}
+
+/// Parses a list of tag names out of REPL args, splitting on commas and/or whitespace.
+/// Deduplicates and sorts the result.
+fn parse_tags(args: &[Arg]) -> Vec<String> {
+    let mut tags: Vec<String> = args
+        .iter()
+        .flat_map(|a| a.split(','))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    tags.sort();
+    tags.dedup();
+    tags
 }
 
 /// Stages a new value for the current feature (i.e. its control variant).
@@ -490,39 +564,4 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
         return Ok(());
     }
     bail!("No pattern provided.")
-}
-
-/// Extracts and concatenates all comma-separated values for a specific argument name.
-///
-/// Searches through command arguments for entries matching the pattern `arg:value1,value2,...`,
-/// collects all unique values using a BTreeSet (which deduplicates and sorts them),
-/// and returns them as a single comma-separated string.
-///
-/// # Arguments
-/// * `arg_name` - The argument name to match (e.g., "tag", "status")
-/// * `cmd_args` - Slice of command-line arguments in the format "name:value1,value2,..."
-///
-/// # Returns
-/// A comma-separated string of all unique values found for the given argument.
-///
-/// # Example
-/// ```ignore
-/// let args = vec!["tag:foo,bar", "tag:baz,foo", "status:active"];
-/// let result = concat_values_for_arg("tag", &args);
-/// // result == "bar,baz,foo" (deduplicated and sorted)
-/// ```
-fn concat_values_for_arg(arg_name: &str, cmd_args: &[Arg]) -> String {
-    cmd_args
-        .iter()
-        .fold(BTreeSet::new(), |mut acc, arg| {
-            if let Some((arg, tags)) = arg.split_once(":")
-                && arg == arg_name
-            {
-                acc.extend(tags.split(","));
-            }
-            acc
-        })
-        .into_iter()
-        .collect::<Vec<_>>()
-        .join(",")
 }

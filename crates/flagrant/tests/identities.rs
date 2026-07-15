@@ -1,12 +1,13 @@
 use flagrant::models::{
     feature,
-    identity::{self, HugSql, SQLIdentities},
+    identity::{self, HugSql, SQLIdentities, TraitCondition},
     project, traits, variant,
 };
 use flagrant_types::{
     Environment, Feature, FeatureValue, TraitValue, Variant, payload::IdentityTraitPayload,
 };
 use hugsqlx::params;
+use smallvec::smallvec;
 use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
 
 use crate::common::create_context;
@@ -753,8 +754,12 @@ async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) 
         .await
         .unwrap();
 
-    let a_identities = identity::list(&mut conn, &env_a, None).await.unwrap();
-    let b_identities = identity::list(&mut conn, &env_b, None).await.unwrap();
+    let a_identities = identity::list(&mut conn, &env_a, None, None, None)
+        .await
+        .unwrap();
+    let b_identities = identity::list(&mut conn, &env_b, None, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(a_identities.len(), 2);
     assert_eq!(b_identities.len(), 1);
@@ -768,9 +773,13 @@ async fn identities_are_scoped_to_environment(mut conn: PoolConnection<Sqlite>) 
     identity::create(&mut conn, &env_b, "alice".to_owned(), vec![])
         .await
         .unwrap();
-    let b_identities = identity::list(&mut conn, &env_b, None).await.unwrap();
+    let b_identities = identity::list(&mut conn, &env_b, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(b_identities.len(), 2);
-    let a_identities = identity::list(&mut conn, &env_a, None).await.unwrap();
+    let a_identities = identity::list(&mut conn, &env_a, None, None, None)
+        .await
+        .unwrap();
     assert_eq!(
         a_identities.len(),
         2,
@@ -917,4 +926,190 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
         Some(zero_pct_variant.id),
         "variant_id must point to the pinned variant"
     );
+}
+
+#[sqlx::test]
+async fn list_filters_by_included_and_excluded_traits(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    identity::create(
+        &mut conn,
+        &environment,
+        "alice".to_owned(),
+        vec![
+            IdentityTraitPayload {
+                name: "vip".to_owned(),
+                value: Some(TraitValue::build("true")),
+            },
+            IdentityTraitPayload {
+                name: "churned".to_owned(),
+                value: Some(TraitValue::build("true")),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    identity::create(
+        &mut conn,
+        &environment,
+        "bob".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "vip".to_owned(),
+            value: Some(TraitValue::build("true")),
+        }],
+    )
+    .await
+    .unwrap();
+
+    identity::create(&mut conn, &environment, "carol".to_owned(), vec![])
+        .await
+        .unwrap();
+
+    // Excluding "churned" should drop only alice, keeping bob and carol.
+    let results = identity::list(
+        &mut conn,
+        &environment,
+        None,
+        None,
+        Some(smallvec![TraitCondition::any_value("churned")]),
+    )
+    .await
+    .unwrap();
+    let values: Vec<_> = results.iter().map(|i| i.value.clone()).collect();
+    assert!(values.contains(&"bob".to_string()));
+    assert!(values.contains(&"carol".to_string()));
+    assert!(!values.contains(&"alice".to_string()));
+
+    // Including "vip" should return only alice and bob.
+    let results = identity::list(
+        &mut conn,
+        &environment,
+        None,
+        Some(smallvec![TraitCondition::any_value("vip")]),
+        None,
+    )
+    .await
+    .unwrap();
+    let values: Vec<_> = results.iter().map(|i| i.value.clone()).collect();
+    assert!(values.contains(&"alice".to_string()));
+    assert!(values.contains(&"bob".to_string()));
+    assert!(!values.contains(&"carol".to_string()));
+}
+
+#[sqlx::test]
+async fn list_filters_by_trait_value_with_type_coercion(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    // alice's trait is stored typed as bool, bob's as an explicit string - both should be
+    // found by `trait:experimental=true` since the raw value coerces to either type.
+    identity::create(
+        &mut conn,
+        &environment,
+        "alice".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "experimental".to_owned(),
+            value: Some(TraitValue::Bool(true)),
+        }],
+    )
+    .await
+    .unwrap();
+
+    identity::create(
+        &mut conn,
+        &environment,
+        "bob".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "experimental".to_owned(),
+            value: Some(TraitValue::Str("true".to_owned())),
+        }],
+    )
+    .await
+    .unwrap();
+
+    identity::create(
+        &mut conn,
+        &environment,
+        "carol".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "experimental".to_owned(),
+            value: Some(TraitValue::Bool(false)),
+        }],
+    )
+    .await
+    .unwrap();
+
+    let results = identity::list(
+        &mut conn,
+        &environment,
+        None,
+        Some(smallvec![TraitCondition::value("experimental", "true")]),
+        None,
+    )
+    .await
+    .unwrap();
+    let values: Vec<_> = results.iter().map(|i| i.value.clone()).collect();
+    assert!(values.contains(&"alice".to_string()));
+    assert!(values.contains(&"bob".to_string()));
+    assert!(!values.contains(&"carol".to_string()));
+
+    // Excluding experimental=true should drop alice and bob, keeping carol.
+    let results = identity::list(
+        &mut conn,
+        &environment,
+        None,
+        None,
+        Some(smallvec![TraitCondition::value("experimental", "true")]),
+    )
+    .await
+    .unwrap();
+    let values: Vec<_> = results.iter().map(|i| i.value.clone()).collect();
+    assert!(values.contains(&"carol".to_string()));
+    assert!(!values.contains(&"alice".to_string()));
+    assert!(!values.contains(&"bob".to_string()));
+}
+
+#[sqlx::test]
+async fn trait_name_with_unsafe_characters_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    // A trait name crafted to break out of the JSON blob `identity::list` builds to
+    // filter by trait (see the `identity::list` doc comment) must be rejected outright.
+    let result = identity::create(
+        &mut conn,
+        &environment,
+        "alice".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "nope\",null],[\"vip".to_owned(),
+            value: Some(TraitValue::Bool(true)),
+        }],
+    )
+    .await;
+
+    assert!(result.is_err());
+
+    // The rejected trait must not have been persisted (validated inside a transaction
+    // that rolls back rather than after an already-committed write).
+    let traits = traits::get_all(&mut conn, environment.project_id)
+        .await
+        .unwrap();
+    assert!(traits.is_empty());
+}
+
+#[sqlx::test]
+async fn trait_value_with_unsafe_characters_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    let result = identity::create(
+        &mut conn,
+        &environment,
+        "alice".to_owned(),
+        vec![IdentityTraitPayload {
+            name: "country".to_owned(),
+            value: Some(TraitValue::Str("pl\",null],[\"vip".to_owned())),
+        }],
+    )
+    .await;
+
+    assert!(result.is_err());
 }

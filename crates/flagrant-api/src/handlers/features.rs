@@ -182,7 +182,7 @@ pub async fn list(
 ) -> Result<Json<Vec<Feature>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let (tags_included, tags_excluded) = super::parse_tags(params.tags.as_ref());
+    let (tags_included, tags_excluded) = super::parse_included_excluded(params.tags.as_ref());
     let features = feature::get_all(
         &mut conn,
         &env,

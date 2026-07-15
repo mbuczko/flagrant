@@ -14,6 +14,10 @@ impl Tabular for IdentityWithTraits {
     type Context = Vec<IdentityVariant>;
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No identities found.");
+            return;
+        }
         let rows: Vec<_> = selfs
             .iter()
             .map(|id| {
@@ -160,7 +164,7 @@ impl Tabular for IdentityWithTraits {
             ]];
             if has_variants {
                 rows.push(vec![
-                    "OVERRIDES".to_string(),
+                    "VARIANTS".to_string(),
                     variants_str,
                     variants_stage_str,
                 ]);
@@ -182,7 +186,7 @@ impl Tabular for IdentityWithTraits {
 
             let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
             if has_variants {
-                rows.push(vec!["OVERRIDES".to_string(), variants_str]);
+                rows.push(vec!["VARIANTS".to_string(), variants_str]);
             }
             table.render(rows);
         }
@@ -190,7 +194,7 @@ impl Tabular for IdentityWithTraits {
         let has_any_override =
             ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
         if has_any_override {
-            println!("  {} variant overridden\n", "★".dimmed());
+            println!("  {} variant explicitly overridden\n", "★".dimmed());
         }
     }
 }
@@ -205,8 +209,8 @@ fn format_trait_value(trait_name: &str, value: &Option<TraitValue>, with_type: b
     };
     if with_type {
         let padded = format!("{:<6}", type_label);
-        format!("{} : {trait_name}:{val}", padded.dimmed())
+        format!("{} : {trait_name}={val}", padded.dimmed())
     } else {
-        format!("{}:{val}", trait_name.bright_blue())
+        format!("{}={val}", trait_name.bright_blue())
     }
 }

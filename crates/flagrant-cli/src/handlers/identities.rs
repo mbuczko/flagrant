@@ -7,12 +7,14 @@
 //! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
-//! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
+//! | `SET trait <name=value ...>`   | [`set_trait`]   | Stage one or more trait value changes.              |
 //! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
 //! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
 //! | `UNSET override`               | [`unset_trait`] | Unpin the identitfy from pinned feature variant.    |
 //! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
 //! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
+
+use std::ops::Deref;
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
@@ -28,7 +30,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         features,
-        internal::{effectives as effective, index, stage},
+        internal::{concat_values_for_arg, effectives as effective, index, stage},
         open_in_editor,
     },
     printer::tabular::Tabular,
@@ -99,17 +101,30 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     bail!("No identity provided.")
 }
 
-/// List identities, optionally filtered by pattern.
+/// List identities, optionally filtered by pattern and/or trait.
 ///
-/// Expected args: `[pattern]`
+/// Expected args: `[pattern] [trait:a] [trait:a=1] [trait:-b] [trait:-b=2] ...`
+///
+/// `trait:name` restricts results to identities carrying that trait, regardless of value.
+/// `trait:name=value` further restricts to identities whose trait value matches - `value`
+/// is coerced to whichever of bool/int/float/string it looks like, so `trait:vip=true`
+/// matches the trait however it was typed when stored. A leading `-` excludes instead:
+/// `trait:-name` drops identities that carry the trait at all, while `trait:-name=value`
+/// only drops identities where the trait has that specific value. Conditions may be given
+/// as separate `trait:` args or comma-separated within one, e.g. `trait:vip,-churned`.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    let pattern = args
-        .get(1)
-        .map(|a| format!("?pattern={a}"))
-        .unwrap_or_default();
+    let res = ctx.env_resource();
+
+    let traits = concat_values_for_arg("trait", args);
+    let pat = args[1..]
+        .iter()
+        .find(|a| !a.contains(":"))
+        .map(Deref::deref)
+        .unwrap_or("");
+
     let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
-        ctx.env_resource().subpath(format!("/identities{pattern}")),
+        res.subpath(format!("/identities?traits={traits}&pattern={pat}")),
     )?;
 
     IdentityWithTraits::list(&identities);
@@ -168,31 +183,34 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
-/// Stage a trait value change for the current identity.
+/// Stage one or more trait value changes for the current identity.
 ///
-/// Expected args: `trait <name:value>`
+/// Expected args: `trait <name=value> [name=value ...]`
 ///
-/// The value is auto-typed (bool → i32 → f32 → str).
+/// Each value is auto-typed (bool → i32 → f32 → str).
 pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(arg) = args.get(1)
-        && let Some((name, value)) = arg.split_once(':')
-    {
-        let mut ctx = session.context.write().unwrap();
-        if let Some(identity) = &ctx.identity {
-            let trait_exists = identity.traits.iter().any(|t| t.name == name);
-            let trait_value = TraitValue::build(value);
+    let pairs: Vec<(&str, &str)> = args[1..]
+        .iter()
+        .filter_map(|arg| arg.split_once('='))
+        .collect();
 
-            stage::stage_trait(
-                ctx.get_or_init_identity_patch(),
-                trait_exists,
-                name.to_string(),
-                trait_value,
-            );
-            return Ok(());
-        }
-        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
+    if pairs.is_empty() {
+        bail!("Usage: SET trait <name=value> [name=value ...]");
     }
-    bail!("Usage: SET trait <name:value>")
+
+    let mut ctx = session.context.write().unwrap();
+    if let Some(identity) = &ctx.identity {
+        let existing: Vec<String> = identity.traits.iter().map(|t| t.name.clone()).collect();
+        let patch = ctx.get_or_init_identity_patch();
+
+        for (name, value) in pairs {
+            let trait_exists = existing.iter().any(|n| n == name);
+            let trait_value = TraitValue::build(value);
+            stage::stage_trait(patch, trait_exists, name.to_string(), trait_value);
+        }
+        return Ok(());
+    }
+    bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
 }
 
 /// Stage a trait removal for the current identity.

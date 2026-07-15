@@ -1,10 +1,11 @@
 use rustyline::Context;
 use rustyline::hint::{Hint, Hinter};
 
-use super::command::ReplCommand;
+use super::{command::ReplCommand, session::Session};
 
-pub struct ReplHinter<'a, T> {
+pub struct ReplHinter<'a, T: 'static> {
     hints: &'a Vec<ReplCommand<T>>,
+    session: &'a Session<T>,
 }
 
 #[derive(Hash, Debug, PartialEq, Eq)]
@@ -21,7 +22,7 @@ impl Hint for CommandHint {
     }
 }
 
-impl<T> Hinter for ReplHinter<'_, T> {
+impl<T: 'static> Hinter for ReplHinter<'_, T> {
     type Hint = CommandHint;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Option<CommandHint> {
@@ -30,10 +31,13 @@ impl<T> Hinter for ReplHinter<'_, T> {
         }
 
         let slices = line.split_whitespace().collect::<Vec<_>>();
-        let command = self
-            .hints
-            .iter()
-            .find(|candidate| candidate.matches_slices(&slices));
+        let command = self.hints.iter().find(|candidate| {
+            candidate.matches_slices(&slices)
+                && candidate
+                    .has_context
+                    .map(|checks| checks.iter().all(|check| check(self.session)))
+                    .unwrap_or(true)
+        });
 
         if let Some(command) = command {
             return Some(CommandHint {
@@ -45,7 +49,7 @@ impl<T> Hinter for ReplHinter<'_, T> {
 }
 
 impl<'a, T> ReplHinter<'a, T> {
-    pub fn new(hints: &'a Vec<ReplCommand<T>>) -> ReplHinter<'a, T> {
-        ReplHinter { hints }
+    pub fn new(hints: &'a Vec<ReplCommand<T>>, session: &'a Session<T>) -> ReplHinter<'a, T> {
+        ReplHinter { hints, session }
     }
 }

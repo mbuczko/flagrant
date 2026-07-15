@@ -3,12 +3,14 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
+use flagrant::models::identity::TraitCondition;
 use flagrant::models::{environment, identity, project};
 use flagrant_types::{
     IdentityVariant, IdentityWithTraits,
     payload::{IdentityPatch, NewIdentityPayload},
 };
 use serde::Deserialize;
+use smallvec::{SmallVec, smallvec};
 use utoipa::IntoParams;
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -17,9 +19,67 @@ pub(crate) struct IdentityQueryParams {
     prefix: Option<String>,
     /// Optional pattern to filter identities (substring match, max 10 returned)
     pattern: Option<String>,
+    /// Comma-separated trait conditions to filter by: `name` (has trait, any value),
+    /// `name=value` (has trait matching value - coerced to bool/int/float/string as
+    /// applicable), or either prefixed with `-` to exclude (e.g. "vip,-churned,-country=us")
+    traits: Option<String>,
 }
 
-/// Lists up to 10 identities with their traits, optionally filtered by a pattern.
+type TraitConditionsTuple<'a> = (
+    Option<SmallVec<[TraitCondition<'a>; 3]>>,
+    Option<SmallVec<[TraitCondition<'a>; 3]>>,
+);
+
+/// Parses a `traits` query parameter into included/excluded [`TraitCondition`] lists.
+/// Each comma-separated entry is `name`, `name=value`, `-name`, or `-name=value`; a
+/// leading `-` marks the condition as excluded. `=value` pins the condition to a value
+/// coercible from the raw string (bool/int/float/string); without it, any value matches -
+/// for exclusions, this means "does not have this trait at all".
+fn parse_trait_conditions(traits: Option<&String>) -> TraitConditionsTuple<'_> {
+    let Some(traits) = traits else {
+        return (None, None);
+    };
+    let (mut included, mut excluded): (SmallVec<[_; 3]>, SmallVec<[_; 3]>) =
+        (smallvec![], smallvec![]);
+
+    for entry in traits.split(',') {
+        let (entry, excl) = match entry.strip_prefix('-') {
+            Some(rest) => (rest, true),
+            None => (entry, false),
+        };
+        if entry.is_empty() {
+            continue;
+        }
+
+        let condition = match entry.split_once('=') {
+            Some((name, value)) if !name.is_empty() && !value.is_empty() => {
+                TraitCondition::value(name, value)
+            }
+            _ => TraitCondition::any_value(entry),
+        };
+
+        if excl {
+            excluded.push(condition);
+        } else {
+            included.push(condition);
+        }
+    }
+
+    (
+        if included.is_empty() {
+            None
+        } else {
+            Some(included)
+        },
+        if excluded.is_empty() {
+            None
+        } else {
+            Some(excluded)
+        },
+    )
+}
+
+/// Lists up to 10 identities with their traits, optionally filtered by a pattern and/or trait.
 #[utoipa::path(
     get,
     path = "/projects/{project}/envs/{environment}/identities",
@@ -40,10 +100,13 @@ pub async fn list(
 ) -> Result<Json<Vec<IdentityWithTraits>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let (traits_included, traits_excluded) = parse_trait_conditions(params.traits.as_ref());
     let identities = identity::list(
         &mut conn,
         &env,
         super::parse_pattern(params.pattern, params.prefix),
+        traits_included,
+        traits_excluded,
     )
     .await?;
 

@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use chrono::Utc;
 use flagrant_types::{
     Environment, Feature, FeatureValue, Project, TagList, Variant,
-    payload::{FeaturePatch, VariantPatchOp},
+    payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
-use super::variant;
+use super::{into_json_string, variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
@@ -220,8 +220,6 @@ pub async fn get_all(
     let mut result: Vec<Feature> = Vec::new();
     let mut id_to_idx: HashMap<i32, usize> = HashMap::new();
 
-    print!("ROWS: {}", rows.len());
-
     for (feature, variant) in rows {
         if let Some(&idx) = id_to_idx.get(&feature.id) {
             if let Some(v) = variant {
@@ -291,6 +289,20 @@ pub async fn patch(
         SQLFeatures::archive_feature(&mut *tx, params![feature.id, ts])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
+    }
+    for op in patch.tags {
+        match op {
+            TagPatchOp::Add(tag) => {
+                SQLFeatures::insert_tag_for_feature(&mut *tx, params![feature.id, tag])
+                    .await
+                    .map_err(|e| FlagrantError::QueryFailed("Could not add feature tag", e))?;
+            }
+            TagPatchOp::Remove(tag) => {
+                SQLFeatures::delete_tag_for_feature(&mut *tx, params![feature.id, tag])
+                    .await
+                    .map_err(|e| FlagrantError::QueryFailed("Could not remove feature tag", e))?;
+            }
+        }
     }
     // Partition variant ops: deletes first, then updates, then adds
     let (deletes, rest): (Vec<_>, Vec<_>) = patch
@@ -416,19 +428,4 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
     }
-}
-
-fn surround_string(s: &str, open_ch: char, close_ch: char) -> String {
-    let mut buf = String::with_capacity(s.len() + 2);
-    buf.push(open_ch);
-    buf.push_str(s);
-    buf.push(close_ch);
-    buf
-}
-
-fn into_json_string(tags: Option<SmallVec<[&str; 3]>>) -> Option<String> {
-    tags.map(|vt| {
-        let quoted_tags: Vec<String> = vt.iter().map(|t| surround_string(t, '"', '"')).collect();
-        surround_string(&quoted_tags.join(","), '[', ']')
-    })
 }

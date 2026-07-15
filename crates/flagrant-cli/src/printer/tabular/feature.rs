@@ -2,7 +2,7 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     Feature, FeatureOverride, Variant,
-    payload::{FeaturePatch, SegmentVariantWeight},
+    payload::{FeaturePatch, SegmentVariantWeight, TagPatchOp},
 };
 
 use crate::handlers::internal::effectives as effective;
@@ -36,6 +36,10 @@ impl Tabular for Feature {
     type Context = OverridesContext;
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No features found.");
+            return;
+        }
         let rows = selfs
             .iter()
             .map(|feat| {
@@ -68,7 +72,33 @@ impl Tabular for Feature {
 
     fn describe(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
-        let tags = format!("{}", self.tags.to_string().bright_blue());
+        let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
+        let tags_str = if has_tag_ops {
+            let mut effective: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
+            for op in patch.into_iter().flat_map(|p| &p.tags) {
+                match op {
+                    TagPatchOp::Add(t) => {
+                        if !effective.contains(&t.as_str()) {
+                            effective.push(t.as_str());
+                        }
+                    }
+                    TagPatchOp::Remove(t) => effective.retain(|x| *x != t.as_str()),
+                }
+            }
+            effective.sort();
+            if effective.is_empty() {
+                "(none)".yellow().to_string()
+            } else {
+                effective.join(", ").yellow().to_string()
+            }
+        } else {
+            self.tags.to_string().bright_blue().to_string()
+        };
+        let tags_stage = if has_tag_ops {
+            "▪ updated".yellow().to_string()
+        } else {
+            String::new()
+        };
 
         let resolve = |pending: Option<bool>, committed: bool, on: &str, off: &str| -> String {
             let (effective, is_pending) = match pending {
@@ -301,6 +331,7 @@ impl Tabular for Feature {
 
         let has_staged = !status_stage.is_empty()
             || !desc_stage.is_empty()
+            || !tags_stage.is_empty()
             || variant_stage.iter().any(|s| !s.is_empty())
             || overrides_has_staged;
 
@@ -343,8 +374,7 @@ impl Tabular for Feature {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
-                vec!["TAGS".to_string(), tags, String::new()],
-                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
+                vec!["TAGS".to_string(), tags_str, tags_stage],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec![
@@ -353,17 +383,18 @@ impl Tabular for Feature {
                     overrides_stage_str,
                 ]);
             }
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
             rows
         } else {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
-                vec!["TAGS".to_string(), tags],
-                vec!["DESCRIPTION".to_string(), desc_str],
+                vec!["TAGS".to_string(), tags_str],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec!["OVERRIDDEN-BY".to_string(), overrides_str]);
             }
+            rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
             rows
         };
         table.render(rows);
