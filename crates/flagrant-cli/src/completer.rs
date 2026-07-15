@@ -93,14 +93,14 @@ impl AutoCompleter for ArgCompleter<'_> {
                             .map(|t| t.name)
                             .collect::<Vec<_>>()
                     }
-                    "trait" if arg_n == 2 && !prefix.contains(':') => {
+                    "trait" if arg_n >= 2 && !prefix.contains('=') => {
                         let ctx = self.session.context.read().unwrap();
                         let res = ctx.project.as_base_resource();
 
                         ctx.client
                             .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
                             .into_iter()
-                            .map(|t| format!("{}:", t.name))
+                            .map(|t| format!("{}=", t.name))
                             .collect::<Vec<_>>()
                     }
                     _ => vec![],

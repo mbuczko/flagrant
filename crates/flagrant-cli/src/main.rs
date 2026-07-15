@@ -81,30 +81,20 @@ fn prompter(session: &Session<Connection>) -> String {
     )
 }
 
-fn has_feature_ctx(session: &Session<Connection>) -> bool {
+fn feature_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().feature.is_some()
 }
-fn has_identity_ctx(session: &Session<Connection>) -> bool {
-    let ctx = session.context.read().unwrap();
-    // Identity context is mutually exclusive with segment context.
-    ctx.identity.is_some() && ctx.segment.is_none()
+fn identity_ctx(session: &Session<Connection>) -> bool {
+    session.context.read().unwrap().identity.is_some()
 }
-fn has_feature_or_identity_ctx(session: &Session<Connection>) -> bool {
-    let ctx = session.context.read().unwrap();
-    (ctx.feature.is_some() || ctx.identity.is_some()) && ctx.segment.is_none()
-}
-fn has_segment_ctx(session: &Session<Connection>) -> bool {
+fn segment_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().segment.is_some()
 }
-fn has_feature_and_segment_ctx(session: &Session<Connection>) -> bool {
-    let ctx = session.context.read().unwrap();
-    ctx.feature.is_some() && ctx.segment.is_some()
-}
-fn has_any_ctx(session: &Session<Connection>) -> bool {
+fn any_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     ctx.feature.is_some() || ctx.identity.is_some() || ctx.segment.is_some()
 }
-fn has_pending_ctx(session: &Session<Connection>) -> bool {
+fn pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
     (ctx.feature.is_some()
         && ctx
@@ -178,132 +168,144 @@ fn main() -> anyhow::Result<()> {
             "add",
             "weight value",
             handlers::variants::add,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
             "delete",
             "index",
             handlers::variants::delete,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
             "discard",
             "index",
             handlers::variants::discard,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
             "value",
             "index value",
             handlers::variants::value,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
             "weight",
             "index [+/-]weight",
             handlers::variants::weight,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
-        Command::Variant
-            .args_in_context("add · delete · discard · weight · value", has_feature_ctx),
+        Command::Variant.args_in_context(
+            "add · delete · discard · weight · value",
+            in_context!(feature_ctx),
+        ),
         // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "status",
             "on|off|archived",
             handlers::features::set_status,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Set.op_in_context(
             "value",
             "value",
             handlers::features::set_value,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Set.op_in_context(
             "description",
             "[description]",
             handlers::features::set_description,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Set.op_in_context(
             "tags",
             "tag1[, tag2, ...]",
             handlers::features::set_tags,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "trait",
-            "name=value",
+            "name=value [name=value ...]",
             handlers::identities::set_trait,
-            has_identity_ctx,
+            in_context!(identity_ctx),
         ),
         Command::Set.op_in_context(
             "override",
             "[value]",
             handlers::identities::set_override,
-            has_identity_ctx,
-        ),
-        Command::Set.args_in_context(
-            "status · value · description · tags · override · trait",
-            has_feature_or_identity_ctx,
+            in_context!(identity_ctx),
         ),
         // Segment setters (only in segment context)
         Command::Set.op_in_context(
             "name",
             "value",
             handlers::segments::set_name,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
         Command::Set.op_in_context(
             "description",
             "value",
             handlers::segments::set_description,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
         // Segment override (only when both feature and segment are in context)
         Command::Set.op_in_context(
             "override",
             "[variant-index weight]",
             handlers::segments::set_override,
-            has_feature_and_segment_ctx,
+            in_context!(feature_ctx, segment_ctx),
         ),
-        Command::Set.args_in_context("name · description · override", has_segment_ctx),
+        Command::Set.args_in_context(
+            "status · value · description · tags · name · override",
+            in_context!(feature_ctx, segment_ctx),
+        ),
+        Command::Set.args_in_context(
+            "status · value · description · tags · trait · override",
+            in_context!(feature_ctx, identity_ctx),
+        ),
+        Command::Set.args_in_context(
+            "status · value · description · tags",
+            in_context!(feature_ctx),
+        ),
+        Command::Set.args_in_context("trait", in_context!(identity_ctx)),
+        Command::Set.args_in_context("name · description", in_context!(segment_ctx)),
         // Feature unsetters (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
             "pattern",
             handlers::features::unset_distribution,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
         Command::Unset.op_in_context(
             "tags",
             "tag1[, tag2, ...]",
             handlers::features::unset_tags,
-            has_feature_ctx,
+            in_context!(feature_ctx),
         ),
-        Command::Unset.args_in_context("distribution · tags", has_feature_ctx),
         // UNSET (only in identity context)
         Command::Unset.op_in_context(
             "trait",
             "name",
             handlers::identities::unset_trait,
-            has_identity_ctx,
+            in_context!(identity_ctx),
         ),
         Command::Unset.op_in_context(
             "override",
             "",
             handlers::identities::unset_override,
-            has_identity_ctx,
+            in_context!(identity_ctx),
         ),
-        Command::Unset.args_in_context("trait · override", has_identity_ctx),
-        // Segment unset override (only when both feature and segment are in context)
-        Command::Unset.op_in_context(
-            "override",
-            "",
-            handlers::segments::unset_override,
-            has_feature_and_segment_ctx,
+        Command::Unset.args_in_context(
+            "distribution · tags · override",
+            in_context!(feature_ctx, segment_ctx),
         ),
+        Command::Unset.args_in_context(
+            "distribution · tags · trait · override",
+            in_context!(feature_ctx, identity_ctx),
+        ),
+        Command::Unset.args_in_context("trait", in_context!(identity_ctx)),
+        Command::Unset.args_in_context("distribution · tags", in_context!(feature_ctx)),
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
         Command::Segment.op("list", "", handlers::segments::list),
@@ -316,52 +318,57 @@ fn main() -> anyhow::Result<()> {
             "add",
             "[--and|--and-not] [description]",
             handlers::groups::add,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
-        Command::Group.op_in_context("list", "", handlers::groups::list, has_segment_ctx),
+        Command::Group.op_in_context("list", "", handlers::groups::list, in_context!(segment_ctx)),
         Command::Group.op_in_context(
             "describe",
             "label",
             handlers::groups::describe,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
-        Command::Group.op_in_context("delete", "label", handlers::groups::delete, has_segment_ctx),
-        Command::Group.args_in_context("add · list · describe · delete", has_segment_ctx),
+        Command::Group.op_in_context(
+            "delete",
+            "label",
+            handlers::groups::delete,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.args_in_context("add · list · describe · delete", in_context!(segment_ctx)),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
             "group-label <identity|trait|environment> comparator value",
             handlers::rules::add,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
             "describe",
             "group-label rule-index",
             handlers::rules::describe,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
             "delete",
             "group-label rule-index",
             handlers::rules::delete,
-            has_segment_ctx,
+            in_context!(segment_ctx),
         ),
-        Command::Rule.args_in_context("add · describe · delete", has_segment_ctx),
+        Command::Rule.args_in_context("add · describe · delete", in_context!(segment_ctx)),
         // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
             handlers::commit,
-            has_pending_ctx,
+            in_context!(pending_ctx),
         ),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
             handlers::discard,
-            has_pending_ctx,
+            in_context!(pending_ctx),
         ),
         Command::Reset.no_op_in_context(
             "→ reset feature and identity context",
             handlers::reset,
-            has_any_ctx,
+            in_context!(any_ctx),
         ),
     ];
     let overlays = vec![
@@ -372,18 +379,19 @@ fn main() -> anyhow::Result<()> {
     let arg_completer = ArgCompleter { session: &session };
     let helper = ReplHelper {
         prompter,
-        hinter: ReplHinter::new(&commands),
+        hinter: ReplHinter::new(&commands, &session),
         overlayer: GenericOverlayer { pairs: overlays },
         completer: CommandLineCompleter::new({
             let session_ref = &session;
             commands
                 .iter()
                 .map(|c| {
-                    // Convert function pointer fn(&Session) -> bool to closure Fn() -> bool
-                    // by capturing session_ref. This allows the completer to check context
-                    // without needing direct access to the session.
-                    let context_checker = c.has_context.map(|checker| {
-                        Box::new(move || checker(session_ref)) as Box<dyn Fn() -> bool>
+                    // Convert the slice of context predicates (AND-ed) into a closure
+                    // Fn() -> bool by capturing session_ref. This allows the completer to
+                    // check context without needing direct access to the session.
+                    let context_checker = c.has_context.map(|checkers| {
+                        Box::new(move || checkers.iter().all(|checker| checker(session_ref)))
+                            as Box<dyn Fn() -> bool>
                     });
                     (c.cmd.to_uppercase(), &c.op, context_checker)
                 })

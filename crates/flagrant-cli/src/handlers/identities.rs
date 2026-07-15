@@ -7,7 +7,7 @@
 //! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
-//! | `SET trait <name:value>`       | [`set_trait`]   | Stage a trait value change for the current identity.|
+//! | `SET trait <name=value ...>`   | [`set_trait`]   | Stage one or more trait value changes.              |
 //! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
 //! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
 //! | `UNSET override`               | [`unset_trait`] | Unpin the identitfy from pinned feature variant.    |
@@ -183,31 +183,34 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
-/// Stage a trait value change for the current identity.
+/// Stage one or more trait value changes for the current identity.
 ///
-/// Expected args: `trait <name:value>`
+/// Expected args: `trait <name=value> [name=value ...]`
 ///
-/// The value is auto-typed (bool → i32 → f32 → str).
+/// Each value is auto-typed (bool → i32 → f32 → str).
 pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(arg) = args.get(1)
-        && let Some((name, value)) = arg.split_once('=')
-    {
-        let mut ctx = session.context.write().unwrap();
-        if let Some(identity) = &ctx.identity {
-            let trait_exists = identity.traits.iter().any(|t| t.name == name);
-            let trait_value = TraitValue::build(value);
+    let pairs: Vec<(&str, &str)> = args[1..]
+        .iter()
+        .filter_map(|arg| arg.split_once('='))
+        .collect();
 
-            stage::stage_trait(
-                ctx.get_or_init_identity_patch(),
-                trait_exists,
-                name.to_string(),
-                trait_value,
-            );
-            return Ok(());
-        }
-        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
+    if pairs.is_empty() {
+        bail!("Usage: SET trait <name=value> [name=value ...]");
     }
-    bail!("Usage: SET trait <name:value>")
+
+    let mut ctx = session.context.write().unwrap();
+    if let Some(identity) = &ctx.identity {
+        let existing: Vec<String> = identity.traits.iter().map(|t| t.name.clone()).collect();
+        let patch = ctx.get_or_init_identity_patch();
+
+        for (name, value) in pairs {
+            let trait_exists = existing.iter().any(|n| n == name);
+            let trait_value = TraitValue::build(value);
+            stage::stage_trait(patch, trait_exists, name.to_string(), trait_value);
+        }
+        return Ok(());
+    }
+    bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
 }
 
 /// Stage a trait removal for the current identity.

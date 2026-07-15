@@ -15,7 +15,7 @@ use super::{completer::CommandLineCompleter, hinter::ReplHinter, parser::split_c
 pub type ReplEditor<'a, T> = Editor<ReplHelper<'a, T>, DefaultHistory>;
 
 #[derive(Helper, Completer, Hinter, Validator, Overlayer)]
-pub struct ReplHelper<'a, T> {
+pub struct ReplHelper<'a, T: 'static> {
     pub prompter: PromptFn<T>,
     #[rustyline(Hinter)]
     pub hinter: ReplHinter<'a, T>,
@@ -54,7 +54,9 @@ pub fn init<T>(
 
                 if let Some(cmd) = commands.iter().find(|c| {
                     c.matches_slices(&slices.iter().map(Deref::deref).collect::<Vec<_>>())
-                        && c.has_context.map(|check| check(session)).unwrap_or(true)
+                        && c.has_context
+                            .map(|checks| checks.iter().all(|check| check(session)))
+                            .unwrap_or(true)
                 }) {
                     rl.add_history_entry(line.as_str())?;
                     if let Err(error) = (cmd.handler)(&slices[1..], session) {

@@ -5,12 +5,16 @@ use super::session::Session;
 pub type CommandHandler<T> = fn(&[Arg], &Session<T>) -> anyhow::Result<()>;
 pub type CommandInContext<T> = fn(&Session<T>) -> bool;
 
-pub struct ReplCommand<T> {
+pub struct ReplCommand<T: 'static> {
     pub cmd: String,
     pub op: Option<String>,
     pub hint: String,
     pub handler: CommandHandler<T>,
-    pub has_context: Option<CommandInContext<T>>,
+    /// Predicates checked against the session to decide whether this command applies to
+    /// the current context. `None` means the command always applies. When present, the
+    /// command applies if *all* predicate matches (AND semantics) - build this with the
+    /// `in_context!` macro, e.g. `in_context!(feature_ctx, identity_ctx)`.
+    pub has_context: Option<&'static [CommandInContext<T>]>,
 }
 
 /// A struct extending a simple string slice with the position

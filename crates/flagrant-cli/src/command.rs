@@ -1,9 +1,27 @@
 use flagrant_client::connection::Connection;
 use flagrant_repl::{
-    command::{Arg, CommandHandler, ReplCommand},
+    command::{Arg, CommandHandler, CommandInContext, ReplCommand},
     session::Session,
 };
 use strum_macros::{Display, EnumIter, EnumString};
+
+/// Predicates checked against the session to decide whether a command applies to the
+/// current context; `None` means the command always applies, `Some` requires every
+/// predicate to match (AND semantics) - see `in_context!`.
+type ContextPredicates = Option<&'static [CommandInContext<Connection>]>;
+
+/// Builds a `&'static [fn(&Session<Connection>) -> bool]` from one or more context
+/// predicates, to be passed to `op_in_context` / `args_in_context` / `no_op_in_context`.
+/// The command applies if *all* predicates match (AND semantics), e.g.
+/// `in_context!(feature_ctx, identity_ctx)` applies only when both feature AND identity
+/// context are active, without needing a dedicated hand-written composite predicate
+/// function.
+#[macro_export]
+macro_rules! in_context {
+    ($($pred:expr),+ $(,)?) => {
+        &[$($pred),+]
+    };
+}
 
 #[derive(Debug, Display, EnumIter, EnumString)]
 pub enum Command {
@@ -34,7 +52,7 @@ impl Command {
         op: Option<&str>,
         hint: &str,
         handler: Option<CommandHandler<Connection>>,
-        has_context: Option<fn(&Session<Connection>) -> bool>,
+        has_context: ContextPredicates,
     ) -> ReplCommand<Connection> {
         ReplCommand {
             cmd: self.to_string().to_uppercase(),
@@ -60,7 +78,7 @@ impl Command {
         op: &str,
         hint: &str,
         handler: CommandHandler<Connection>,
-        has_context: fn(&Session<Connection>) -> bool,
+        has_context: &'static [CommandInContext<Connection>],
     ) -> ReplCommand<Connection> {
         self.build(Some(op), hint, Some(handler), Some(has_context))
     }
@@ -80,7 +98,7 @@ impl Command {
         &self,
         hint: &str,
         handler: CommandHandler<Connection>,
-        has_context: fn(&Session<Connection>) -> bool,
+        has_context: &'static [CommandInContext<Connection>],
     ) -> ReplCommand<Connection> {
         self.build(None, hint, Some(handler), Some(has_context))
     }
@@ -93,7 +111,7 @@ impl Command {
     pub fn args_in_context(
         &self,
         hint: &str,
-        has_context: fn(&Session<Connection>) -> bool,
+        has_context: &'static [CommandInContext<Connection>],
     ) -> ReplCommand<Connection> {
         self.build(None, hint, None, Some(has_context))
     }
