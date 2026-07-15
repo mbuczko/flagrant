@@ -36,6 +36,10 @@ impl Tabular for Feature {
     type Context = OverridesContext;
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No features found.");
+            return;
+        }
         let rows = selfs
             .iter()
             .map(|feat| {

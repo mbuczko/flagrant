@@ -25,6 +25,10 @@ impl Tabular for Segment {
     type Context = SegmentContext;
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No segments found.");
+            return;
+        }
         let rows: Vec<_> = selfs
             .iter()
             .map(|seg| {

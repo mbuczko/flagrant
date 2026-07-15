@@ -14,6 +14,10 @@ impl Tabular for IdentityWithTraits {
     type Context = Vec<IdentityVariant>;
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No identities found.");
+            return;
+        }
         let rows: Vec<_> = selfs
             .iter()
             .map(|id| {

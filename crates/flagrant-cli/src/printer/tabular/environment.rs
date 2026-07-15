@@ -8,6 +8,10 @@ impl Tabular for Environment {
     type Context = ();
 
     fn list(selfs: &[Self]) {
+        if selfs.is_empty() {
+            println!("No environments found.");
+            return;
+        }
         let rows: Vec<_> = selfs
             .iter()
             .map(|env| {
