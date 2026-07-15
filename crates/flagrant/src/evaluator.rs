@@ -29,14 +29,14 @@ pub struct IdentityContext<'a> {
 /// The value a rule's driver resolves to, for comparison against `SegmentRule.value`.
 ///
 /// Distinct from `flagrant_types::TraitValue` on purpose: `TraitValue` is the domain type
-/// for an *identity trait's* stored value. `Identity`/`Environment` drivers don't resolve to
+/// for an identity trait's stored value. `Identity`/`Environment` drivers don't resolve to
 /// a trait at all - they read the identity's own value / the environment's name - so
 /// wrapping them in `TraitValue` would misrepresent them as trait data. `ActualValue` is the
 /// evaluator's own "comparable value" shape; a `Trait(name)` driver converts the identity's
 /// `TraitValue` into one.
 ///
-/// Borrows rather than owns (`Str(&'a str)`, not `Str(String)`) so resolving a driver never
-/// needs to clone the identity's value, the environment's name, or a trait's string -
+/// Borrows rather than owns (so `Str(&'a str)`, not `Str(String)`) so resolving a driver
+/// never needs to clone the identity's value, the environment's name, or a trait's string -
 /// everything it points at already lives in `Environment`/`IdentityContext`/`SegmentRule`
 /// for at least as long as one rule evaluation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -180,7 +180,11 @@ fn comparator_matches(comparator: &Comparator, actual: &ActualValue, rule_value:
 
 fn numeric_cmp(actual: &ActualValue, rule_value: &str) -> Option<Ordering> {
     let parsed = parse_as(actual, rule_value)?;
-    values_cmp(actual, &parsed)
+    match (actual, &parsed) {
+        (ActualValue::Int(x), ActualValue::Int(y)) => Some(x.cmp(y)),
+        (ActualValue::Float(x), ActualValue::Float(y)) => x.partial_cmp(y),
+        _ => None,
+    }
 }
 
 /// Parses `raw` into the same `ActualValue` variant as `actual` (type-directed parse).
@@ -191,17 +195,6 @@ fn parse_as<'a>(actual: &ActualValue, raw: &'a str) -> Option<ActualValue<'a>> {
         ActualValue::Int(_) => raw.parse::<i32>().ok().map(ActualValue::Int),
         ActualValue::Float(_) => raw.parse::<f32>().ok().map(ActualValue::Float),
         ActualValue::Bool(_) => raw.parse::<bool>().ok().map(ActualValue::Bool),
-    }
-}
-
-/// Ordering between two `ActualValue`s - only Int/Int and Float/Float are comparable; every
-/// other pairing (including Str/Str, Bool/Bool) returns `None`, so `GreaterThan`/`LowerThan`
-/// variants never match on `Str` or `Bool` actual values.
-fn values_cmp(a: &ActualValue, b: &ActualValue) -> Option<Ordering> {
-    match (a, b) {
-        (ActualValue::Int(x), ActualValue::Int(y)) => Some(x.cmp(y)),
-        (ActualValue::Float(x), ActualValue::Float(y)) => x.partial_cmp(y),
-        _ => None,
     }
 }
 
