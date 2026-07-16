@@ -51,7 +51,6 @@ impl Tabular for Segment {
 
     fn describe(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
-
         let title = if eff.name_modified {
             format!(
                 "Segment: {} {} {} (ID={})",
@@ -71,7 +70,7 @@ impl Tabular for Segment {
                 .yellow()
                 .to_string()
         } else {
-            eff.description.as_deref().unwrap_or("").to_string()
+            eff.description.unwrap_or_default()
         };
         let desc_stage = if eff.description_modified {
             "▪ updating".yellow().to_string()
@@ -79,8 +78,12 @@ impl Tabular for Segment {
             String::new()
         };
 
-        let mut group_lines: Vec<String> = Vec::new();
-        let mut group_stage: Vec<String> = Vec::new();
+        // Upper-bound capacity: each group pushes at most 3 lines for its connector, 1 for
+        // the label, 1 for the closing corner, plus one per rule (the +1 also safely covers
+        // the single "(no rules)" placeholder line when a group has none).
+        let group_capacity: usize = eff.groups.iter().map(|g| g.rules.len() + 6).sum();
+        let mut group_lines: Vec<String> = Vec::with_capacity(group_capacity);
+        let mut group_stage: Vec<String> = Vec::with_capacity(group_capacity);
 
         for group in &eff.groups {
             if let Some(connector) = &group.connector {
@@ -104,19 +107,23 @@ impl Tabular for Segment {
                 group_stage.push(String::new());
             }
 
-            let (frame, label_colored) = if group.is_deleted {
-                (UTF_TOP_CORNER.red().dimmed(), group.label.red().dimmed())
+            let label_colored = if group.is_deleted {
+                group.label.dimmed()
             } else if group.is_staged_add {
-                (UTF_TOP_CORNER.green(), group.label.green())
+                group.label.green()
             } else {
-                (UTF_TOP_CORNER.dimmed(), group.label.yellow())
+                group.label.yellow()
             };
             let desc_part = group
                 .description
                 .as_deref()
                 .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
                 .unwrap_or_default();
-            group_lines.push(format!("{frame} {label_colored}{desc_part}"));
+
+            group_lines.push(format!(
+                "{} {label_colored}{desc_part}",
+                UTF_TOP_CORNER.dimmed()
+            ));
             group_stage.push(if group.is_deleted {
                 "▪ deleting".red().to_string()
             } else if group.is_staged_add {
@@ -127,14 +134,11 @@ impl Tabular for Segment {
 
             let visible_rules: Vec<_> = group.rules.iter().collect();
             if visible_rules.is_empty() {
-                let pipe = if group.is_deleted {
-                    UTF_VERT_BAR.red().dimmed()
-                } else if group.is_staged_add {
-                    UTF_VERT_BAR.green()
-                } else {
-                    UTF_VERT_BAR.dimmed()
-                };
-                group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
+                group_lines.push(format!(
+                    "{}  {}",
+                    UTF_VERT_BAR.dimmed(),
+                    "(no rules)".dimmed()
+                ));
                 group_stage.push(String::new());
             } else {
                 let max_driver = visible_rules
@@ -147,42 +151,38 @@ impl Tabular for Segment {
                     let driver = format_driver(&r.driver);
                     let cmp = format_comparator(&r.comparator);
 
-                    let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
-                        if group.is_deleted || r.is_deleted {
-                            (
-                                UTF_VERT_BAR.red().dimmed(),
-                                display_idx.to_string().dimmed(),
-                                driver.dimmed(),
-                                cmp.dimmed(),
-                                r.value.dimmed(),
-                                if r.is_deleted {
-                                    "▪ deleting".red().to_string()
-                                } else {
-                                    String::new()
-                                },
-                            )
-                        } else if r.is_staged_add {
-                            (
-                                UTF_VERT_BAR.green(),
-                                "+".green(),
-                                driver.bright_blue(),
-                                cmp.dimmed(),
-                                r.value.green(),
-                                "▪ adding".green().to_string(),
-                            )
-                        } else {
-                            (
-                                UTF_VERT_BAR.dimmed(),
-                                display_idx.to_string().dimmed(),
-                                driver.bright_blue(),
-                                cmp.dimmed(),
-                                r.value.green(),
-                                String::new(),
-                            )
-                        };
+                    let (idx_str, driver_s, val_s, rule_stage) = if group.is_deleted || r.is_deleted
+                    {
+                        (
+                            display_idx.to_string().dimmed(),
+                            driver.dimmed(),
+                            r.value.dimmed(),
+                            if r.is_deleted {
+                                "▪ deleting".red().to_string()
+                            } else {
+                                String::new()
+                            },
+                        )
+                    } else if r.is_staged_add {
+                        (
+                            "+".green(),
+                            driver.bright_blue(),
+                            r.value.green(),
+                            "▪ adding".green().to_string(),
+                        )
+                    } else {
+                        (
+                            display_idx.to_string().dimmed(),
+                            driver.bright_blue(),
+                            r.value.green(),
+                            String::new(),
+                        )
+                    };
 
                     group_lines.push(format!(
-                        "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}",
+                        "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp}  {val_s}",
+                        pipe = UTF_VERT_BAR.dimmed(),
+                        cmp = cmp.dimmed(),
                         dw = max_driver,
                     ));
                     group_stage.push(rule_stage);
@@ -193,18 +193,9 @@ impl Tabular for Segment {
                 }
             }
 
-            let close = if group.is_deleted {
-                UTF_BTM_CORNER.red().dimmed()
-            } else if group.is_staged_add {
-                UTF_BTM_CORNER.green()
-            } else {
-                UTF_BTM_CORNER.dimmed()
-            };
-            group_lines.push(close.to_string());
+            group_lines.push(UTF_BTM_CORNER.dimmed().to_string());
             group_stage.push(String::new());
         }
-
-        let groups_str = group_lines.join("\n");
 
         // overrides_lines and overrides_stages must stay in lockstep (one stage entry per
         // content line) since they're joined by "\n" and rendered as aligned rows in
@@ -223,8 +214,8 @@ impl Tabular for Segment {
 
             let parts = overridden_variant_parts(&o.weights);
             let plain_line = format!(
-                "{} {}: {}",
-                "(feature)".dimmed(),
+                "{} › {} {}",
+                "feature".bright_blue(),
                 o.feature_name.dimmed(),
                 parts.join(", ")
             );
@@ -236,10 +227,10 @@ impl Tabular for Segment {
                 }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) if o.weights.is_empty() => {
                     // Newly staged override for a feature with no committed weights yet.
-                    let line = format!("{} {}: (pending)", "(feature)".dimmed(), o.feature_name)
-                        .green()
-                        .to_string();
-                    overrides_lines.push(line);
+                    let line =
+                        format!("{} › {} (pending)", "feature".bright_blue(), o.feature_name);
+
+                    overrides_lines.push(line.green().to_string());
                     overrides_stages.push("▪ adding".green().to_string());
                 }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
@@ -253,14 +244,10 @@ impl Tabular for Segment {
             }
         }
 
-        let overrides_str = overrides_lines.join("\n");
-        let overrides_stage_str = overrides_stages.join("\n");
-        let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
-
+        let has_staged_overrides = overrides_stages.iter().any(|s| !s.is_empty());
         let has_staged = !desc_stage.is_empty()
             || group_stage.iter().any(|s| !s.is_empty())
-            || overrides_has_staged;
-        let rules_stage_str = group_stage.join("\n");
+            || has_staged_overrides;
 
         let table = if has_staged {
             FancyTable::create(FancyTableOpts::default())
@@ -299,34 +286,36 @@ impl Tabular for Segment {
                 .build()
         };
 
-        let rows: Vec<Vec<String>> = if has_staged {
-            let mut rows = vec![
-                vec!["RULES".to_string(), groups_str, rules_stage_str],
-                vec!["DESCRIPTION".to_string(), desc_str, desc_stage],
-            ];
-            if !overrides_str.is_empty() {
-                rows.push(vec![
-                    "OVERRIDES".to_string(),
-                    overrides_str,
-                    overrides_stage_str,
-                ]);
+        let mut rows = vec![vec![
+            "RULES".to_string(),
+            group_lines.join("\n"),
+            group_stage.join("\n"),
+        ]];
+        if let overrides_str = overrides_lines.join("\n")
+            && !overrides_str.is_empty()
+        {
+            rows.push(vec![
+                "OVERRIDES".to_string(),
+                overrides_str,
+                overrides_stages.join("\n"),
+            ]);
+        }
+        rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
+
+        // The table itself only has a stage column when has_staged, so drop it from each
+        // row to match - it would be all empty strings anyway in that case.
+        if !has_staged {
+            for row in &mut rows {
+                row.truncate(2);
             }
-            rows
-        } else {
-            let mut rows = vec![
-                vec!["RULES".to_string(), groups_str],
-                vec!["DESCRIPTION".to_string(), desc_str],
-            ];
-            if !overrides_str.is_empty() {
-                rows.push(vec!["OVERRIDES".to_string(), overrides_str]);
-            }
-            rows
-        };
+        }
         table.render(rows);
 
-        let has_visible = eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add);
-        if !has_visible {
-            println!("{}", "(no groups - use GROUP add to create one)".dimmed());
+        if !(eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add)) {
+            println!(
+                "{}",
+                "(no group added yet - use `GROUP add ...` to create one)".dimmed()
+            );
         }
     }
 }
@@ -398,7 +387,7 @@ impl Tabular for SegmentGroup {
         let mut group_stage: Vec<String> = Vec::new();
 
         let (frame, label_colored) = if is_deleted {
-            (UTF_TOP_CORNER.red().dimmed(), group.label.red().dimmed())
+            (UTF_TOP_CORNER.dimmed(), group.label.dimmed())
         } else {
             (UTF_TOP_CORNER.dimmed(), group.label.yellow())
         };
@@ -419,12 +408,11 @@ impl Tabular for SegmentGroup {
         let all_empty = group.rules.is_empty() && staged_add_rules.is_empty();
 
         if all_empty {
-            let pipe = if is_deleted {
-                UTF_VERT_BAR.red().dimmed()
-            } else {
-                UTF_VERT_BAR.dimmed()
-            };
-            group_lines.push(format!("{pipe}  {}", "(no rules)".dimmed()));
+            group_lines.push(format!(
+                "{}  {}",
+                UTF_VERT_BAR.dimmed(),
+                "(no rules)".dimmed()
+            ));
             group_stage.push(String::new());
         } else {
             let max_driver = group
@@ -446,7 +434,7 @@ impl Tabular for SegmentGroup {
                 let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                     if is_deleted || rule_deleted {
                         (
-                            UTF_VERT_BAR.red().dimmed(),
+                            UTF_VERT_BAR.dimmed(),
                             display_idx.to_string().dimmed(),
                             driver.dimmed(),
                             cmp.dimmed(),
@@ -487,12 +475,7 @@ impl Tabular for SegmentGroup {
             }
         }
 
-        let close = if is_deleted {
-            UTF_BTM_CORNER.red().dimmed()
-        } else {
-            UTF_BTM_CORNER.dimmed()
-        };
-        group_lines.push(close.to_string());
+        group_lines.push(UTF_BTM_CORNER.dimmed().to_string());
         group_stage.push(String::new());
 
         let group_str = group_lines.join("\n");
