@@ -3,7 +3,6 @@
 //! | Command                          | Handler      | Description                                          |
 //! |----------------------------------|--------------|------------------------------------------------------|
 //! | `GROUP add [--and|--and-not]`    | [`add`]      | Stage a new group on the current segment.            |
-//! | `GROUP list`                     | [`list`]     | List all groups in the current segment.              |
 //! | `GROUP describe <label>`         | [`describe`] | Print details of a group with its rules.             |
 //! | `GROUP delete <label>`           | [`delete`]   | Stage a group deletion by label.                     |
 
@@ -12,17 +11,13 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
-use crate::{
-    handlers::segments,
-    printer::tabular::{Tabular, segment::SegmentContext},
-};
+use crate::printer::tabular::Tabular;
 
 /// Stage a group addition for the current segment.
 ///
 /// Expected args: `[--and|--and-not] [description]`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let segment = segment_from_ctx(session)?;
-
     let (connector, description) = match args.get(1).map(|a| a.as_ref()) {
         Some("--and") => (
             Some(GroupConnector::And),
@@ -42,6 +37,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             .as_ref()
             .map(|p| p.ops.as_slice())
             .unwrap_or_default();
+
         predict_next_label(&segment, staged)
     };
 
@@ -60,24 +56,6 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         });
 
     println!("Staged: add [{}]{connector_hint}", predicted_label);
-    Ok(())
-}
-
-/// List groups - shows the current committed segment state.
-pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let (segment_id, fresh) = {
-        let ctx = session.context.read().unwrap();
-        let Some(segment_id) = ctx.segment.as_ref().map(|s| s.id) else {
-            bail!("Not in a segment context.");
-        };
-        let res = ctx.project_resource();
-        let fresh = ctx
-            .client
-            .get::<Segment>(res.subpath(format!("/segments/{segment_id}")))?;
-        (segment_id, fresh)
-    };
-    let overrides = segments::fetch_overridden_features(segment_id, session);
-    fresh.describe(None, &SegmentContext { overrides });
     Ok(())
 }
 

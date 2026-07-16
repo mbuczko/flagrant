@@ -11,7 +11,6 @@
 //! | `FEATURE describe`   | [`describe`]           | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
 //! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `SET value`          | [`set_value`]          | Stage a default value change.                       |
 //! | `SET description`    | [`set_description`]    | Stage a feature description.                        |
 //! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
@@ -26,7 +25,7 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, FeatureOverride, FeatureValue,
-    payload::{NewFeaturePayload, SegmentPatchOp, VariantPatchOp},
+    payload::{NewFeaturePayload, SegmentPatchOp},
 };
 
 use crate::{
@@ -35,10 +34,11 @@ use crate::{
         internal::{concat_values_for_arg, index, stage},
         open_in_editor,
     },
-    printer::tabular::{Tabular, feature::OverridesContext},
+    printer::tabular::{
+        Tabular,
+        feature::{IdentityPending, OverridesContext},
+    },
 };
-
-use flagrant_client::connection::VariantRef;
 
 fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
@@ -139,78 +139,83 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 ///
 /// Expected args: `[feature]`
 ///
-/// If a feature argument is provided, fetches and describes that feature. Otherwise
-/// describes the feature in the current context, overlaying any pending staged changes.
+/// If a feature argument is provided that names a *different* feature than the one in
+/// context, fetches and describes that feature with committed overrides only. Otherwise
+/// (no argument, or naming the feature already in context) describes the feature in the
+/// current context, overlaying any pending staged changes - since pending state (feature
+/// patch, identity override, segment override) only exists for the in-context feature.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
+    let ctx = session.context.read().unwrap();
+    let in_context = match args.get(1) {
+        Some(name) => ctx.feature.as_ref().is_some_and(|f| f.name == name.as_ref()),
+        None => true,
+    };
+
+    if !in_context {
+        let name = args.get(1).unwrap();
+        drop(ctx);
+
         let feature = fetch_feature(name, session)?;
         let overrides = fetch_overrides(feature.id, session);
 
         feature.describe(None, &OverridesContext::committed_only(overrides));
-    } else {
-        let ctx = session.context.read().unwrap();
-        let feature = ctx.feature.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(
-                "Not in a feature context. Set the context with: \"FEATURE use\" command."
-            )
-        })?;
-        let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
-        let overrides = fetch_overrides(feature.id, session);
-
-        let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
-            let identity_value = ctx.identity.as_ref()?.value.clone();
-
-            // Any recent unpins (discarded overrides)?
-            if ipatch.unpins.contains(&feature.name) {
-                return Some(identity_value);
-            }
-
-            // ...or newly added overrides?
-            if ipatch
-                .overrides
-                .iter()
-                .find(|o| o.feature_name == feature.name)
-                .is_some()
-            {
-                return Some(identity_value);
-            }
-            None
-        });
-
-        let segment_pending = ctx.segment_patch.as_ref().and_then(|spatch| {
-            let seg_name = ctx.segment.as_ref()?.name.clone();
-            for op in &spatch.ops {
-                match op {
-                    SegmentPatchOp::SetFeatureOverride {
-                        feature_id,
-                        variant_weights,
-                        ..
-                    } if *feature_id == feature.id => {
-                        return Some((seg_name, Some(variant_weights.clone())));
-                    }
-                    SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
-                        if *feature_id == feature.id =>
-                    {
-                        return Some((seg_name, None));
-                    }
-                    _ => {}
-                }
-            }
-            None
-        });
-
-        feature.describe(
-            patch,
-            &OverridesContext {
-                committed: overrides,
-                identity_pending,
-                segment_pending,
-            },
-        );
-        drop(ctx);
-
-        index::rebuild(&mut session.context.write().unwrap());
+        return Ok(());
     }
+
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Set the context with: \"FEATURE use\" command.")
+    })?;
+    let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
+    let overrides = fetch_overrides(feature.id, session);
+
+    let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
+        let identity_value = ctx.identity.as_ref()?.value.clone();
+
+        // Any recent unpins (discarded overrides)?
+        if ipatch.unpins.contains(&feature.name) {
+            return Some(IdentityPending::Unpin(identity_value));
+        }
+
+        // ...or newly added overrides?
+        if ipatch.overrides.iter().any(|o| o.feature_name == feature.name) {
+            return Some(IdentityPending::Override(identity_value));
+        }
+        None
+    });
+
+    let segment_pending = ctx.segment_patch.as_ref().and_then(|spatch| {
+        let seg_name = ctx.segment.as_ref()?.name.clone();
+        for op in &spatch.ops {
+            match op {
+                SegmentPatchOp::SetFeatureOverride {
+                    feature_id,
+                    variant_weights,
+                    ..
+                } if *feature_id == feature.id => {
+                    return Some((seg_name, Some(variant_weights.clone())));
+                }
+                SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
+                    if *feature_id == feature.id =>
+                {
+                    return Some((seg_name, None));
+                }
+                _ => {}
+            }
+        }
+        None
+    });
+
+    feature.describe(
+        patch,
+        &OverridesContext {
+            committed: overrides,
+            identity_pending,
+            segment_pending,
+        },
+    );
+    drop(ctx);
+
+    index::rebuild(&mut session.context.write().unwrap());
     Ok(())
 }
 
@@ -331,55 +336,6 @@ fn parse_tags(args: &[Arg]) -> Vec<String> {
     tags
 }
 
-/// Stages a new value for the current feature (i.e. its control variant).
-///
-/// Expected args: `[value]`
-///
-/// When called without a value argument, opens `$EDITOR` (falling back to `vi`) pre-filled
-/// with the current value so the user can edit it interactively.
-pub fn set_value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-    if let Some(feature) = &ctx.feature {
-        let control_id = feature.get_default_variant().id;
-        let control_ref = VariantRef::Committed(control_id);
-
-        let raw: String = if let Some(raw) = args.get(1) {
-            raw.to_string()
-        } else {
-            // No value provided - open editor with current bare value (without type prefix).
-            // Prefer any already-staged value over the committed one.
-            let current_fv = ctx
-                .feature_patch
-                .as_ref()
-                .and_then(|p| {
-                    p.variants.iter().find_map(|op| match op {
-                        VariantPatchOp::SetValue { id, value } if *id == control_id => Some(value),
-                        _ => None,
-                    })
-                })
-                .unwrap_or_else(|| feature.get_default_value());
-            let (_, bare) = current_fv.decompose();
-            let edited = open_in_editor(bare)?;
-
-            // Type is inferred from the edited content, not the original.
-            let parsed = FeatureValue::build(&edited);
-
-            stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
-            return Ok(());
-        };
-
-        let parsed = raw
-            .parse()
-            .unwrap_or_else(|_| feature.get_default_value().clone_with(&raw));
-        let display = parsed.to_string();
-        stage::stage_value(ctx.get_or_init_pending(), &control_ref, parsed)?;
-
-        println!("Staged: value = {display}");
-        return Ok(());
-    }
-    bail!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
-}
-
 /// Commits all staged changes for the current feature to the API atomically.
 pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
@@ -477,15 +433,14 @@ pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
 /// List features in the current environment.
 ///
-/// Accepts optional filter arguments of the form `tag:a,b`, `status:active`,
-/// and `state:on`, plus a bare pattern string for name matching.
+/// Accepts optional filter arguments of the form `tag:a,b` and `status:on|off|archived`,
+/// plus a bare pattern string for name matching.
 pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx: std::sync::RwLockReadGuard<'_, Connection> = session.context.read().unwrap();
     let res = ctx.env_resource();
 
     let tags = concat_values_for_arg("tag", args);
-    let archived: String = concat_values_for_arg("archived", args);
-    let enabled = concat_values_for_arg("enabled", args);
+    let status = concat_values_for_arg("status", args);
     let pat = args[1..]
         .iter()
         .find(|a| !a.contains(":"))
@@ -495,7 +450,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Feature::list(
         ctx.client
             .get::<Vec<Feature>>(res.subpath(format!(
-                "/features?tags={tags}&archived={archived}&enabled={enabled}&pattern={pat}"
+                "/features?tags={tags}&status={status}&pattern={pat}"
             )))?
             .as_ref(),
     );

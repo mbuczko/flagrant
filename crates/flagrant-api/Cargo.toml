@@ -11,8 +11,8 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant = {path = "../flagrant", version = "0.0.8"}
-flagrant-types = {path = "../flagrant-types", version = "0.0.8"}
+flagrant = {path = "../flagrant", version = "0.0.9"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.9"}
 
 tokio = {workspace = true}
 axum = {workspace = true}

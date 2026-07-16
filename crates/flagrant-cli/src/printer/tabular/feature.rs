@@ -11,11 +11,27 @@ use super::Tabular;
 
 const SHOW_OVERRIDES: usize = 3;
 
+/// A staged change to the in-context identity's override for this feature.
+pub enum IdentityPending {
+    /// A new or updated override was staged (`SET override`).
+    Override(String),
+    /// The existing override was staged for removal (`UNSET override`).
+    Unpin(String),
+}
+
+impl IdentityPending {
+    fn identity_value(&self) -> &str {
+        match self {
+            IdentityPending::Override(v) | IdentityPending::Unpin(v) => v,
+        }
+    }
+}
+
 /// Context passed to `Feature::describe` to show both committed and pending overrides.
 pub struct OverridesContext {
     pub committed: Vec<FeatureOverride>,
     /// Identity with staged change in a context.
-    pub identity_pending: Option<String>,
+    pub identity_pending: Option<IdentityPending>,
     /// If the segment in context has a staged change for this feature:
     /// `(segment_name, Some(weights))` = override set; `(segment_name, None)` = unset.
     pub segment_pending: Option<(String, Option<Vec<SegmentVariantWeight>>)>,
@@ -61,10 +77,10 @@ impl Tabular for Feature {
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
-                Layout::Expandable(30),
+                Layout::Expandable(40),
                 Align::Left,
             )
-            .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
+            .add_column_named_with_align("TAGS".into(), Layout::Expandable(30), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows)
@@ -92,10 +108,10 @@ impl Tabular for Feature {
                 effective.join(", ").yellow().to_string()
             }
         } else {
-            self.tags.to_string().bright_blue().to_string()
+            self.tags.to_string().blue().to_string()
         };
         let tags_stage = if has_tag_ops {
-            "▪ updated".yellow().to_string()
+            "▪ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -131,7 +147,7 @@ impl Tabular for Feature {
             )
         };
         let status_stage = if pending_enabled.is_some() || pending_archived.is_some() {
-            "▪ updated".yellow().to_string()
+            "▪ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -142,7 +158,7 @@ impl Tabular for Feature {
             None => self.description.clone(),
         };
         let desc_stage = if patch.and_then(|p| p.description.as_ref()).is_some() {
-            "▪ updated".yellow().to_string()
+            "▪ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -182,19 +198,19 @@ impl Tabular for Feature {
 
             if e.is_deleted {
                 variant_lines.push(line.dimmed().to_string());
-                variant_stage.push("- deleted".red().to_string());
+                variant_stage.push("▪ deleting".red().to_string());
             } else if e.is_staged_add {
                 variant_lines.push(line.green().to_string());
-                variant_stage.push("+ added".green().to_string());
+                variant_stage.push("▪ adding".green().to_string());
             } else if e.value_modified
                 || e.weight_modified
                 || (e.is_control && has_ops && weight != e.weight)
             {
                 variant_lines.push(line.yellow().to_string());
                 let label = if e.value_modified || e.weight_modified {
-                    "▪ updated"
+                    "▪ updating"
                 } else {
-                    "▪ adjusted"
+                    "▪ adjusting"
                 };
                 variant_stage.push(label.yellow().to_string());
             } else {
@@ -231,24 +247,47 @@ impl Tabular for Feature {
                 .collect::<Vec<_>>();
 
             if let Some(pending) = ctx.identity_pending.as_ref()
-                && !committed_identities.contains(&pending.as_str())
+                && !committed_identities.contains(&pending.identity_value())
             {
-                identities.push(pending)
+                identities.push(pending.identity_value())
             }
 
-            let line = identities.join(", ");
             let rest = identities.len().saturating_sub(SHOW_OVERRIDES);
+            // Only the identity with a pending change is colored - dimmed if it's being
+            // unpinned, green if it's a new/updated override - the rest keep their
+            // default style so the pending one stands out.
+            let pending_value = ctx.identity_pending.as_ref().map(|p| p.identity_value());
+            let line = identities
+                .iter()
+                .map(|id| match &ctx.identity_pending {
+                    Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
+                        id.dimmed().to_string()
+                    }
+                    Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
+                        id.green().to_string()
+                    }
+                    _ => id.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             let content = if rest > 0 {
-                format!("{}: {} (+{} more)", "identities".dimmed(), line, rest)
+                format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
             } else {
-                format!("{}: {}", "identities".dimmed(), line)
+                format!("{} › {}", "identity".bright_blue(), line)
             };
-            if ctx.identity_pending.is_some() {
-                // TODO: Generic "updated" annotation for now.
-                // Later we may distinct between different actions (like override being added/removed).
-                overrides_stages.push("▪ updated".yellow().to_string());
-            }
+            // overrides_lines and overrides_stages must stay in lockstep (one stage entry
+            // per content line) since they're joined by "\n" and rendered as aligned rows
+            // in adjacent table columns - always push both, even if the stage is empty.
+            let stage = if let Some(pending) = &ctx.identity_pending {
+                match pending {
+                    IdentityPending::Override(_) => "▪ updating".yellow().to_string(),
+                    IdentityPending::Unpin(_) => "▪ removing".red().to_string(),
+                }
+            } else {
+                String::new()
+            };
             overrides_lines.push(content);
+            overrides_stages.push(stage);
         }
 
         // Segment overrides: one line per segment with optional staging annotation.
@@ -270,26 +309,26 @@ impl Tabular for Feature {
                                 with_control_remainder(pending_weights, &self.variants);
                             let parts = segment_weight_parts(&with_control, &self.variants);
                             let line = format!(
-                                "{} {}: {}",
-                                "(segment)".dimmed(),
+                                "{}  › {} {}",
+                                "segment".bright_blue(),
                                 name.dimmed(),
                                 parts.join(", ")
                             )
                             .yellow()
                             .to_string();
-                            (line, "▪ updated".yellow().to_string())
+                            (line, "▪ updating".yellow().to_string())
                         }
                         Some((_, None)) => {
                             let parts = segment_weight_parts(weights, &self.variants);
                             let line = format!(
-                                "{} {}: {}",
-                                "(segment)".dimmed(),
+                                "{}  › {} {}",
+                                "segment".bright_blue(),
                                 name.dimmed(),
                                 parts.join(", ")
                             )
                             .dimmed()
                             .to_string();
-                            (line, "▪ removed".red().to_string())
+                            (line, "▪ removing".red().to_string())
                         }
                         None => unreachable!(),
                     };
@@ -298,8 +337,8 @@ impl Tabular for Feature {
                 } else {
                     let parts = segment_weight_parts(weights, &self.variants);
                     overrides_lines.push(format!(
-                        "{} {}: {}",
-                        "(segment)".dimmed(),
+                        "{}  › {} {}",
+                        "segment".bright_blue(),
                         name.dimmed(),
                         parts.join(", ")
                     ));
@@ -314,15 +353,15 @@ impl Tabular for Feature {
             let with_control = with_control_remainder(pending_weights, &self.variants);
             let parts = segment_weight_parts(&with_control, &self.variants);
             let line = format!(
-                "{} {}: {}",
-                "(segment)".dimmed(),
+                "{}  › {} {}",
+                "segment".bright_blue(),
                 seg_name.green(),
                 parts.join(", ")
             )
             .green()
             .to_string();
             overrides_lines.push(line);
-            overrides_stages.push("▪ added".green().to_string());
+            overrides_stages.push("▪ adding".green().to_string());
         }
 
         let overrides_str = overrides_lines.join("\n");
@@ -347,7 +386,7 @@ impl Tabular for Feature {
                 )
                 .add_column(
                     None,
-                    Layout::Fixed(12),
+                    Layout::Fixed(14),
                     Align::Left,
                     Overflow::Truncate,
                     variant_stage.len().max(1),
@@ -374,7 +413,6 @@ impl Tabular for Feature {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
-                vec!["TAGS".to_string(), tags_str, tags_stage],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec![
@@ -383,17 +421,18 @@ impl Tabular for Feature {
                     overrides_stage_str,
                 ]);
             }
+            rows.push(vec!["TAGS".to_string(), tags_str, tags_stage]);
             rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
             rows
         } else {
             let mut rows = vec![
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
-                vec!["TAGS".to_string(), tags_str],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec!["OVERRIDDEN-BY".to_string(), overrides_str]);
             }
+            rows.push(vec!["TAGS".to_string(), tags_str]);
             rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
             rows
         };

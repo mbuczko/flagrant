@@ -13,21 +13,27 @@ use utoipa::IntoParams;
 use crate::{errors::ServiceError, extractors::DbConnection};
 
 /// Query parameters for feature listing.
-///
-/// Boolean fields (`archived`, `enabled`) are parsed case-insensitively:
-/// truthy values are `"true"`, `"yes"`, `"on"`, `"t"`; anything else is falsey.
 #[derive(Debug, Deserialize, IntoParams)]
 pub(crate) struct FeatureQueryParams {
     /// Filter by name prefix
     prefix: Option<String>,
-    /// Filter archived: "true" or "false"
-    archived: Option<String>,
-    /// Filter enabled: "true" or "false"
-    enabled: Option<String>,
+    /// Filter by status: "on", "off", or "archived" (empty string ignored)
+    status: Option<String>,
     /// Comma-separated tags; prefix with `-` to exclude (e.g. "prod,-beta")
     tags: Option<String>,
     /// SQL LIKE pattern applied to feature names
     pattern: Option<String>,
+}
+
+/// Parses the `status` query parameter ("on", "off", or "archived") into the
+/// `(is_archived, is_enabled)` pair the model layer filters on.
+fn parse_status(status: Option<String>) -> (Option<bool>, Option<bool>) {
+    match status.as_deref() {
+        Some("archived") => (Some(true), None),
+        Some("on") => (Some(false), Some(true)),
+        Some("off") => (Some(false), Some(false)),
+        _ => (None, None),
+    }
 }
 
 #[derive(Debug)]
@@ -159,8 +165,7 @@ pub async fn update(
 /// # Query Parameters
 /// - `pattern` - Filter by feature name substring (e.g., "banner" matches "show_banner", "show_banner_top")
 /// - `prefix`  - Filter by feature name prefix (e.g., "show_" matches "show_banner", "show_notification")
-/// - `status`  - Filter by active status: "active" or "inactive" (empty string ignored)
-/// - `state`   - Filter by enabled state: "on" or "off" (empty string ignored)
+/// - `status`  - Filter by status: "on", "off", or "archived" (empty string ignored)
 /// - `tags`    - Comma-separated tags to filter by. Prefix with `-` to exclude (e.g., "prod,-beta")
 #[utoipa::path(
     get,
@@ -183,11 +188,12 @@ pub async fn list(
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let (tags_included, tags_excluded) = super::parse_included_excluded(params.tags.as_ref());
+    let (is_archived, is_enabled) = parse_status(params.status);
     let features = feature::get_all(
         &mut conn,
         &env,
-        super::parse_bool(params.archived),
-        super::parse_bool(params.enabled),
+        is_archived,
+        is_enabled,
         super::parse_pattern(params.pattern, params.prefix),
         tags_included,
         tags_excluded,

@@ -18,7 +18,7 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, Segment, SegmentFeatureOverride,
+    Feature, OverriddenVariant, Segment, SegmentFeatureOverride,
     payload::{FeaturePatch, NewSegmentPayload, SegmentPatchOp, SegmentVariantWeight},
 };
 
@@ -37,6 +37,42 @@ fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Se
 
     ctx.client
         .get::<Segment>(res.subpath(format!("/segments/{name}")))
+}
+
+/// Resolves a staged `SetFeatureOverride`'s weights into fully-detailed `OverriddenVariant`s
+/// (with values and the control variant's auto-balanced remainder), so `SEGMENT describe`
+/// can preview the pending state instead of the stale committed weights it's replacing.
+fn resolve_staged_weights(
+    feature: &Feature,
+    feature_patch: Option<&FeaturePatch>,
+    staged: &[SegmentVariantWeight],
+) -> Vec<OverriddenVariant> {
+    let variants = effective::effective_variants(feature, feature_patch);
+    let non_control_total: u32 = staged.iter().map(|w| w.weight as u32).sum();
+
+    variants
+        .into_iter()
+        .filter(|v| !v.is_deleted)
+        .filter_map(|v| {
+            let variant_id = v.id?;
+            if v.is_control {
+                Some(OverriddenVariant {
+                    variant_id,
+                    value: v.value,
+                    is_control: true,
+                    weight: 100u32.saturating_sub(non_control_total) as u8,
+                })
+            } else {
+                let weight = staged.iter().find(|w| w.variant_id == variant_id)?.weight;
+                Some(OverriddenVariant {
+                    variant_id,
+                    value: v.value,
+                    is_control: false,
+                    weight,
+                })
+            }
+        })
+        .collect()
 }
 
 /// Fetches the features this segment overrides in the current environment.
@@ -109,21 +145,58 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         let overrides = fetch_overridden_features(segment.id, session);
         segment.describe(None, &SegmentContext { overrides });
     } else {
-        let (segment_id, patch) = {
+        let (segment_id, in_context_feature_id) = {
             let ctx = session.context.read().unwrap();
             let segment = ctx.segment.as_ref().ok_or_else(|| {
                 anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
             })?;
-            (segment.id, ctx.segment_patch.clone())
+            (segment.id, ctx.feature.as_ref().map(|f| f.id))
         };
-        let overrides = fetch_overridden_features(segment_id, session);
+        let mut overrides = fetch_overridden_features(segment_id, session);
 
+        // Nothing mutates the session between the lock above and the one below - just a
+        // read-only HTTP fetch - so it's safe to defer reading `segment_patch` to here
+        // rather than cloning it across the gap.
         let ctx = session.context.read().unwrap();
         let segment = ctx.segment.as_ref().unwrap();
-        segment.describe(
-            patch.as_ref().filter(|p| !p.is_empty()),
-            &SegmentContext { overrides },
-        );
+        let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+
+        // `SET override` requires a feature+segment context and switching feature is
+        // blocked while this patch is pending, so the in-context feature is guaranteed to
+        // be the one any `SetFeatureOverride` op refers to - at most one can be staged.
+        if let Some(feature_id) = in_context_feature_id
+            && let Some(feature) = ctx.feature.as_ref()
+        {
+            let staged_weights = patch.iter().flat_map(|p| &p.ops).find_map(|op| match op {
+                SegmentPatchOp::SetFeatureOverride {
+                    feature_id: fid,
+                    variant_weights,
+                    ..
+                } if *fid == feature_id => Some(variant_weights.as_slice()),
+                _ => None,
+            });
+
+            if let Some(staged_weights) = staged_weights {
+                if let Some(entry) = overrides.iter_mut().find(|o| o.feature_id == feature_id) {
+                    // Already has a committed override - replace its stale weights with the
+                    // staged ones so the preview reflects what's about to be committed,
+                    // rather than what's about to be replaced.
+                    entry.weights =
+                        resolve_staged_weights(feature, ctx.feature_patch.as_ref(), staged_weights);
+                } else {
+                    // A brand new override (not yet committed) won't appear in `overrides`
+                    // at all - add a placeholder (empty weights) so the printer can still
+                    // show it as pending, rather than silently omitting it until COMMIT.
+                    overrides.push(SegmentFeatureOverride {
+                        feature_id,
+                        feature_name: feature.name.clone(),
+                        weights: vec![],
+                    });
+                }
+            }
+        }
+
+        segment.describe(patch, &SegmentContext { overrides });
     }
     Ok(())
 }
@@ -212,6 +285,7 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
 ///
 /// **Inline mode** (`SET override <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
+///
 /// Missing entries are stored absent, which the server treats as weight=0.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Collect everything we need under the read lock, then release before writing.
@@ -387,6 +461,12 @@ fn build_segment_override_editor_content(
     let variants = effective::effective_variants(feature, patch);
     let mut content = String::new();
 
+    content.push_str(
+        "# Set this segment's weight override by editing the number on the line below each\n\
+         # variant (0-100). The default value's weight auto-adjusts to whatever remains, so\n\
+         # the numbers below must not sum to more than 100.\n\n",
+    );
+
     for (idx, ev) in (1..).zip(variants.iter().filter(|v| !v.is_control && !v.is_deleted)) {
         let staged_weight = ev.id.and_then(|id| {
             current_weights
@@ -403,11 +483,21 @@ fn build_segment_override_editor_content(
         let (_, bare) = ev.value.decompose();
         let first_line = bare.lines().next().unwrap_or(bare);
         content.push_str(&format!(
-            "# variant {idx}: {first_line} ({}%){}\n{weight}\n\n",
+            "# variant {idx}: {first_line} (currently at {}%){}\n{weight}\n\n",
             ev.weight, staged
         ));
     }
-    content.push_str("# default value auto-adjusts to the remainder (= 100 - sum of above)");
+    let default_value = variants
+        .iter()
+        .find(|v| v.is_control && !v.is_deleted)
+        .map(|v| {
+            let (_, bare) = v.value.decompose();
+            bare.lines().next().unwrap_or(bare).to_string()
+        })
+        .unwrap_or_default();
+    content.push_str(&format!(
+        "# default value ({default_value}) auto-adjusts to the remainder (= 100 - sum of above)"
+    ));
     content
 }
 

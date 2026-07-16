@@ -54,21 +54,21 @@ impl Tabular for IdentityWithTraits {
                         .dimmed()
                         .to_string(),
                 );
-                trait_stage.push("- deleted".red().to_string());
+                trait_stage.push("▪ deleting".red().to_string());
             } else if t.value_modified {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .yellow()
                         .to_string(),
                 );
-                trait_stage.push("▪ updated".yellow().to_string());
+                trait_stage.push("▪ updating".yellow().to_string());
             } else if t.is_staged_add {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .green()
                         .to_string(),
                 );
-                trait_stage.push("+ added".green().to_string());
+                trait_stage.push("▪ adding".green().to_string());
             } else {
                 trait_lines.push(format_trait_value(&name, &t.value, true));
                 trait_stage.push(String::new());
@@ -152,7 +152,7 @@ impl Tabular for IdentityWithTraits {
                     Overflow::Truncate,
                     11,
                 )
-                .add_column(None, Layout::Fixed(12), Align::Left, Overflow::Truncate, 10)
+                .add_column(None, Layout::Fixed(14), Align::Left, Overflow::Truncate, 10)
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .width(Width::Percentage(100))
                 .build();
