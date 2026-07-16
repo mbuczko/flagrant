@@ -47,20 +47,20 @@ pub trait AutoCompleter {
 }
 
 impl<'a> CommandLineCompleter<'a> {
-    /// Returns unique command completions that match the input line.
+    /// Returns unique command completions matching the command token's prefix.
     ///
     /// Filters duplicates by assuming commands are sorted lexicographically and
     /// skipping consecutive identical command names. Matches commands that start
-    /// with the input, or returns all commands if the line is empty.
-    fn complete_command(&self, line: &str) -> anyhow::Result<(usize, Vec<Pair>)> {
+    /// with `prefix`, or returns all commands if `prefix` is empty.
+    fn complete_command(&self, prefix: &str) -> anyhow::Result<Vec<Pair>> {
         let mut prev_command_str = "";
-        let empty = line.trim().is_empty();
+        let empty = prefix.trim().is_empty();
         let pairs = self
             .commands
             .iter()
             .filter_map(|(command_str, _, within_ctx)| {
                 if command_str != prev_command_str
-                    && (empty || command_str.starts_with(line))
+                    && (empty || command_str.starts_with(prefix))
                     && within_ctx.as_ref().is_none_or(|f| f())
                 {
                     prev_command_str = command_str;
@@ -73,7 +73,7 @@ impl<'a> CommandLineCompleter<'a> {
             })
             .collect::<Vec<_>>();
 
-        Ok((0, pairs))
+        Ok(pairs)
     }
 
     /// Returns operation completions for a specific command that match the given prefix.
@@ -162,29 +162,70 @@ impl Completer for CommandLineCompleter<'_> {
         let args = split_command_line(line).unwrap();
         let (arg_n, offset) = find_arg_by_position(&args, pos);
 
-        match args.len() {
-            0..=1 => self
-                .complete_command(&line.to_uppercase())
-                .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string()))),
-            n if arg_n < n => {
-                let command = args.first().unwrap().as_ref();
-                let argument = &args[arg_n];
-
-                if n == 2
-                    && let Ok(candidates) = self.complete_operation(
-                        command,
-                        &argument[..offset].to_lowercase(),
-                        argument.1,
-                    )
-                    && !candidates.1.is_empty()
-                {
-                    return Ok(candidates);
-                }
-
-                self.complete_argument(command, &args, arg_n, &argument[..offset], argument.1)
-                    .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
-            }
-            _ => Ok((pos, vec![])),
+        // Dispatch on which token the cursor is actually in (arg_n), not on how many
+        // tokens the line has - otherwise editing an earlier token (e.g. moving back into
+        // "FEATURE" or "use" after the line already has more words typed after it) would
+        // fall through to argument completion instead of command/operation completion.
+        if arg_n == 0 {
+            let start = args.first().map(|a| a.1).unwrap_or(0);
+            let prefix = args
+                .first()
+                .map(|a| a[..offset].to_uppercase())
+                .unwrap_or_default();
+            return self
+                .complete_command(&prefix)
+                .map(|pairs| (start, pairs))
+                .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())));
         }
+
+        let command = args.first().unwrap().as_ref();
+        let argument = &args[arg_n];
+
+        if arg_n == 1
+            && let Ok(candidates) =
+                self.complete_operation(command, &argument[..offset].to_lowercase(), argument.1)
+            && !candidates.1.is_empty()
+        {
+            return Ok(candidates);
+        }
+
+        self.complete_argument(command, &args, arg_n, &argument[..offset], argument.1)
+            .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rustyline::history::DefaultHistory;
+
+    use super::*;
+
+    #[test]
+    fn completes_command_when_editing_first_token_with_more_tokens_after() {
+        let op = Some("use".to_string());
+        let commands: CommandList = vec![("FEATURE".to_string(), &op, None)];
+        let completer = CommandLineCompleter::new(commands);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        // "FEAT use ui_theme" with the cursor right after "FEAT" - simulates deleting
+        // "URE" from "FEATURE" while later tokens are still present on the line.
+        let (start, pairs) = completer.complete("FEAT use ui_theme", 4, &ctx).unwrap();
+        assert_eq!(start, 0);
+        assert!(pairs.iter().any(|p| p.replacement == "FEATURE"));
+    }
+
+    #[test]
+    fn completes_operation_when_editing_second_token_with_more_tokens_after() {
+        let op = Some("use".to_string());
+        let commands: CommandList = vec![("FEATURE".to_string(), &op, None)];
+        let completer = CommandLineCompleter::new(commands);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        // "FEATURE us ui_theme" with the cursor right after "us" - simulates deleting
+        // "e" from "use" while a 3rd token is still present on the line.
+        let (_start, pairs) = completer.complete("FEATURE us ui_theme", 10, &ctx).unwrap();
+        assert!(pairs.iter().any(|p| p.replacement == "use"));
     }
 }
