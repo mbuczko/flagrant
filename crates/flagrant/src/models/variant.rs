@@ -507,6 +507,18 @@ async fn balance_control_weight(
     Ok((control_variant_id, control_weight))
 }
 
+/// Returns `(environment_id, feature_id)` pairs this segment currently overrides, across
+/// all environments. Used to scope reconciliation after a segment's rules/groups change,
+/// since the affected features aren't known at that call site.
+pub(crate) async fn get_segment_override_scopes(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+) -> anyhow::Result<Vec<(i32, i32)>> {
+    SQLVariants::fetch_segment_override_scopes(conn, params![segment_id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment override scopes", e).into())
+}
+
 /// Returns true if variant is default one within given environment.
 fn is_default(environment: &Environment, variant: &Variant) -> bool {
     variant

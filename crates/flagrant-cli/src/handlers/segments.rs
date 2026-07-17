@@ -14,6 +14,8 @@
 //! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.                                     |
 //! | `DISCARD`                 | [`discard`]        | Drop all staged segment changes.                                            |
 
+use std::borrow::Cow;
+
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
@@ -277,6 +279,38 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
     Ok(())
 }
 
+/// Returns the weights currently in effect for `feature_id`: staged ones if a
+/// `SetFeatureOverride` for it is already pending (borrowed - no clone needed), otherwise
+/// the committed weights fetched from the API (owned, empty if none exist yet).
+fn current_weights_for<'a>(
+    ctx: &'a Connection,
+    feature_id: i32,
+    environment_id: i32,
+) -> Cow<'a, [SegmentVariantWeight]> {
+    let weights = ctx.segment_patch.as_ref().and_then(|p| {
+        p.ops.iter().find_map(|op| match op {
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: fid,
+                variant_weights,
+                ..
+            } if *fid == feature_id => Some(Cow::Borrowed(variant_weights.as_slice())),
+            _ => None,
+        })
+    });
+
+    weights.unwrap_or_else(|| {
+        let segment_id = ctx.segment.as_ref().map(|s| s.id).unwrap_or(0);
+        let path = ctx.project_resource().subpath(format!(
+            "/segments/{segment_id}/features/{feature_id}/overrides/{environment_id}"
+        ));
+        Cow::Owned(
+            ctx.client
+                .get::<Vec<SegmentVariantWeight>>(path)
+                .unwrap_or_default(),
+        )
+    })
+}
+
 /// Stage variant weight overrides for the current feature within this segment.
 ///
 /// **Editor mode** (`SET override` - no args):
@@ -286,7 +320,9 @@ pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::R
 /// **Inline mode** (`SET override <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
 ///
-/// Missing entries are stored absent, which the server treats as weight=0.
+/// Either way, every non-control variant ends up with an explicit entry (0 for any not
+/// touched) - so `FEATURE describe`'s OVERRIDES row always shows the full picture, since
+/// only variants with a stored weight row are displayed.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Collect everything we need under the read lock, then release before writing.
     // Returns None for variant_weights if the editor was closed without changes.
@@ -298,6 +334,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         let feature_id = feature.id;
         let environment_id = ctx.environment.id;
         let has_idx_arg = args.get(1).is_some();
+        let current_weights = current_weights_for(&ctx, feature_id, environment_id);
 
         let variant_weights: Option<Vec<SegmentVariantWeight>> = if has_idx_arg {
             // Inline mode: always stages the result.
@@ -317,21 +354,23 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 }
             };
 
-            // Start from any already-staged weights for this feature, then update/insert this one.
-            let mut weights: Vec<SegmentVariantWeight> = ctx
-                .segment_patch
-                .as_ref()
-                .and_then(|p| {
-                    p.ops.iter().find_map(|op| match op {
-                        SegmentPatchOp::SetFeatureOverride {
-                            feature_id: fid,
-                            variant_weights: vw,
-                            ..
-                        } if *fid == feature_id => Some(vw.clone()),
-                        _ => None,
-                    })
+            // Every non-control variant gets an explicit entry (0 if not already weighted),
+            // then the targeted one is updated - so untouched variants still show up in
+            // FEATURE describe's OVERRIDES row instead of being silently absent.
+            let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+            let mut weights: Vec<SegmentVariantWeight> = variants
+                .iter()
+                .filter(|v| !v.is_control && !v.is_deleted)
+                .filter_map(|v| v.id)
+                .map(|id| SegmentVariantWeight {
+                    variant_id: id,
+                    weight: current_weights
+                        .iter()
+                        .find(|w| w.variant_id == id)
+                        .map(|w| w.weight)
+                        .unwrap_or(0),
                 })
-                .unwrap_or_default();
+                .collect();
 
             if let Some(entry) = weights.iter_mut().find(|w| w.variant_id == variant_id) {
                 entry.weight = weight;
@@ -341,29 +380,6 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
             Some(weights)
         } else {
             // Editor mode: prefer staged weights; fall back to committed weights from API.
-            let current_weights: Vec<SegmentVariantWeight> = ctx
-                .segment_patch
-                .as_ref()
-                .and_then(|p| {
-                    p.ops.iter().find_map(|op| match op {
-                        SegmentPatchOp::SetFeatureOverride {
-                            feature_id: fid,
-                            variant_weights: vw,
-                            ..
-                        } if *fid == feature_id => Some(vw.clone()),
-                        _ => None,
-                    })
-                })
-                .unwrap_or_else(|| {
-                    let segment_id = ctx.segment.as_ref().map(|s| s.id).unwrap_or(0);
-                    let path = ctx.project_resource().subpath(format!(
-                        "/segments/{segment_id}/features/{feature_id}/overrides/{environment_id}"
-                    ));
-                    ctx.client
-                        .get::<Vec<SegmentVariantWeight>>(path)
-                        .unwrap_or_default()
-                });
-
             let content = build_segment_override_editor_content(
                 feature,
                 ctx.feature_patch.as_ref(),

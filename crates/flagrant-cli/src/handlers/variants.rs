@@ -7,7 +7,6 @@
 //! | `VARIANT add`      | [`add`]    | Stage a new variant addition.                    |
 //! | `VARIANT value`    | [`value`]  | Stage a value change for an existing variant.    |
 //! | `VARIANT weight`   | [`weight`] | Stage a weight change for an existing variant.   |
-//! | `VARIANT discard`  | [`discard`]| Drop staged ops for a single variant.            |
 //! | `VARIANT delete`   | [`delete`] | Stage a variant deletion.                        |
 //!
 //! All mutations are accumulated in [`Connection::pending`] as a [`FeaturePatch`] and
@@ -220,42 +219,13 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Discard a single pending change for the variant at the given display index.
-///
-/// Expected args: `<index>`
-///
-/// For committed variants removes any SetValue/SetWeight/Delete ops for that id.
-/// For staged additions removes the Add op entirely.
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-
-    if ctx.feature.is_none() {
-        bail!("Not within a feature context.");
-    }
-    let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
-        None => bail!("No variant index provided. Use an index or 'all'."),
-    };
-    let pending = match ctx.feature_patch.as_mut() {
-        Some(p) => p,
-        None => {
-            println!("No pending variant changes.");
-            return Ok(());
-        }
-    };
-
-    stage::discard_feature_patch(pending, &variant_ref);
-    index::rebuild(&mut ctx);
-    Ok(())
-}
-
 /// Stage a deletion for the variant at the given display index.
 ///
 /// Expected args: `<index>`
 ///
 /// For committed variants, clears any pending SetValue/SetWeight ops for that id and
-/// appends a Delete op. For staged additions, delegates to [`discard`] to remove the
-/// Add op entirely. Refuses to delete the control variant.
+/// appends a Delete op. For staged additions, there's nothing committed to delete - the
+/// pending Add op is discarded instead. Refuses to delete the control variant.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -281,8 +251,13 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let variant_id = match variant_ref {
         VariantRef::Committed(id) => id,
         VariantRef::Staged(_) => {
-            drop(ctx);
-            return discard(args, session);
+            if let Some(pending) = ctx.feature_patch.as_mut() {
+                stage::discard_feature_patch(pending, &variant_ref);
+                index::rebuild(&mut ctx);
+            } else {
+                println!("No pending variant changes.");
+            }
+            return Ok(());
         }
     };
 

@@ -151,7 +151,8 @@ ORDER BY f.name, (v.environment_id IS NULL), vw.variant_id
 
 -- :name fetch_variants_for_identity :<> :*
 -- :doc Fetches feature variants for given identity. Variants attached to identity by distributor are denoted by non-NULL identity_id field.
-SELECT f.feature_id, iv.variant_id, f.name AS feature_name, iv_v.value AS feature_value, iv.migrated_id, iv.pinned_at, iv.identity_id
+SELECT f.feature_id, iv.variant_id, f.name AS feature_name, iv_v.value AS feature_value, iv.migrated_id,
+       iv.segment_id, COALESCE(iv.segment_dirty, FALSE) AS segment_dirty, iv.pinned_at, iv.identity_id
 FROM features f
 LEFT JOIN identities i ON i.identity = lower($3) AND i.environment_id = $2
 LEFT JOIN identity_variants iv ON iv.feature_id = f.feature_id AND iv.environment_id = $2 AND iv.identity_id = i.identity_id
@@ -172,3 +173,11 @@ DELETE FROM variants WHERE variant_id = $1
 -- :name delete_variant_weights :<> :!
 -- :doc Removes all variant weights
 DELETE FROM variant_weights WHERE variant_id = $1
+
+-- :name fetch_segment_override_scopes :<> :*
+-- :doc Returns DISTINCT (environment_id, feature_id) pairs this segment currently overrides,
+-- across all environments. Used to scope segment-rule-change reconciliation.
+SELECT DISTINCT vw.environment_id, v.feature_id
+FROM variant_weights vw
+JOIN variants v ON v.variant_id = vw.variant_id
+WHERE vw.segment_id = $1

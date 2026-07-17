@@ -125,6 +125,8 @@ pub struct IdentityVariant {
     pub feature_id: i32,
     pub identity_id: Option<i32>,
     pub migrated_id: Option<i32>,
+    pub segment_id: Option<i32>,
+    pub segment_dirty: bool,
     pub feature_name: String,
     pub feature_value: Option<FeatureValue>,
     pub pinned_at: Option<NaiveDateTime>,

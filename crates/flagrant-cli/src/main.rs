@@ -173,12 +173,6 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
-            "discard",
-            "index",
-            handlers::variants::discard,
-            in_context!(feature_ctx),
-        ),
-        Command::Variant.op_in_context(
             "value",
             "index value",
             handlers::variants::value,
@@ -190,10 +184,7 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::weight,
             in_context!(feature_ctx),
         ),
-        Command::Variant.args_in_context(
-            "add · delete · discard · weight · value",
-            in_context!(feature_ctx),
-        ),
+        Command::Variant.args_in_context("add · delete · weight · value", in_context!(feature_ctx)),
         // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "status",

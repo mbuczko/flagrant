@@ -392,6 +392,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     ctx.feature_patch = None;
     ctx.feature = Some(updated);
+    index::rebuild(&mut ctx);
 
     Ok(())
 }
