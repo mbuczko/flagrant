@@ -179,20 +179,21 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
             });
 
             if let Some(staged_weights) = staged_weights {
+                // Resolve the actual staged weights (control's auto-balanced remainder
+                // included) so the preview shows real numbers rather than a placeholder,
+                // whether this replaces an existing committed override or is brand new.
+                let weights =
+                    resolve_staged_weights(feature, ctx.feature_patch.as_ref(), staged_weights);
                 if let Some(entry) = overrides.iter_mut().find(|o| o.feature_id == feature_id) {
-                    // Already has a committed override - replace its stale weights with the
-                    // staged ones so the preview reflects what's about to be committed,
-                    // rather than what's about to be replaced.
-                    entry.weights =
-                        resolve_staged_weights(feature, ctx.feature_patch.as_ref(), staged_weights);
+                    entry.weights = weights;
                 } else {
                     // A brand new override (not yet committed) won't appear in `overrides`
-                    // at all - add a placeholder (empty weights) so the printer can still
-                    // show it as pending, rather than silently omitting it until COMMIT.
+                    // at all - add it with the resolved staged weights, rather than
+                    // silently omitting it until COMMIT.
                     overrides.push(SegmentFeatureOverride {
                         feature_id,
                         feature_name: feature.name.clone(),
-                        weights: vec![],
+                        weights,
                     });
                 }
             }

@@ -225,14 +225,6 @@ impl Tabular for Segment {
                     overrides_lines.push(plain_line.dimmed().to_string());
                     overrides_stages.push("▪ removing".red().to_string());
                 }
-                Some(SegmentPatchOp::SetFeatureOverride { .. }) if o.weights.is_empty() => {
-                    // Newly staged override for a feature with no committed weights yet.
-                    let line =
-                        format!("{} › {} (pending)", "feature".bright_blue(), o.feature_name);
-
-                    overrides_lines.push(line.green().to_string());
-                    overrides_stages.push("▪ adding".green().to_string());
-                }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
                     overrides_lines.push(plain_line.yellow().to_string());
                     overrides_stages.push("▪ updating".yellow().to_string());
