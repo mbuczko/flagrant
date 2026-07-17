@@ -260,18 +260,21 @@ pub async fn delete_group(
 )]
 pub async fn add_rule(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, _segment_id, group_id)): Path<(String, SegmentId, i32)>,
+    Path((project_name, segment_id, group_id)): Path<(String, SegmentId, i32)>,
     Json(payload): Json<NewRulePayload>,
 ) -> Result<Json<SegmentRule>, ServiceError> {
-    let _project = project::get_by_name(&mut conn, project_name).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let segment = resolve_segment(&mut conn, &project, segment_id).await?;
     let rule = rule::add(
         &mut conn,
+        segment.id,
         group_id,
         payload.driver,
         payload.comparator,
         payload.value,
     )
     .await?;
+
     Ok(Json(rule))
 }
 
@@ -292,10 +295,12 @@ pub async fn add_rule(
 )]
 pub async fn delete_rule(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, _segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
+    Path((project_name, segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
 ) -> Result<StatusCode, ServiceError> {
-    let _project = project::get_by_name(&mut conn, project_name).await?;
-    rule::delete(&mut conn, rule_id).await?;
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let segment = resolve_segment(&mut conn, &project, segment_id).await?;
+
+    rule::delete(&mut conn, segment.id, rule_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

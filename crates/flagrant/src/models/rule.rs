@@ -4,6 +4,7 @@ use flagrant_types::{Comparator, SegmentDriver, SegmentGroup, SegmentRule};
 use hugsqlx::{HugSqlx, params};
 use sqlx::SqliteConnection;
 
+use super::segment;
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -19,27 +20,41 @@ struct RuleRow {
     value: String,
 }
 
-/// Adds a rule to the given group.
+/// Adds a rule to the given group, then reconciles already-distributed identities against
+/// the segment's updated rules - this is the shared mutation point for both the CLI's
+/// batched `segment::patch` and the direct `POST .../rules` REST endpoint, so both trigger
+/// reconciliation the same way.
 pub async fn add(
     conn: &mut SqliteConnection,
+    segment_id: i32,
     group_id: i32,
     driver: SegmentDriver,
     comparator: Comparator,
     value: String,
 ) -> anyhow::Result<SegmentRule> {
-    Ok(
-        SQLSegments::add_rule::<_, SegmentRule>(conn, params![group_id, driver, comparator, value])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not add rule", e))?,
+    let rule = SQLSegments::add_rule::<_, SegmentRule>(
+        &mut *conn,
+        params![group_id, driver, comparator, value],
     )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not add rule", e))?;
+
+    segment::reconcile_rules_changed(conn, segment_id).await?;
+    Ok(rule)
 }
 
-/// Deletes a single rule by ID.
-pub async fn delete(conn: &mut SqliteConnection, rule_id: i32) -> anyhow::Result<()> {
-    SQLSegments::delete_rule::<_>(conn, params![rule_id])
+/// Deletes a single rule by ID, then reconciles already-distributed identities against the
+/// segment's updated rules (see [`add`] for why this lives at the mutation point).
+pub async fn delete(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    rule_id: i32,
+) -> anyhow::Result<()> {
+    SQLSegments::delete_rule::<_>(&mut *conn, params![rule_id])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not delete rule", e))?;
 
+    segment::reconcile_rules_changed(conn, segment_id).await?;
     Ok(())
 }
 

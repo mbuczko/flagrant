@@ -8,7 +8,7 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
-use super::{environment, rule, variant};
+use super::{environment, identity, rule, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -249,6 +249,8 @@ pub async fn add_group(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not add group", e))?;
 
+    reconcile_rules_changed(conn, segment.id).await?;
+
     Ok(SegmentGroup {
         id: row.group_id,
         label: row.label,
@@ -277,6 +279,7 @@ pub async fn delete_group(
         .map_err(|e| FlagrantError::QueryFailed("Could not clear head connector", e))?;
 
     tx.commit().await?;
+    reconcile_rules_changed(conn, segment.id).await?;
     Ok(())
 }
 
@@ -342,14 +345,14 @@ pub async fn patch(
                     .find(|g| g.label == group_label)
                     .map(|g| g.id)
                     .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
-                let sr = rule::add(conn, group_id, driver, comparator, value).await?;
+                let sr = rule::add(conn, segment.id, group_id, driver, comparator, value).await?;
 
                 if let Some(g) = segment.groups.iter_mut().find(|g| g.label == group_label) {
                     g.rules.push(sr);
                 }
             }
             SegmentPatchOp::DeleteRule { rule_id } => {
-                rule::delete(conn, rule_id).await?;
+                rule::delete(conn, segment.id, rule_id).await?;
                 rule::remove_from_groups(&mut segment.groups, rule_id);
             }
             SegmentPatchOp::SetFeatureOverride {
@@ -385,6 +388,8 @@ pub async fn patch(
                     feature_id,
                 )
                 .await?;
+
+                identity::mark_feature_dirty(&mut *conn, environment_id, feature_id).await?;
             }
             SegmentPatchOp::UnsetFeatureOverride {
                 feature_id,
@@ -397,11 +402,40 @@ pub async fn patch(
                     environment_id,
                 )
                 .await?;
+
+                // Flag now that this segment no longer overrides the feature, so
+                // identities previously attributed to it re-evaluate (and fall through to
+                // a lower-priority segment or the organic pool) the next time they're read.
+                identity::mark_feature_dirty(&mut *conn, environment_id, feature_id).await?;
             }
         }
     }
 
     get_by_id(conn, project, segment.id).await
+}
+
+//
+// Reconciliation - keeping already-distributed identities in sync with segment state
+//
+
+/// Flags every `(environment, feature)` pair this segment currently overrides as needing
+/// re-evaluation - called after a structural rule/group change, where the affected scopes
+/// aren't known at the call site (unlike `SetFeatureOverride`/`UnsetFeatureOverride`, which
+/// already know their exact scope and call [`identity::mark_feature_dirty`] directly).
+///
+/// Resolution itself is deferred: flagging is a single cheap `UPDATE` per scope, and each
+/// flagged identity is actually re-evaluated the next time it's read (see
+/// `identity::get_identity_variants`), not eagerly here.
+pub(crate) async fn reconcile_rules_changed(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+) -> anyhow::Result<()> {
+    for (environment_id, feature_id) in
+        variant::get_segment_override_scopes(conn, segment_id).await?
+    {
+        identity::mark_feature_dirty(conn, environment_id, feature_id).await?;
+    }
+    Ok(())
 }
 
 //

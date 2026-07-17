@@ -2,17 +2,53 @@ use std::collections::HashMap;
 
 use flagrant::{
     distributor,
-    models::{segment, variant},
+    models::{
+        identity::{self, HugSql, SQLIdentities},
+        rule, segment, variant,
+    },
 };
 use flagrant_types::{
-    FeatureValue,
+    Comparator, Environment, Feature, FeatureValue, Identity, SegmentDriver,
     payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
-use sqlx::{Sqlite, pool::PoolConnection};
+use hugsqlx::params;
+use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
 
-use crate::common::{create_context, create_feature};
+use crate::common::{add_group, add_rule, apply, create_context, create_feature};
 
 mod common;
+
+#[derive(Debug, sqlx::FromRow)]
+struct IdentityAttribution {
+    identity_id: i32,
+    variant_id: i32,
+    migrated_id: Option<i32>,
+    segment_id: Option<i32>,
+    segment_dirty: bool,
+}
+
+async fn attribution_for(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature: &Feature,
+    identity_id: i32,
+) -> IdentityAttribution {
+    let rows: Vec<IdentityAttribution> =
+        SQLIdentities::fetch_identities(conn, params![environment.id, feature.id])
+            .await
+            .unwrap();
+    rows.into_iter()
+        .find(|r| r.identity_id == identity_id)
+        .unwrap()
+}
+
+/// Forces resolution of any dirty/unassigned rows for `ident` by simulating the real
+/// per-request read path (`GET .../features`, backed by `get_identity_variants`).
+async fn resolve(conn: &mut SqliteConnection, environment: &Environment, ident: &Identity) {
+    identity::get_identity_variants(conn, environment, ident)
+        .await
+        .unwrap();
+}
 
 /// A segment's `SetFeatureOverride` should write its explicit weights plus a control-variant
 /// remainder straight into `variant_weights`, scoped by `segment_id`, without touching the
@@ -229,4 +265,498 @@ async fn distributor_scopes_by_segment_id(mut conn: PoolConnection<Sqlite>) {
 
     // The two scopes converged to different ratios - confirms they're tracked independently.
     assert_ne!(organic_alt_count, segment_alt_count);
+}
+
+// -- reconciliation: already-distributed identities react to segment state changes -------
+//
+// Reconciliation is now lazy: a segment mutation only flags affected identity_variants rows
+// (`segment_dirty = TRUE`), cheaply and synchronously. The actual re-evaluation happens the
+// next time each identity is read via `get_identity_variants` (simulated here by `resolve`)
+// - mirroring the real per-request flow (`GET .../features`).
+
+/// An identity organically distributed *before* a segment exists gets migrated into that
+/// segment's pool once the segment gains a matching rule + a `SetFeatureOverride` - but only
+/// once actually read again; the mutation itself just flags the row dirty.
+#[sqlx::test]
+async fn segment_override_migrates_already_distributed_matching_identity(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    let before = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(before.segment_id, None);
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        segment.clone(),
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    // The mutation only flags the row - it hasn't been re-evaluated yet.
+    let flagged = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert!(flagged.segment_dirty);
+    assert_eq!(flagged.segment_id, None);
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, Some(segment.id));
+    assert!(!after.segment_dirty);
+}
+
+/// An identity that doesn't match the new segment's rules is left untouched: it does get
+/// flagged (marking is a blanket per-feature operation), but re-evaluating confirms no
+/// actual change, so it's never redistributed - no accumulator perturbation, no variant flip.
+#[sqlx::test]
+async fn segment_override_leaves_non_matching_identity_untouched(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let ident =
+        identity::get_or_create_by_value(&mut conn, &environment, "someone-else".to_owned())
+            .await
+            .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    let before = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        segment.clone(),
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.variant_id, before.variant_id);
+    assert!(after.migrated_id.is_none());
+    assert_eq!(after.segment_id, None);
+    assert!(!after.segment_dirty);
+}
+
+/// A pinned (explicitly overridden) identity is never flagged by reconciliation at all, even
+/// if it matches the new segment's rules.
+#[sqlx::test]
+async fn segment_override_leaves_pinned_identity_untouched(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    let control = variant::get_for_feature(&mut conn, &environment, feature.id, None)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|v| v.is_control())
+        .unwrap();
+    identity::override_variant(&mut conn, &environment, &ident, feature.id, control.id)
+        .await
+        .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        segment.clone(),
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    // Not flagged - mark_feature_dirty excludes pinned rows entirely.
+    let flagged = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert!(!flagged.segment_dirty);
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.variant_id, control.id);
+    assert!(after.migrated_id.is_none());
+}
+
+/// Adding a rule to a segment that already has an override (a pure rule edit, no
+/// `SetFeatureOverride` in the same batch) retroactively migrates newly-matching identities
+/// once they're next read.
+#[sqlx::test]
+async fn adding_rule_to_already_overriding_segment_retroactively_migrates(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "nobody-yet",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    assert_eq!(
+        attribution_for(&mut conn, &environment, &feature, ident.id)
+            .await
+            .segment_id,
+        None
+    );
+
+    apply(
+        &mut conn,
+        &project,
+        segment.clone(),
+        vec![add_rule(
+            "group-1",
+            SegmentDriver::Identity,
+            Comparator::ExactlyMatches,
+            "user-vip",
+        )],
+    )
+    .await;
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, Some(segment.id));
+}
+
+/// Calling `rule::add` directly (simulating the REST `POST .../rules` endpoint, which
+/// bypasses `segment::patch` entirely) still flags reconciliation - not just batched `PATCH`.
+#[sqlx::test]
+async fn direct_rule_add_triggers_reconciliation_not_just_patch(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    assert_eq!(
+        attribution_for(&mut conn, &environment, &feature, ident.id)
+            .await
+            .segment_id,
+        None
+    );
+
+    let group_id = segment.groups[0].id;
+    rule::add(
+        &mut conn,
+        segment.id,
+        group_id,
+        SegmentDriver::Identity,
+        Comparator::ExactlyMatches,
+        "user-vip".to_owned(),
+    )
+    .await
+    .unwrap();
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, Some(segment.id));
+}
+
+/// Deleting a rule so a previously-matching, already-migrated identity no longer matches
+/// causes it to fall back to the organic pool once next read.
+#[sqlx::test]
+async fn deleting_a_rule_falls_the_identity_back_to_organic(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    assert_eq!(
+        attribution_for(&mut conn, &environment, &feature, ident.id)
+            .await
+            .segment_id,
+        Some(segment.id)
+    );
+
+    let rule_id = segment.groups[0].rules[0].id;
+    rule::delete(&mut conn, segment.id, rule_id).await.unwrap();
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, None);
+}
+
+/// Two segments both match an identity; the identity is already correctly attributed to
+/// the higher-priority (lower `segment_id`) one. A later, lower-priority segment gaining
+/// an override for the same feature must not steal it, once re-evaluated.
+#[sqlx::test]
+async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let older = segment::create(&mut conn, &project, "older".to_owned(), None)
+        .await
+        .unwrap();
+    let older = apply(
+        &mut conn,
+        &project,
+        older,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                &environment.name,
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 15,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "any-user".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+    assert_eq!(
+        attribution_for(&mut conn, &environment, &feature, ident.id)
+            .await
+            .segment_id,
+        Some(older.id)
+    );
+
+    let newer = segment::create(&mut conn, &project, "newer".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        newer.clone(),
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Environment,
+                Comparator::ExactlyMatches,
+                &environment.name,
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 45,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, Some(older.id));
 }

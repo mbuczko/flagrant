@@ -1,5 +1,9 @@
-use flagrant::models::{environment, feature, project};
-use flagrant_types::{Environment, Feature, FeatureValue, Project};
+use flagrant::models::{environment, feature, project, segment};
+use flagrant_types::{
+    Environment, Feature, FeatureValue, GroupConnector, Project, Segment, SegmentDriver,
+    Comparator,
+    payload::{SegmentPatch, SegmentPatchOp},
+};
 use rand::Rng;
 use sqlx::{Sqlite, pool::PoolConnection};
 
@@ -64,4 +68,40 @@ pub async fn create_feature(
     )
     .await
     .unwrap()
+}
+
+/// Stages and commits `ops` against `segment` in one patch call.
+#[allow(dead_code)]
+pub async fn apply(
+    conn: &mut PoolConnection<Sqlite>,
+    project: &Project,
+    segment: Segment,
+    ops: Vec<SegmentPatchOp>,
+) -> Segment {
+    segment::patch(conn, project, segment, SegmentPatch { ops })
+        .await
+        .unwrap()
+}
+
+#[allow(dead_code)]
+pub fn add_rule(
+    group_label: &str,
+    driver: SegmentDriver,
+    comparator: Comparator,
+    value: &str,
+) -> SegmentPatchOp {
+    SegmentPatchOp::AddRule {
+        group_label: group_label.to_owned(),
+        driver,
+        comparator,
+        value: value.to_owned(),
+    }
+}
+
+#[allow(dead_code)]
+pub fn add_group(connector: Option<GroupConnector>) -> SegmentPatchOp {
+    SegmentPatchOp::AddGroup {
+        connector,
+        description: None,
+    }
 }

@@ -145,10 +145,23 @@ CREATE TABLE IF NOT EXISTS identity_variants (
   variant_id INTEGER NOT NULL REFERENCES variants,
   environment_id INTEGER NOT NULL REFERENCES environments,
   migrated_id INTEGER REFERENCES variants,
+
+  -- The segment (if any) the current variant_id came from; NULL for organic assignments
+  -- and pinned overrides. ON DELETE CASCADE: deleting a segment drops only the
+  -- identity_variants rows currently attributed to it, so those identities read back as
+  -- unassigned and get freshly (re-)distributed on next access.
+  segment_id INTEGER REFERENCES segments ON DELETE CASCADE,
+
+  -- Set whenever a segment's rules/groups/overrides change in a way that might affect this
+  -- row's attribution. Resolved lazily: get_identity_variants re-evaluates and rewrites a
+  -- dirty row (clearing this flag) the next time it's read, rather than reconciling eagerly
+  -- - the same "settle on next read" idiom migrated_id already uses for weight-shift
+  -- migration, just triggered by segment state instead of weight state.
+  segment_dirty BOOLEAN NOT NULL DEFAULT FALSE,
+
   attached_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   pinned_at DATETIME,
 
   UNIQUE(identity_id, feature_id, environment_id),
-
   FOREIGN KEY (feature_id, variant_id) REFERENCES variants(feature_id, variant_id)
 );

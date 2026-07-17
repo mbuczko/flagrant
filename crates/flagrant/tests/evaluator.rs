@@ -3,47 +3,14 @@ use flagrant::{
     models::{identity, segment, variant},
 };
 use flagrant_types::{
-    Comparator, FeatureValue, GroupConnector, Project, Segment, SegmentDriver,
-    payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
+    Comparator, FeatureValue, GroupConnector, SegmentDriver,
+    payload::{SegmentPatchOp, SegmentVariantWeight},
 };
 use sqlx::{Sqlite, pool::PoolConnection};
 
-use crate::common::{create_context, create_feature};
+use crate::common::{add_group, add_rule, apply, create_context, create_feature};
 
 mod common;
-
-/// Stages and commits `ops` against `segment` in one patch call.
-async fn apply(
-    conn: &mut PoolConnection<Sqlite>,
-    project: &Project,
-    segment: Segment,
-    ops: Vec<SegmentPatchOp>,
-) -> Segment {
-    segment::patch(conn, project, segment, SegmentPatch { ops })
-        .await
-        .unwrap()
-}
-
-fn add_rule(
-    group_label: &str,
-    driver: SegmentDriver,
-    comparator: Comparator,
-    value: &str,
-) -> SegmentPatchOp {
-    SegmentPatchOp::AddRule {
-        group_label: group_label.to_owned(),
-        driver,
-        comparator,
-        value: value.to_owned(),
-    }
-}
-
-fn add_group(connector: Option<GroupConnector>) -> SegmentPatchOp {
-    SegmentPatchOp::AddGroup {
-        connector,
-        description: None,
-    }
-}
 
 #[sqlx::test]
 async fn no_segment_overriding_feature_returns_none(mut conn: PoolConnection<Sqlite>) {

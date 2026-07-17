@@ -331,6 +331,7 @@ pub async fn patch(
                 environment.id,
                 feat.id,
                 variant.id,
+                Option::<i32>::None,
                 Some(Utc::now())
             ],
         )
@@ -413,6 +414,23 @@ pub async fn clear_distribution_for_feature(
     Ok(())
 }
 
+/// Flags every already-distributed, unpinned identity for `feature_id` in `environment` as
+/// needing re-evaluation against current segment state - called whenever a segment's
+/// rules/groups/overrides change in a way that could affect this feature. Resolution itself
+/// is deferred: [`get_identity_variants`] re-evaluates and clears the flag the next time
+/// each identity is actually read, rather than reconciling every affected identity eagerly.
+pub(crate) async fn mark_feature_dirty(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<()> {
+    SQLIdentities::mark_feature_dirty(conn, params![feature_id, environment_id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not mark feature dirty", e))?;
+
+    Ok(())
+}
+
 /// Returns the variant_id currently assigned to the given identity for the given
 /// feature+environment, or None if no assignment exists.
 pub async fn get_variant_for_identity(
@@ -440,6 +458,26 @@ pub async fn list_variant_assignments(
     variant::get_by_identity(conn, environment, &identity.value).await
 }
 
+/// Evaluates which segment (if any) governs `feature_id` for `identity`, loading and
+/// caching `identity`'s traits into `identity_traits` on first use (shared across every
+/// feature resolved in one [`get_identity_variants`] call).
+async fn evaluate_segment_for(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    identity: &Identity,
+    identity_traits: &mut Option<Vec<IdentityTrait>>,
+    feature_id: i32,
+) -> anyhow::Result<Option<i32>> {
+    if identity_traits.is_none() {
+        *identity_traits = Some(load_traits(conn, identity.id).await?);
+    }
+    let ctx = evaluator::IdentityContext {
+        value: &identity.value,
+        traits: identity_traits.as_ref().unwrap(),
+    };
+    evaluator::evaluate(conn, environment, &ctx, feature_id).await
+}
+
 /// Returns enabled features variants assigned to given identity, distributing the
 /// identity across variants as needed.
 ///
@@ -453,38 +491,65 @@ pub async fn get_identity_variants(
     let mut tx = conn.begin().await?;
     let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
-    // Only needed to evaluate segment rules for identities not yet distributed; loaded at
-    // most once (on first use below) and reused across every feature in this call. Kept as
-    // just the traits (not a full IdentityWithTraits) so evaluator::evaluate can borrow
-    // `identity.value` directly instead of every caller cloning it.
+    // Only needed to evaluate segment rules; loaded at most once (on first use) and reused
+    // across every feature in this call. Kept as just the traits (not a full
+    // IdentityWithTraits) so evaluator::evaluate can borrow `identity.value` directly
+    // instead of every caller cloning it.
     let mut identity_traits: Option<Vec<IdentityTrait>> = None;
 
     for var in variants.iter_mut() {
-        // Resolve the variant to attach to: skip pinned identities, follow a pending
-        // migration if one exists, or distribute a fresh identity for the first time.
+        // Resolve the variant (and the segment it's attributed to) to attach to: skip
+        // pinned identities, follow a pending weight-migration if one exists, distribute
+        // fresh for a never-assigned identity, or - for one flagged `segment_dirty` by a
+        // segment change - re-evaluate and only actually redistribute if the attribution
+        // genuinely changed (an unrelated segment's rule edit shouldn't reshuffle
+        // identities it was never going to match).
         let attach_to_variant = if var.pinned_at.is_some() {
             None
         } else if let Some(id) = var.migrated_id {
             variant::get_by_id(&mut tx, environment, id, None)
                 .await
                 .ok()
+                .map(|v| (v, None))
         } else if var.identity_id.is_none() {
-            if identity_traits.is_none() {
-                identity_traits = Some(load_traits(&mut tx, identity.id).await?);
+            let segment_id = evaluate_segment_for(
+                &mut tx,
+                environment,
+                identity,
+                &mut identity_traits,
+                var.feature_id,
+            )
+            .await?;
+            let variant =
+                distributor::distribute(&mut tx, environment, var.feature_id, segment_id).await?;
+            Some((variant, segment_id))
+        } else if var.segment_dirty {
+            let segment_id = evaluate_segment_for(
+                &mut tx,
+                environment,
+                identity,
+                &mut identity_traits,
+                var.feature_id,
+            )
+            .await?;
+            if segment_id != var.segment_id {
+                let variant = distributor::distribute(&mut tx, environment, var.feature_id, segment_id)
+                    .await?;
+                Some((variant, segment_id))
+            } else {
+                SQLIdentities::clear_identity_dirty(
+                    &mut *tx,
+                    params![identity.id, var.feature_id, environment.id],
+                )
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not clear dirty flag", e))?;
+                None
             }
-            let ctx = evaluator::IdentityContext {
-                value: &identity.value,
-                traits: identity_traits.as_ref().unwrap(),
-            };
-            let segment_id =
-                evaluator::evaluate(&mut tx, environment, &ctx, var.feature_id).await?;
-
-            Some(distributor::distribute(&mut tx, environment, var.feature_id, segment_id).await?)
         } else {
             None
         };
 
-        if let Some(variant) = attach_to_variant {
+        if let Some((variant, segment_id)) = attach_to_variant {
             SQLIdentities::upsert_identity_variant(
                 &mut *tx,
                 params![
@@ -492,6 +557,7 @@ pub async fn get_identity_variants(
                     environment.id,
                     var.feature_id,
                     variant.id,
+                    segment_id,
                     Option::<NaiveDateTime>::None
                 ],
             )
@@ -533,6 +599,10 @@ pub async fn get_identity_variants(
 /// - Only up to that many identities across the whole environment end up redirected to
 ///   `into_variant_id` this way; older attachments (by `attached_at`) are preferred when
 ///   picking who moves next, so migration is deterministic and repeatable.
+///
+/// Only touches organic (non-segment-governed) identities - segment-governed ones are
+/// reconciled separately, lazily, via the `segment_dirty` flag (see [`mark_feature_dirty`]
+/// and the resolution logic in [`get_identity_variants`]).
 pub async fn migrate_identities(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -567,6 +637,7 @@ pub async fn override_variant(
             environment.id,
             feature_id,
             variant_id,
+            Option::<i32>::None,
             Some(Utc::now())
         ],
     )
