@@ -40,8 +40,9 @@ pub async fn create(
     name: String,
     description: Option<String>,
 ) -> anyhow::Result<Segment> {
+    let mut tx = conn.begin().await?;
     let row = SQLSegments::create_segment::<_, SegmentRow>(
-        &mut *conn,
+        &mut *tx,
         params![project.id, name, description],
     )
     .await
@@ -56,6 +57,8 @@ pub async fn create(
     };
 
     segment.validate()?;
+    tx.commit().await?;
+
     Ok(segment)
 }
 

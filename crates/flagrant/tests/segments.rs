@@ -267,6 +267,20 @@ async fn distributor_scopes_by_segment_id(mut conn: PoolConnection<Sqlite>) {
     assert_ne!(organic_alt_count, segment_alt_count);
 }
 
+/// A segment name failing validation must be rejected without leaving a row behind -
+/// validated inside the same transaction as the insert, which rolls back on failure,
+/// rather than validated after an already-committed write.
+#[sqlx::test]
+async fn create_with_invalid_name_is_rejected_and_not_persisted(mut conn: PoolConnection<Sqlite>) {
+    let (project, _environment) = create_context(&mut conn).await;
+
+    let result = segment::create(&mut conn, &project, "beta-testers".to_owned(), None).await;
+    assert!(result.is_err());
+
+    let segments = segment::get_all(&mut conn, &project, None).await.unwrap();
+    assert!(segments.is_empty());
+}
+
 // -- reconciliation: already-distributed identities react to segment state changes -------
 //
 // Reconciliation is now lazy: a segment mutation only flags affected identity_variants rows
