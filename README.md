@@ -8,14 +8,6 @@ Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day thr
 
 Flagrant also doubles as a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
 
-## Demo
-
-A recording of a sample CLI session:
-
-https://github.com/user-attachments/assets/33ca446d-c03a-488c-8c76-369a20bc2237
-
-
-
 ## What's there today
 
 - **Multiple environments** per project (prod, dev, staging, ...), each with its own control values and weights
@@ -96,10 +88,12 @@ All staged changes across every active context - feature edits, identity/segment
 
 ## What's next
 
-- **Versioning** - track and roll back changes to features/segments over time (yes, just as git commits!)
-- **Snapshots** - capture and restore the full state of a project/environment at a point in time
-- **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
-- **Socket-based communication protocol** - a lighter-weight, persistent alternative to HTTP for client libraries that need low-latency flag reads
+- [ ] **Backend only flags** - allow to reach for certain flags only from the backend
+- [ ] **JWT based identities** - use JWT to discover the identity and serve the right feature variant
+- [ ] **Versioning** - track and roll back changes to features/segments over time (yes, just as git commits!)
+- [ ] **Snapshots** - capture and restore the full state of a project/environment at a point in time
+- [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
+- [ ] **Socket-based communication protocol** - a lighter-weight, persistent alternative to HTTP for client libraries that need low-latency flag reads
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 
