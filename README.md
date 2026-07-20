@@ -58,7 +58,7 @@ FEATURE use <feature>
 
 The prompt then shows the active feature, and these become available:
 
-- `FEATURE status on|off|archived`, `SET value <value>`, `FEATURE describe [description]`
+- `FEATURE status on|off|archived`, `FEATURE describe [description]`
 - `VARIANT add <weight> <value>` - stage a new variant
 - `VARIANT value <index> <value>` / `VARIANT weight <index> [+/-]weight` - edit an existing one
 - `VARIANT delete <index>` / `VARIANT discard <index>` - remove a variant (or drop a still-staged one)
