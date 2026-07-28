@@ -74,6 +74,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 Some(a) => a.to_string(),
                 None => open_in_editor("")?,
             };
+
             let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
             ctx.client.post::<_, Feature>(
                 res.subpath("/features"),
@@ -147,7 +148,10 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let in_context = match args.get(1) {
-        Some(name) => ctx.feature.as_ref().is_some_and(|f| f.name == name.as_ref()),
+        Some(name) => ctx
+            .feature
+            .as_ref()
+            .is_some_and(|f| f.name == name.as_ref()),
         None => true,
     };
 
@@ -177,7 +181,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         }
 
         // ...or newly added overrides?
-        if ipatch.overrides.iter().any(|o| o.feature_name == feature.name) {
+        if ipatch
+            .overrides
+            .iter()
+            .any(|o| o.feature_name == feature.name)
+        {
             return Some(IdentityPending::Override(identity_value));
         }
         None
@@ -224,19 +232,21 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Expected args: `on`, `off` and `archived`
 pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let enabled = args
+    let (enabled, archived) = args
         .get(1)
-        .map(|arg| matches!(arg.to_lowercase().as_str(), "on"));
-    let archived = args
-        .get(1)
-        .map(|arg| matches!(arg.to_lowercase().as_str(), "archived"));
+        .map(|arg| match arg.to_lowercase().as_str() {
+            "on" => (true, false),
+            "archived" => (false, true),
+            _ => (false, false),
+        })
+        .unwrap();
 
     if ctx.feature.is_some() {
-        if archived.unwrap_or_default() {
+        if archived {
             ctx.get_or_init_pending().is_archived = Some(true);
             ctx.get_or_init_pending().is_enabled = Some(false);
             println!("Staged: status = ARCHIVED");
-        } else if let Some(enabled) = enabled {
+        } else if enabled {
             ctx.get_or_init_pending().is_enabled = Some(enabled);
             ctx.get_or_init_pending().is_archived = Some(false);
             println!("Staged: status = {}", if enabled { "ON" } else { "OFF" });

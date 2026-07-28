@@ -190,7 +190,7 @@ impl Tabular for Feature {
             let line = format!(
                 "{}{} {}{} │ {}",
                 connector,
-                bar(weight, 10),
+                format_weight_bar(weight, 10),
                 marker,
                 (i + 1).to_string().dimmed(),
                 e.value
@@ -305,9 +305,10 @@ impl Tabular for Feature {
                     pending_seg_shown = true;
                     let (line, stage) = match &ctx.segment_pending {
                         Some((_, Some(pending_weights))) => {
-                            let with_control =
-                                with_control_remainder(pending_weights, &self.variants);
-                            let parts = segment_weight_parts(&with_control, &self.variants);
+                            let parts = segment_weights_with_control_remainder(
+                                pending_weights,
+                                &self.variants,
+                            );
                             let line = format!(
                                 "{}  › {} {}",
                                 "segment".bright_blue(),
@@ -319,7 +320,7 @@ impl Tabular for Feature {
                             (line, "▪ updating".yellow().to_string())
                         }
                         Some((_, None)) => {
-                            let parts = segment_weight_parts(weights, &self.variants);
+                            let parts = segment_weights(weights, &self.variants);
                             let line = format!(
                                 "{}  › {} {}",
                                 "segment".bright_blue(),
@@ -335,7 +336,7 @@ impl Tabular for Feature {
                     overrides_lines.push(line);
                     overrides_stages.push(stage);
                 } else {
-                    let parts = segment_weight_parts(weights, &self.variants);
+                    let parts = segment_weights(weights, &self.variants);
                     overrides_lines.push(format!(
                         "{}  › {} {}",
                         "segment".bright_blue(),
@@ -350,12 +351,11 @@ impl Tabular for Feature {
         // Pending segment set for a segment not yet in committed - show as new added line.
         if !pending_seg_shown && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
         {
-            let with_control = with_control_remainder(pending_weights, &self.variants);
-            let parts = segment_weight_parts(&with_control, &self.variants);
+            let parts = segment_weights_with_control_remainder(pending_weights, &self.variants);
             let line = format!(
                 "{}  › {} {}",
                 "segment".bright_blue(),
-                seg_name.green(),
+                seg_name.dimmed(),
                 parts.join(", ")
             )
             .green()
@@ -441,42 +441,46 @@ impl Tabular for Feature {
     }
 }
 
-/// Synthesizes the control variant's remainder (100 - sum of the given weights) for a
-/// staged/pending override, which only carries the explicit non-control entries the user
-/// provided. Mirrors the auto-balanced control row `list_overrides_for_feature` already
-/// returns for committed overrides, so pending changes show the same "where does the rest
-/// go" picture before they're committed.
-fn with_control_remainder(
-    weights: &[SegmentVariantWeight],
-    variants: &[Variant],
-) -> Vec<SegmentVariantWeight> {
-    let Some(control) = variants.iter().find(|v| v.is_control()) else {
-        return weights.to_vec();
-    };
-    let sum: u32 = weights.iter().map(|w| w.weight as u32).sum();
-    let mut result = vec![SegmentVariantWeight {
-        variant_id: control.id,
-        weight: 100u32.saturating_sub(sum) as u8,
-    }];
-
-    result.extend(weights.iter().cloned());
-    result
-}
-
-fn segment_weight_parts(weights: &[SegmentVariantWeight], variants: &[Variant]) -> Vec<String> {
+/// Formats each weight as `"<value> → <weight>%"`, skipping any whose `variant_id` no
+/// longer resolves to a known variant. Unlike [`segment_weight_parts_with_control_remainder`],
+/// this doesn't synthesize a control entry - use it only for committed overrides, which
+/// already carry one.
+fn segment_weights(weights: &[SegmentVariantWeight], variants: &[Variant]) -> Vec<String> {
     weights
         .iter()
-        .filter_map(|w| {
-            variants.iter().find(|v| v.id == w.variant_id).map(|v| {
-                let (_, bare) = v.value.decompose();
-                let first_line = bare.lines().next().unwrap_or(bare);
-                format!("{} → {}", first_line, format!("{}%", w.weight).bold())
-            })
-        })
+        .filter_map(|w| format_weight_percent(w, variants))
         .collect()
 }
 
-pub fn bar(weight: u8, width: u16) -> String {
+/// Same as [`segment_weight_parts`], but with the control variant's auto-balanced
+/// remainder (see [`control_remainder`]) shown first - for a staged/pending override
+/// that, unlike a committed one, doesn't already carry a control entry.
+fn segment_weights_with_control_remainder(
+    weights: &[SegmentVariantWeight],
+    variants: &[Variant],
+) -> Vec<String> {
+    let control = variants.iter().find(|v| v.is_control());
+    let sum: u32 = weights.iter().map(|w| w.weight as u32).sum();
+
+    Some(SegmentVariantWeight {
+        variant_id: control.unwrap().id,
+        weight: 100u32.saturating_sub(sum) as u8,
+    })
+    .iter()
+    .chain(weights.iter())
+    .filter_map(|w| format_weight_percent(w, variants))
+    .collect()
+}
+
+fn format_weight_percent(w: &SegmentVariantWeight, variants: &[Variant]) -> Option<String> {
+    let v = variants.iter().find(|v| v.id == w.variant_id)?;
+    let (_, bare) = v.value.decompose();
+    let first_line = bare.lines().next().unwrap_or(bare);
+
+    Some(format!("{} → {}%", first_line, w.weight))
+}
+
+fn format_weight_bar(weight: u8, width: u16) -> String {
     let total_halves = weight as u32 * width as u32 * 2 / 100;
     let full_chars = (total_halves / 2) as usize;
     let half = total_halves % 2 == 1;
