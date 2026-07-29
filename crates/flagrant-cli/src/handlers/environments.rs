@@ -7,7 +7,7 @@
 //! | `ENVIRONMENT add`        | [`add`]            | Create a new environment in the project.   |
 //! | `ENVIRONMENT list`       | [`list`]           | Print all environments in the project.     |
 //! | `ENVIRONMENT show`       | [`show`]           | Print details of an environment.           |
-//! | `ENVIRONMENT description`| [`set_description`]| Update an environment's description.       |
+//! | `ENVIRONMENT describe`   | [`describe`]       | Update an environment's description.       |
 //! | `ENVIRONMENT use`        | [`r#use`]          | Switch the active environment.             |
 //!
 //! Unlike `FEATURE`/`SEGMENT`, environment mutations apply immediately - there is no
@@ -81,7 +81,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Update the current environment's description immediately (no staging/`COMMIT`).
 ///
 /// Expected args: `[description]` (omit to clear)
-pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let desc = args.get(1).map(|a| a.to_string());
     let mut ctx = session.context.write().unwrap();
     let res = ctx.project.as_base_resource();

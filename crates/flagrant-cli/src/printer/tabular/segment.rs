@@ -51,31 +51,23 @@ impl Tabular for Segment {
 
     fn describe(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
-        let title = if eff.name_modified {
-            format!(
-                "Segment: {} {} {} (ID={})",
-                self.name.dimmed(),
-                "→".dimmed(),
-                eff.name.yellow(),
-                self.id
+        let title = format!("Segment: {} (ID={})", self.name, self.id);
+
+        let (name_str, name_stage) = if eff.name_modified {
+            (
+                eff.name.yellow().to_string(),
+                "‣ updating".yellow().to_string(),
             )
         } else {
-            format!("Segment: {} (ID={})", self.name, self.id)
+            (eff.name, String::new())
         };
-
-        let desc_str = if eff.description_modified {
-            eff.description
-                .as_deref()
-                .unwrap_or("(cleared)")
-                .yellow()
-                .to_string()
+        let (desc_str, desc_stage) = if eff.description_modified {
+            (
+                eff.description.unwrap_or_default().yellow().to_string(),
+                "‣ updating".yellow().to_string(),
+            )
         } else {
-            eff.description.unwrap_or_default()
-        };
-        let desc_stage = if eff.description_modified {
-            "‣ updating".yellow().to_string()
-        } else {
-            String::new()
+            (eff.description.unwrap_or_default(), String::new())
         };
 
         // Upper-bound capacity: each group pushes at most 3 lines for its connector, 1 for
@@ -255,7 +247,8 @@ impl Tabular for Segment {
         }
 
         let has_staged_overrides = overrides_stages.iter().any(|s| !s.is_empty());
-        let has_staged = !desc_stage.is_empty()
+        let has_staged = !name_stage.is_empty()
+            || !desc_stage.is_empty()
             || group_stage.iter().any(|s| !s.is_empty())
             || has_staged_overrides;
 
@@ -296,11 +289,14 @@ impl Tabular for Segment {
                 .build()
         };
 
-        let mut rows = vec![vec![
-            "RULES".to_string(),
-            group_lines.join("\n"),
-            group_stage.join("\n"),
-        ]];
+        let mut rows = vec![
+            vec!["NAME".to_string(), name_str, name_stage],
+            vec![
+                "RULES".to_string(),
+                group_lines.join("\n"),
+                group_stage.join("\n"),
+            ],
+        ];
         if let overrides_str = overrides_lines.join("\n")
             && !overrides_str.is_empty()
         {

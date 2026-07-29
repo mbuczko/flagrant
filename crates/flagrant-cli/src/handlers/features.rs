@@ -10,7 +10,7 @@
 //! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                      |
 //! | `FEATURE show`       | [`show`]               | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
-//! | `FEATURE description`| [`set_description`]    | Stage a feature description.                        |
+//! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                        |
 //! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
 //! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
@@ -97,6 +97,24 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         return Ok(());
     }
     bail!("No feature name provided.")
+}
+
+/// Stage a feature description change.
+///
+/// Expected args: `[description]` (omit to clear)
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
+    let mut ctx = session.context.write().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+    ctx.get_or_init_pending().description = Some(desc.clone());
+    println!(
+        "Staged: description = {}",
+        if desc.is_empty() { "(cleared)" } else { &desc }
+    );
+    Ok(())
 }
 
 /// Switch into a feature context by name.
@@ -254,24 +272,6 @@ pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
         return Ok(());
     }
     bail!("Not enough arguments provided")
-}
-
-/// Stage a feature description change.
-///
-/// Expected args: `[description]` (omit to clear)
-pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
-    let mut ctx = session.context.write().unwrap();
-
-    if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
-    }
-    ctx.get_or_init_pending().description = Some(desc.clone());
-    println!(
-        "Staged: description = {}",
-        if desc.is_empty() { "(cleared)" } else { &desc }
-    );
-    Ok(())
 }
 
 /// Stage adding one or more tags to the current feature.

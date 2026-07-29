@@ -142,11 +142,11 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.op("show", "[name]", handlers::environments::show),
         Command::Environment.op(
-            "description",
+            "describe",
             "[description]",
-            handlers::environments::set_description,
+            handlers::environments::describe,
         ),
-        Command::Environment.args("add · description · list · show · use"),
+        Command::Environment.args("add · describe · list · show · use"),
         // Features
         Command::Feature.op("list", "status|tag|[pattern]", handlers::features::list),
         Command::Feature.op("add", "feature value", handlers::features::add),
@@ -154,16 +154,16 @@ fn main() -> anyhow::Result<()> {
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.op_in_context(
-            "description",
+            "describe",
             "[description]",
-            handlers::features::set_description,
+            handlers::features::describe,
             in_context!(feature_ctx),
         ),
         // Context-gated hint must come before the unconditional one below - `find()` takes
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · description · list · show · use",
+            "add · delete · describe · list · show · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),
@@ -297,21 +297,21 @@ fn main() -> anyhow::Result<()> {
         Command::Segment.op("delete", "name", handlers::segments::delete),
         Command::Segment.op("use", "name", handlers::segments::r#use),
         Command::Segment.op_in_context(
-            "name",
+            "rename",
             "value",
-            handlers::segments::set_name,
+            handlers::segments::rename,
             in_context!(segment_ctx),
         ),
         Command::Segment.op_in_context(
-            "description",
+            "describe",
             "value",
-            handlers::segments::set_description,
+            handlers::segments::describe,
             in_context!(segment_ctx),
         ),
         // Context-gated hint must come before the unconditional one below - see the
         // Feature block above for why.
         Command::Segment.args_in_context(
-            "add · delete · description · list · name · show · use",
+            "add · delete · describe · list · rename · show · use",
             in_context!(segment_ctx),
         ),
         Command::Segment.args("add · delete · list · show · use"),

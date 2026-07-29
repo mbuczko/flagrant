@@ -7,8 +7,8 @@
 //! | `SEGMENT show`            | [`show`]           | Print details of a segment.                                                 |
 //! | `SEGMENT delete`          | [`delete`]         | Delete a segment by name.                                                   |
 //! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                                              |
-//! | `SEGMENT name`            | [`set_name`]       | Stage a segment name change.                                                |
-//! | `SEGMENT description`     | [`set_description`]| Stage a segment description change.                                         |
+//! | `SEGMENT rename`          | [`rename`]         | Stage a segment name change.                                                |
+//! | `SEGMENT describe`        | [`describe`]       | Stage a segment description change.                                         |
 //! | `SET override`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
 //! | `UNSET override`          | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
 //! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.                                     |
@@ -230,10 +230,10 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// Stage a segment name change.
 ///
 /// Expected args: `<name>`
-pub fn set_name(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let name = args
         .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Usage: SEGMENT name <name>"))?;
+        .ok_or_else(|| anyhow::anyhow!("Usage: SEGMENT rename <name>"))?;
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
@@ -256,7 +256,7 @@ pub fn set_name(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Stage a segment description change.
 ///
 /// Expected args: `[description]` (omit to clear)
-pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let desc = args.get(1).map(|a| a.to_string());
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.is_none() {
