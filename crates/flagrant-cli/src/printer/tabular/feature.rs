@@ -111,7 +111,7 @@ impl Tabular for Feature {
             self.tags.to_string().blue().to_string()
         };
         let tags_stage = if has_tag_ops {
-            "▪ updating".yellow().to_string()
+            "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -147,7 +147,7 @@ impl Tabular for Feature {
             )
         };
         let status_stage = if pending_enabled.is_some() || pending_archived.is_some() {
-            "▪ updating".yellow().to_string()
+            "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -158,7 +158,7 @@ impl Tabular for Feature {
             None => self.description.clone(),
         };
         let desc_stage = if patch.and_then(|p| p.description.as_ref()).is_some() {
-            "▪ updating".yellow().to_string()
+            "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -198,19 +198,19 @@ impl Tabular for Feature {
 
             if e.is_deleted {
                 variant_lines.push(line.dimmed().to_string());
-                variant_stage.push("▪ deleting".red().to_string());
+                variant_stage.push("✕ deleting".red().to_string());
             } else if e.is_staged_add {
                 variant_lines.push(line.green().to_string());
-                variant_stage.push("▪ adding".green().to_string());
+                variant_stage.push("‣ adding".green().to_string());
             } else if e.value_modified
                 || e.weight_modified
                 || (e.is_control && has_ops && weight != e.weight)
             {
                 variant_lines.push(line.yellow().to_string());
                 let label = if e.value_modified || e.weight_modified {
-                    "▪ updating"
+                    "‣ updating"
                 } else {
-                    "▪ adjusting"
+                    "~ adjusting"
                 };
                 variant_stage.push(label.yellow().to_string());
             } else {
@@ -280,8 +280,8 @@ impl Tabular for Feature {
             // in adjacent table columns - always push both, even if the stage is empty.
             let stage = if let Some(pending) = &ctx.identity_pending {
                 match pending {
-                    IdentityPending::Override(_) => "▪ updating".yellow().to_string(),
-                    IdentityPending::Unpin(_) => "▪ removing".red().to_string(),
+                    IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
+                    IdentityPending::Unpin(_) => "‣ removing".red().to_string(),
                 }
             } else {
                 String::new()
@@ -317,7 +317,7 @@ impl Tabular for Feature {
                             )
                             .yellow()
                             .to_string();
-                            (line, "▪ updating".yellow().to_string())
+                            (line, "‣ updating".yellow().to_string())
                         }
                         Some((_, None)) => {
                             let parts = segment_weights(weights, &self.variants);
@@ -329,7 +329,7 @@ impl Tabular for Feature {
                             )
                             .dimmed()
                             .to_string();
-                            (line, "▪ removing".red().to_string())
+                            (line, "‣ removing".red().to_string())
                         }
                         None => unreachable!(),
                     };
@@ -361,7 +361,7 @@ impl Tabular for Feature {
             .green()
             .to_string();
             overrides_lines.push(line);
-            overrides_stages.push("▪ adding".green().to_string());
+            overrides_stages.push("‣ adding".green().to_string());
         }
 
         let overrides_str = overrides_lines.join("\n");

@@ -187,6 +187,14 @@ pub enum SegmentPatchOp {
     DeleteRule {
         rule_id: i32,
     },
+    SetRuleValue {
+        rule_id: i32,
+        value: String,
+    },
+    SetRuleComparator {
+        rule_id: i32,
+        comparator: Comparator,
+    },
     /// Stores per-environment weight overrides for a feature's variants within this segment.
     SetFeatureOverride {
         feature_id: i32,

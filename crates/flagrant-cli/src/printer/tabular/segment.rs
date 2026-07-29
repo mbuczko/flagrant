@@ -73,7 +73,7 @@ impl Tabular for Segment {
             eff.description.unwrap_or_default()
         };
         let desc_stage = if eff.description_modified {
-            "▪ updating".yellow().to_string()
+            "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
@@ -125,9 +125,9 @@ impl Tabular for Segment {
                 UTF_TOP_CORNER.dimmed()
             ));
             group_stage.push(if group.is_deleted {
-                "▪ deleting".red().to_string()
+                "✕ deleting".red().to_string()
             } else if group.is_staged_add {
-                "▪ adding".green().to_string()
+                "‣ adding".green().to_string()
             } else {
                 String::new()
             });
@@ -151,38 +151,56 @@ impl Tabular for Segment {
                     let driver = format_driver(&r.driver);
                     let cmp = format_comparator(&r.comparator);
 
-                    let (idx_str, driver_s, val_s, rule_stage) = if group.is_deleted || r.is_deleted
-                    {
-                        (
-                            display_idx.to_string().dimmed(),
-                            driver.dimmed(),
-                            r.value.dimmed(),
-                            if r.is_deleted {
-                                "▪ deleting".red().to_string()
-                            } else {
-                                String::new()
-                            },
-                        )
-                    } else if r.is_staged_add {
-                        (
-                            "+".green(),
-                            driver.bright_blue(),
-                            r.value.green(),
-                            "▪ adding".green().to_string(),
-                        )
-                    } else {
-                        (
-                            display_idx.to_string().dimmed(),
-                            driver.bright_blue(),
-                            r.value.green(),
-                            String::new(),
-                        )
-                    };
+                    let (idx_str, driver_s, cmp_s, val_s, rule_stage) =
+                        if group.is_deleted || r.is_deleted {
+                            (
+                                display_idx.to_string().dimmed(),
+                                driver.dimmed(),
+                                cmp.dimmed(),
+                                r.value.dimmed(),
+                                if r.is_deleted {
+                                    "✕ deleting".red().to_string()
+                                } else {
+                                    String::new()
+                                },
+                            )
+                        } else if r.is_staged_add {
+                            (
+                                "+".green(),
+                                driver.bright_blue(),
+                                cmp.dimmed(),
+                                r.value.green(),
+                                "‣ adding".green().to_string(),
+                            )
+                        } else if r.value_modified || r.comparator_modified {
+                            (
+                                display_idx.to_string().dimmed(),
+                                driver.bright_blue(),
+                                if r.comparator_modified {
+                                    cmp.yellow()
+                                } else {
+                                    cmp.dimmed()
+                                },
+                                if r.value_modified {
+                                    r.value.yellow()
+                                } else {
+                                    r.value.green()
+                                },
+                                "‣ updating".yellow().to_string(),
+                            )
+                        } else {
+                            (
+                                display_idx.to_string().dimmed(),
+                                driver.bright_blue(),
+                                cmp.dimmed(),
+                                r.value.green(),
+                                String::new(),
+                            )
+                        };
 
                     group_lines.push(format!(
-                        "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp}  {val_s}",
+                        "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}",
                         pipe = UTF_VERT_BAR.dimmed(),
-                        cmp = cmp.dimmed(),
                         dw = max_driver,
                     ));
                     group_stage.push(rule_stage);
@@ -223,11 +241,11 @@ impl Tabular for Segment {
             match pending_op {
                 Some(SegmentPatchOp::UnsetFeatureOverride { .. }) => {
                     overrides_lines.push(plain_line.dimmed().to_string());
-                    overrides_stages.push("▪ removing".red().to_string());
+                    overrides_stages.push("‣ removing".red().to_string());
                 }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
                     overrides_lines.push(plain_line.yellow().to_string());
-                    overrides_stages.push("▪ updating".yellow().to_string());
+                    overrides_stages.push("‣ updating".yellow().to_string());
                 }
                 _ => {
                     overrides_lines.push(plain_line);
@@ -357,6 +375,35 @@ impl Tabular for SegmentGroup {
             })
             .unwrap_or_default();
 
+        let rule_value_overrides: std::collections::HashMap<i32, &str> = patch
+            .map(|p| {
+                p.ops
+                    .iter()
+                    .filter_map(|op| match op {
+                        SegmentPatchOp::SetRuleValue { rule_id, value } => {
+                            Some((*rule_id, value.as_str()))
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let rule_comparator_overrides: std::collections::HashMap<i32, &Comparator> = patch
+            .map(|p| {
+                p.ops
+                    .iter()
+                    .filter_map(|op| match op {
+                        SegmentPatchOp::SetRuleComparator {
+                            rule_id,
+                            comparator,
+                        } => Some((*rule_id, comparator)),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let sym = group
             .connector
             .as_ref()
@@ -370,7 +417,7 @@ impl Tabular for SegmentGroup {
         };
 
         let joiner_stage = if is_deleted {
-            "▪ deleting".red().to_string()
+            "✕ deleting".red().to_string()
         } else {
             String::new()
         };
@@ -392,7 +439,7 @@ impl Tabular for SegmentGroup {
 
         group_lines.push(format!("{frame} {label_colored}{desc_part}"));
         group_stage.push(if is_deleted {
-            "▪ deleting".red().to_string()
+            "✕ deleting".red().to_string()
         } else {
             String::new()
         });
@@ -421,8 +468,19 @@ impl Tabular for SegmentGroup {
 
             for (display_idx, r) in (1usize..).zip(group.rules.iter()) {
                 let driver = format_driver(&r.driver);
-                let cmp = format_comparator(&r.comparator);
                 let rule_deleted = deleted_rule_ids.contains(&r.id);
+                let value_modified = rule_value_overrides.contains_key(&r.id);
+                let comparator_modified = rule_comparator_overrides.contains_key(&r.id);
+                let effective_comparator = rule_comparator_overrides
+                    .get(&r.id)
+                    .copied()
+                    .unwrap_or(&r.comparator);
+                let effective_value = rule_value_overrides
+                    .get(&r.id)
+                    .copied()
+                    .unwrap_or(r.value.as_str());
+                let cmp = format_comparator(effective_comparator);
+
                 let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
                     if is_deleted || rule_deleted {
                         (
@@ -432,10 +490,27 @@ impl Tabular for SegmentGroup {
                             cmp.dimmed(),
                             r.value.dimmed(),
                             if rule_deleted {
-                                "▪ deleting".red().to_string()
+                                "✕ deleting".red().to_string()
                             } else {
                                 String::new()
                             },
+                        )
+                    } else if value_modified || comparator_modified {
+                        (
+                            UTF_VERT_BAR.dimmed(),
+                            display_idx.to_string().dimmed(),
+                            driver.bright_blue(),
+                            if comparator_modified {
+                                cmp.yellow()
+                            } else {
+                                cmp.dimmed()
+                            },
+                            if value_modified {
+                                effective_value.yellow()
+                            } else {
+                                effective_value.green()
+                            },
+                            "‣ updating".yellow().to_string(),
                         )
                     } else {
                         (
@@ -463,7 +538,7 @@ impl Tabular for SegmentGroup {
                     value.green(),
                     dw = max_driver,
                 ));
-                group_stage.push("▪ adding".green().to_string());
+                group_stage.push("‣ adding".green().to_string());
             }
         }
 
@@ -539,22 +614,70 @@ impl Tabular for SegmentRule {
             )
         });
 
-        let (driver_s, comparator_s, value_s, stage) = if is_deleted {
-            (
-                format_driver(&rule.driver).dimmed(),
-                format_comparator(&rule.comparator).dimmed(),
-                rule.value.dimmed(),
-                "▪ deleting".red().to_string(),
-            )
-        } else {
-            (
-                format_driver(&rule.driver).bright_blue(),
-                format_comparator(&rule.comparator).dimmed(),
-                rule.value.green(),
-                String::new(),
-            )
-        };
-        if stage.is_empty() {
+        let comparator_override = patch
+            .into_iter()
+            .flat_map(|p| &p.ops)
+            .find_map(|op| match op {
+                SegmentPatchOp::SetRuleComparator {
+                    rule_id,
+                    comparator,
+                } if *rule_id == rule.id => Some(comparator),
+                _ => None,
+            });
+        let value_override = patch
+            .into_iter()
+            .flat_map(|p| &p.ops)
+            .find_map(|op| match op {
+                SegmentPatchOp::SetRuleValue { rule_id, value } if *rule_id == rule.id => {
+                    Some(value)
+                }
+                _ => None,
+            });
+
+        let effective_comparator = comparator_override.unwrap_or(&rule.comparator);
+        let effective_value = value_override.map(String::as_str).unwrap_or(&rule.value);
+
+        let (driver_s, comparator_s, value_s, driver_stage, comparator_stage, value_stage) =
+            if is_deleted {
+                (
+                    format_driver(&rule.driver).dimmed(),
+                    format_comparator(&rule.comparator).dimmed(),
+                    rule.value.dimmed(),
+                    "✕ deleting".red().to_string(),
+                    "✕ deleting".red().to_string(),
+                    "✕ deleting".red().to_string(),
+                )
+            } else {
+                (
+                    format_driver(&rule.driver).bright_blue(),
+                    if comparator_override.is_some() {
+                        format_comparator(effective_comparator).yellow()
+                    } else {
+                        format_comparator(effective_comparator).dimmed()
+                    },
+                    if value_override.is_some() {
+                        effective_value.yellow()
+                    } else {
+                        effective_value.green()
+                    },
+                    String::new(),
+                    if comparator_override.is_some() {
+                        "‣ updating".yellow().to_string()
+                    } else {
+                        String::new()
+                    },
+                    if value_override.is_some() {
+                        "‣ updating".yellow().to_string()
+                    } else {
+                        String::new()
+                    },
+                )
+            };
+
+        let has_staged =
+            !driver_stage.is_empty() || !comparator_stage.is_empty() || !value_stage.is_empty();
+
+        if !has_staged {
             let table = FancyTable::create(FancyTableOpts::default())
                 .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
                 .add_column(
@@ -575,7 +698,7 @@ impl Tabular for SegmentRule {
             ]);
         } else {
             let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
                 .add_column(
                     None,
                     Layout::Expandable(100),
@@ -583,20 +706,20 @@ impl Tabular for SegmentRule {
                     Overflow::Wrap,
                     12,
                 )
-                .add_column(None, Layout::Fixed(10), Align::Left, Overflow::Truncate, 1)
+                .add_column(None, Layout::Fixed(14), Align::Left, Overflow::Truncate, 1)
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
                 .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
                 .width(Width::Percentage(100))
                 .build();
 
             table.render(vec![
-                vec!["DRIVER".to_string(), driver_s.to_string(), stage],
+                vec!["DRIVER".to_string(), driver_s.to_string(), driver_stage],
                 vec![
                     "COMPARATOR".to_string(),
                     comparator_s.to_string(),
-                    String::new(),
+                    comparator_stage,
                 ],
-                vec!["VALUE".to_string(), value_s.to_string(), String::new()],
+                vec!["VALUE".to_string(), value_s.to_string(), value_stage],
             ]);
         }
     }
@@ -622,19 +745,8 @@ fn format_driver(driver: &SegmentDriver) -> String {
     }
 }
 
-fn format_comparator(comparator: &Comparator) -> &'static str {
-    match comparator {
-        Comparator::ExactlyMatches => "exactly-matches",
-        Comparator::DoesNotMatch => "does-not-match",
-        Comparator::Contains => "contains",
-        Comparator::DoesNotContain => "does-not-contain",
-        Comparator::GreaterThan => "greater-than",
-        Comparator::GreaterEqualThan => "greater-equal-than",
-        Comparator::LowerThan => "lower-than",
-        Comparator::LowerEqualThan => "lower-equal-than",
-        Comparator::In => "in",
-        Comparator::NotIn => "not-in",
-    }
+fn format_comparator(comparator: &Comparator) -> String {
+    comparator.to_string()
 }
 
 fn format_connector(connector: &GroupConnector) -> &'static str {

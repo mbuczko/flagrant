@@ -733,6 +733,7 @@ dependencies = [
  "reqwest",
  "rustyline",
  "serde",
+ "serde_json",
  "strum",
  "strum_macros",
  "tempfile",
@@ -765,6 +766,8 @@ dependencies = [
  "serde",
  "serde_valid",
  "sqlx",
+ "strum",
+ "strum_macros",
  "thiserror 1.0.64",
  "utoipa",
 ]

@@ -1,6 +1,7 @@
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, completer::AutoCompleter, session::Session};
-use flagrant_types::{Environment, Feature, IdentityWithTraits, Segment, Tag, Trait};
+use flagrant_types::{Comparator, Environment, Feature, IdentityWithTraits, Segment, Tag, Trait};
+use strum::IntoEnumIterator;
 
 pub struct ArgCompleter<'a> {
     pub session: &'a Session<Connection>,
@@ -215,7 +216,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                 Ok(match op {
                     // Since group labels are auto-generated, let's simplify the autocompletion
                     // and reduce it to "group-" only.
-                    "add" | "describe" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
+                    "add" | "describe" | "delete" | "value" | "comparator" if arg_n == 2 => {
+                        filter_by_prefix(&["group-"], prefix)
+                    }
                     "add" if arg_n == 3 => {
                         if let Some(trait_prefix) = prefix.strip_prefix("trait:") {
                             let res = ctx.project.as_base_resource();
@@ -230,21 +233,10 @@ impl AutoCompleter for ArgCompleter<'_> {
                             filter_by_prefix(&["identity", "trait:", "environment"], prefix)
                         }
                     }
-                    "add" if arg_n == 4 => filter_by_prefix(
-                        &[
-                            "exactly-matches",
-                            "does-not-match",
-                            "contains",
-                            "does-not-contain",
-                            "greater-than",
-                            "greater-equal-than",
-                            "lower-than",
-                            "lower-equal-than",
-                            "in",
-                            "not-in",
-                        ],
-                        prefix,
-                    ),
+                    "add" if arg_n == 4 => Comparator::iter()
+                        .map(|c| c.to_string())
+                        .filter(|s| s.starts_with(prefix))
+                        .collect(),
                     "add" if arg_n == 5 => match args.get(3).map(|a| a.as_ref()) {
                         Some("identity") => {
                             let env_res = ctx.env_resource();

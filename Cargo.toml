@@ -35,6 +35,8 @@ regex = "1.10.4"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-scalar = { version = "0.2", features = ["axum"] }
 rustyline = { version = "15.0.0", features = ["derive"], git = "https:/github.com/mbuczko/rustyline", branch = "feat/prompt-overlays" }
+strum = "0.26.2"
+strum_macros = "0.26.2"
 
 [profile.dev]
 opt-level = 1

@@ -30,7 +30,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         features,
-        internal::{concat_values_for_arg, effectives as effective, index, stage},
+        internal::{concat_values_for_arg, effectives as effective, extract_single_value, index, stage},
         open_in_editor,
     },
     printer::tabular::Tabular,
@@ -439,33 +439,6 @@ fn resolve_identity(
     )
 }
 
-/// Strips comment lines from editor content and returns the single remaining
-/// paragraph (a run of non-blank lines). Values may legitimately span several
-/// lines (e.g. pretty-printed JSON), so a paragraph - not a single line - is
-/// the unit of a value. Errors if the content yields zero or more than one
-/// paragraph, which happens e.g. when the editor is closed unedited and all
-/// listed variants remain uncommented.
-fn extract_single_value(text: &str) -> anyhow::Result<String> {
-    let stripped = text
-        .lines()
-        .filter(|line| !line.starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let paragraphs: Vec<&str> = stripped
-        .split("\n\n")
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect();
-
-    match paragraphs.as_slice() {
-        [] => bail!("No value provided."),
-        [value] => Ok(value.to_string()),
-        _ => bail!(
-            "Expected a single variant value, found {}. Leave exactly one variant's value uncommented.",
-            paragraphs.len()
-        ),
-    }
-}
 
 fn build_override_editor_content(
     feature: &Feature,

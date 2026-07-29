@@ -336,7 +336,22 @@ fn main() -> anyhow::Result<()> {
             handlers::rules::delete,
             in_context!(segment_ctx),
         ),
-        Command::Rule.args_in_context("add · describe · delete", in_context!(segment_ctx)),
+        Command::Rule.op_in_context(
+            "value",
+            "group-label rule-index [value]",
+            handlers::rules::value,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.op_in_context(
+            "comparator",
+            "group-label rule-index [comparator]",
+            handlers::rules::comparator,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.args_in_context(
+            "add · describe · delete · value · comparator",
+            in_context!(segment_ctx),
+        ),
         // Commit / discard (available when any context has pending changes)
         Command::Commit.no_op_in_context(
             "→ commit staged changes",
