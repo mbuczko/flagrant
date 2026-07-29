@@ -113,7 +113,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         )?
     };
     // A brand-new segment can't override anything yet.
-    segment.describe(None, &SegmentContext::default());
+    segment.display(None, &SegmentContext::default());
 
     let mut ctx = session.context.write().unwrap();
     ctx.segment = Some(segment);
@@ -145,7 +145,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let segment = fetch_segment(name, session)?;
         let overrides = fetch_overridden_features(segment.id, session);
-        segment.describe(None, &SegmentContext { overrides });
+        segment.display(None, &SegmentContext { overrides });
     } else {
         let (segment_id, in_context_feature_id) = {
             let ctx = session.context.read().unwrap();
@@ -199,7 +199,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             }
         }
 
-        segment.describe(patch, &SegmentContext { overrides });
+        segment.display(patch, &SegmentContext { overrides });
     }
     Ok(())
 }
@@ -671,7 +671,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     ctx.segment
         .as_ref()
         .unwrap()
-        .describe(None, &SegmentContext { overrides });
+        .display(None, &SegmentContext { overrides });
     drop(ctx);
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section
@@ -704,7 +704,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     };
     let segment = fetch_segment(name, session)?;
     let overrides = fetch_overridden_features(segment.id, session);
-    segment.describe(None, &SegmentContext { overrides });
+    segment.display(None, &SegmentContext { overrides });
 
     let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
     ctx.variant_index.clear();

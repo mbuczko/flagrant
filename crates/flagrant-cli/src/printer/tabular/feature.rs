@@ -27,7 +27,7 @@ impl IdentityPending {
     }
 }
 
-/// Context passed to `Feature::describe` to show both committed and pending overrides.
+/// Context passed to `Feature::display` to show both committed and pending overrides.
 pub struct OverridesContext {
     pub committed: Vec<FeatureOverride>,
     /// Identity with staged change in a context.
@@ -86,7 +86,7 @@ impl Tabular for Feature {
             .render(rows)
     }
 
-    fn describe(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
+    fn display(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if has_tag_ops {

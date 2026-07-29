@@ -40,7 +40,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        env.describe(None, &());
+        env.display(None, &());
         return Ok(());
     }
     bail!("No environment name provided.")
@@ -71,10 +71,10 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let env = ctx
             .client
             .get::<Environment>(res.subpath(format!("/envs/{name}")))?;
-        env.describe(None, &());
+        env.display(None, &());
         return Ok(());
     }
-    ctx.environment.describe(None, &());
+    ctx.environment.display(None, &());
     Ok(())
 }
 
@@ -106,7 +106,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     )?;
 
     ctx.environment.description = desc;
-    ctx.environment.describe(None, &());
+    ctx.environment.display(None, &());
     Ok(())
 }
 

@@ -48,10 +48,10 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     if let Some(identity_str) = args.get(1) {
         let identity = resolve_identity(&ctx, identity_str)?;
-        identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+        identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     } else if let Some(identity) = &ctx.identity {
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
-        identity.describe(patch, &fetch_variant_assignments(&ctx, identity));
+        identity.display(patch, &fetch_variant_assignments(&ctx, identity));
     } else {
         bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
     }
@@ -92,7 +92,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 },
             )?
         };
-        identity.describe(None, &vec![]);
+        identity.display(None, &vec![]);
 
         let mut ctx = session.context.write().unwrap();
         ctx.identity = Some(identity);
@@ -175,7 +175,7 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     stage::ensure_no_pending(session)?;
     let ctx = session.context.read().unwrap();
     let identity = resolve_identity(&ctx, identity_str)?;
-    identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+    identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     drop(ctx);
 
     let mut ctx = session.context.write().unwrap();
@@ -389,7 +389,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, IdentityWithTraits>(path, patch)
         .map_err(|err| anyhow::anyhow!("Identity commit failed: {err}"))?;
 
-    updated.describe(None, &fetch_variant_assignments(&ctx, &updated));
+    updated.display(None, &fetch_variant_assignments(&ctx, &updated));
     ctx.identity_patch = None;
     ctx.identity = Some(updated);
     drop(ctx);

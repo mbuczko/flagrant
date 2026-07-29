@@ -14,7 +14,7 @@ const UTF_VERT_BAR: &str = "│";
 const UTF_TOP_CORNER: &str = "╭─";
 const UTF_BTM_CORNER: &str = "╰───";
 
-/// Context passed to `Segment::describe` to show the features this segment overrides.
+/// Context passed to `Segment::display` to show the features this segment overrides.
 #[derive(Default)]
 pub struct SegmentContext {
     pub overrides: Vec<SegmentFeatureOverride>,
@@ -49,7 +49,7 @@ impl Tabular for Segment {
             .render(rows);
     }
 
-    fn describe(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
+    fn display(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
         let title = format!("Segment: {} (ID={})", self.name, self.id);
 
@@ -332,7 +332,7 @@ impl Tabular for SegmentGroup {
 
     fn list(_: &[Self]) {}
 
-    fn describe(&self, patch: Option<&SegmentPatch>, _ctx: &()) {
+    fn display(&self, patch: Option<&SegmentPatch>, _ctx: &()) {
         let group = self;
         let title = format!("Group: {}", group.label);
 
@@ -599,7 +599,7 @@ impl Tabular for SegmentRule {
 
     fn list(_: &[Self]) {}
 
-    fn describe(&self, patch: Option<&SegmentPatch>, ctx: &(String, usize)) {
+    fn display(&self, patch: Option<&SegmentPatch>, ctx: &(String, usize)) {
         let rule = self;
         let (group_label, index) = ctx;
         let title = format!("[{group_label}] rule #{index}");

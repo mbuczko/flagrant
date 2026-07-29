@@ -39,7 +39,7 @@ impl Tabular for IdentityWithTraits {
             .render(rows);
     }
 
-    fn describe(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
+    fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
         let title = format!("Identity: {} (ID={})", self.value, self.id);
         let eff_traits = effective::effective_identity_traits(self, patch);
 

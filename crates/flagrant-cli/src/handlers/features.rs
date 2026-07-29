@@ -88,7 +88,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         };
 
         let overrides = fetch_overrides(feature.id, session);
-        feature.describe(None, &OverridesContext::committed_only(overrides));
+        feature.display(None, &OverridesContext::committed_only(overrides));
 
         let mut ctx = session.context.write().unwrap();
         ctx.feature = Some(feature);
@@ -156,7 +156,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
 
         let overrides = fetch_overrides(feature.id, session);
-        feature.describe(None, &OverridesContext::committed_only(overrides));
+        feature.display(None, &OverridesContext::committed_only(overrides));
         {
             let mut ctx = session.context.write().unwrap();
             ctx.feature = Some(feature);
@@ -197,7 +197,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let feature = fetch_feature(name, session)?;
         let overrides = fetch_overrides(feature.id, session);
 
-        feature.describe(None, &OverridesContext::committed_only(overrides));
+        feature.display(None, &OverridesContext::committed_only(overrides));
         return Ok(());
     }
 
@@ -248,7 +248,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         None
     });
 
-    feature.describe(
+    feature.display(
         patch,
         &OverridesContext {
             committed: overrides,
@@ -414,7 +414,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
             .get::<Vec<FeatureOverride>>(overrides_path)
             .unwrap_or_default();
 
-        updated.describe(None, &OverridesContext::committed_only(overrides));
+        updated.display(None, &OverridesContext::committed_only(overrides));
     }
 
     ctx.feature_patch = None;
@@ -433,7 +433,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 pub(crate) fn show_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
     let updated = fetch_feature(&feature_id.to_string(), session)?;
     let overrides = fetch_overrides(updated.id, session);
-    updated.describe(None, &OverridesContext::committed_only(overrides));
+    updated.display(None, &OverridesContext::committed_only(overrides));
 
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.as_ref().is_some_and(|f| f.id == updated.id) {

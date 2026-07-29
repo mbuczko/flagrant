@@ -7,7 +7,7 @@ pub trait Tabular {
     type Patch;
     type Context;
 
-    fn describe(&self, patch: Option<&Self::Patch>, ctx: &Self::Context);
+    fn display(&self, patch: Option<&Self::Patch>, ctx: &Self::Context);
 
     fn list(rows: &[Self])
     where

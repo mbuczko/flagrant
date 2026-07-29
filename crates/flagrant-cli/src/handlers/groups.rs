@@ -79,7 +79,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
 
-    group.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
+    group.display(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
     Ok(())
 }
 

@@ -58,7 +58,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         )
     })?;
 
-    rule.describe(
+    rule.display(
         ctx.segment_patch.as_ref().filter(|p| !p.is_empty()),
         &(label.to_string(), index),
     );

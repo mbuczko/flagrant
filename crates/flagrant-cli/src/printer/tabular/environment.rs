@@ -31,7 +31,7 @@ impl Tabular for Environment {
             .render(rows);
     }
 
-    fn describe(&self, _patch: Option<&()>, _ctx: &()) {
+    fn display(&self, _patch: Option<&()>, _ctx: &()) {
         let desc_str = self.description.as_deref().unwrap_or("");
         let title = format!("Environment: {} (ID={})", self.name, self.id);
         let table = FancyTable::create(FancyTableOpts::default())

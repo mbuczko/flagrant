@@ -16,7 +16,7 @@ use super::effectives;
 /// Resolve a 1-based display index to a [`VariantRef`].
 pub(crate) fn resolve(idx: usize, ctx: &Connection) -> anyhow::Result<VariantRef> {
     if ctx.variant_index.is_empty() {
-        bail!("Run `FEATURE describe` to refresh indices.")
+        bail!("Run `FEATURE show` to refresh indices.")
     }
     if idx == 0 || idx > ctx.variant_index.len() {
         bail!(
@@ -28,7 +28,7 @@ pub(crate) fn resolve(idx: usize, ctx: &Connection) -> anyhow::Result<VariantRef
     Ok(ctx.variant_index[idx - 1].clone())
 }
 
-/// Rebuilds the variant index to match the display order produced by `FEATURE describe`.
+/// Rebuilds the variant index to match the display order produced by `FEATURE show`.
 ///
 /// Uses `effective_variants` (same sort: descending weight, staged adds last) so that
 /// the 1-based numbers the user sees are always in sync with what `resolve` returns.
