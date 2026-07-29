@@ -140,14 +140,33 @@ fn main() -> anyhow::Result<()> {
         Command::Environment.op("add", "environment base", handlers::environments::add),
         Command::Environment.op("use", "environment", handlers::environments::r#use),
         Command::Environment.op("list", "", handlers::environments::list),
-        Command::Environment.args("add · list · use"),
+        Command::Environment.op("show", "[name]", handlers::environments::show),
+        Command::Environment.op(
+            "description",
+            "[description]",
+            handlers::environments::set_description,
+        ),
+        Command::Environment.args("add · description · list · show · use"),
         // Features
         Command::Feature.op("list", "status|tag|[pattern]", handlers::features::list),
         Command::Feature.op("add", "feature value", handlers::features::add),
-        Command::Feature.op("describe", "feature", handlers::features::describe),
+        Command::Feature.op("show", "feature", handlers::features::show),
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
-        Command::Feature.args("add · delete · describe · list · use"),
+        Command::Feature.op_in_context(
+            "description",
+            "[description]",
+            handlers::features::set_description,
+            in_context!(feature_ctx),
+        ),
+        // Context-gated hint must come before the unconditional one below - `find()` takes
+        // the first match, and the unconditional entry (op: None) would otherwise shadow
+        // any real op registered after it.
+        Command::Feature.args_in_context(
+            "add · delete · description · list · show · use",
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.args("add · delete · list · show · use"),
         // Identities
         Command::Identity.op(
             "add",
@@ -155,10 +174,10 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::add,
         ),
         Command::Identity.op("list", "trait|[pattern]", handlers::identities::list),
-        Command::Identity.op("describe", "[identity]", handlers::identities::describe),
+        Command::Identity.op("show", "[identity]", handlers::identities::show),
         Command::Identity.op("delete", "pattern", handlers::identities::delete),
         Command::Identity.op("use", "identity", handlers::identities::r#use),
-        Command::Identity.args("add · delete · describe · list · use"),
+        Command::Identity.args("add · delete · list · show · use"),
         // Variants
         Command::Variant.op_in_context(
             "add",
@@ -193,12 +212,6 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Set.op_in_context(
-            "description",
-            "[description]",
-            handlers::features::set_description,
-            in_context!(feature_ctx),
-        ),
-        Command::Set.op_in_context(
             "tags",
             "tag1[, tag2, ...]",
             handlers::features::set_tags,
@@ -219,34 +232,21 @@ fn main() -> anyhow::Result<()> {
         ),
         // Segment setters (only in segment context)
         Command::Set.op_in_context(
-            "name",
-            "value",
-            handlers::segments::set_name,
-            in_context!(segment_ctx),
-        ),
-        Command::Set.op_in_context(
-            "description",
-            "value",
-            handlers::segments::set_description,
-            in_context!(segment_ctx),
-        ),
-        Command::Set.op_in_context(
             "override",
             "[variant-index weight]",
             handlers::segments::set_override,
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Set.args_in_context(
-            "status · description · tags · name · override",
+            "status · tags · override",
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Set.args_in_context(
-            "status · description · tags · trait · override",
+            "status · tags · trait · override",
             in_context!(feature_ctx, identity_ctx),
         ),
-        Command::Set.args_in_context("status · description · tags", in_context!(feature_ctx)),
+        Command::Set.args_in_context("status · tags", in_context!(feature_ctx)),
         Command::Set.args_in_context("trait", in_context!(identity_ctx)),
-        Command::Set.args_in_context("name · description", in_context!(segment_ctx)),
         // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
@@ -293,10 +293,28 @@ fn main() -> anyhow::Result<()> {
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
         Command::Segment.op("list", "[pattern]", handlers::segments::list),
-        Command::Segment.op("describe", "[name]", handlers::segments::describe),
+        Command::Segment.op("show", "[name]", handlers::segments::show),
         Command::Segment.op("delete", "name", handlers::segments::delete),
         Command::Segment.op("use", "name", handlers::segments::r#use),
-        Command::Segment.args("add · delete · describe · list · use"),
+        Command::Segment.op_in_context(
+            "name",
+            "value",
+            handlers::segments::set_name,
+            in_context!(segment_ctx),
+        ),
+        Command::Segment.op_in_context(
+            "description",
+            "value",
+            handlers::segments::set_description,
+            in_context!(segment_ctx),
+        ),
+        // Context-gated hint must come before the unconditional one below - see the
+        // Feature block above for why.
+        Command::Segment.args_in_context(
+            "add · delete · description · list · name · show · use",
+            in_context!(segment_ctx),
+        ),
+        Command::Segment.args("add · delete · list · show · use"),
         // Groups (only in segment context)
         Command::Group.op_in_context(
             "add",
@@ -305,9 +323,9 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Group.op_in_context(
-            "describe",
+            "show",
             "label",
-            handlers::groups::describe,
+            handlers::groups::show,
             in_context!(segment_ctx),
         ),
         Command::Group.op_in_context(
@@ -316,7 +334,7 @@ fn main() -> anyhow::Result<()> {
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
-        Command::Group.args_in_context("add · describe · delete", in_context!(segment_ctx)),
+        Command::Group.args_in_context("add · delete · show", in_context!(segment_ctx)),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
@@ -325,9 +343,9 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
-            "describe",
+            "show",
             "group-label rule-index",
-            handlers::rules::describe,
+            handlers::rules::show,
             in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
@@ -349,7 +367,7 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Rule.args_in_context(
-            "add · describe · delete · value · comparator",
+            "add · delete · show · value · comparator",
             in_context!(segment_ctx),
         ),
         // Commit / discard (available when any context has pending changes)

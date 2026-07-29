@@ -1,18 +1,26 @@
 //! REPL command handlers for environment management.
 //!
-//! Each public function corresponds to an `ENV <op>` command:
+//! Each public function corresponds to an `ENVIRONMENT <op>` command:
 //!
-//! | Command       | Handler    | Description                              |
-//! |---------------|------------|------------------------------------------|
-//! | `ENV add`     | [`add`]    | Create a new environment in the project. |
-//! | `ENV list`    | [`list`]   | Print all environments in the project.   |
-//! | `ENV use`     | [`r#use`]  | Switch the active environment.           |
+//! | Command                  | Handler            | Description                                |
+//! |--------------------------|--------------------|--------------------------------------------|
+//! | `ENVIRONMENT add`        | [`add`]            | Create a new environment in the project.   |
+//! | `ENVIRONMENT list`       | [`list`]           | Print all environments in the project.     |
+//! | `ENVIRONMENT show`       | [`show`]           | Print details of an environment.           |
+//! | `ENVIRONMENT description`| [`set_description`]| Update an environment's description.       |
+//! | `ENVIRONMENT use`        | [`r#use`]          | Switch the active environment.             |
+//!
+//! Unlike `FEATURE`/`SEGMENT`, environment mutations apply immediately - there is no
+//! patch/`COMMIT`/`DISCARD` staging concept for environments.
 
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{Environment, payload::NewEnvironmentPayload};
+use flagrant_types::{
+    Environment,
+    payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
+};
 
 use crate::printer::tabular::Tabular;
 
@@ -48,6 +56,46 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .get::<Vec<Environment>>(res.subpath("/envs"))?
             .as_ref(),
     );
+    Ok(())
+}
+
+/// Print details of an environment by name, or the current environment.
+///
+/// Expected args: `[name]`
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    if let Some(name) = args.get(1)
+        && name.as_ref() != ctx.environment.name
+    {
+        let res = ctx.project.as_base_resource();
+        let env = ctx
+            .client
+            .get::<Environment>(res.subpath(format!("/envs/{name}")))?;
+        env.describe(None, &());
+        return Ok(());
+    }
+    ctx.environment.describe(None, &());
+    Ok(())
+}
+
+/// Update the current environment's description immediately (no staging/`COMMIT`).
+///
+/// Expected args: `[description]` (omit to clear)
+pub fn set_description(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let desc = args.get(1).map(|a| a.to_string());
+    let mut ctx = session.context.write().unwrap();
+    let res = ctx.project.as_base_resource();
+    let env_id = ctx.environment.id;
+
+    ctx.client.put(
+        res.subpath(format!("/envs/{env_id}")),
+        UpdateEnvironmentPayload {
+            description: desc.clone(),
+        },
+    )?;
+
+    ctx.environment.description = desc;
+    ctx.environment.describe(None, &());
     Ok(())
 }
 

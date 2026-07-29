@@ -4,7 +4,7 @@
 //! |--------------------------------------|--------------|----------------------------------------------------|
 //! | `RULE add <label> <driver> <cmp> <v>`| [`add`]      | Stage a new rule on a group in the current segment.|
 //! | `RULE delete <label> <index>`        | [`delete`]   | Stage a rule deletion by 1-based index.            |
-//! | `RULE describe <label> <index>`      | [`describe`] | Print details of a single rule within a group.     |
+//! | `RULE show <label> <index>`          | [`show`]     | Print details of a single rule within a group.     |
 //! | `RULE value <label> <index> [v]`     | [`value`]    | Stage a value change for an existing rule.         |
 //! | `RULE comparator <label> <index> [c]`| [`comparator`] | Stage a comparator change for an existing rule.  |
 
@@ -25,7 +25,7 @@ use crate::{
 /// Print details of a single rule within a group, overlaying any staged changes.
 ///
 /// Expected args: `<group-label> <rule-index>`
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let label = args
         .get(1)
         .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;

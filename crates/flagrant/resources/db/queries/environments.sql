@@ -26,3 +26,7 @@ WHERE project_id = $1 AND name = $2
 SELECT environment_id, project_id, name, description
 FROM environments
 WHERE project_id = $1 AND name LIKE $2
+
+-- :name update_environment :<> :!
+-- :doc Updates an environment's description
+UPDATE environments SET description = $2 WHERE environment_id = $1

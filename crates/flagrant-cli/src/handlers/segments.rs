@@ -4,11 +4,11 @@
 //! |---------------------------|--------------------|-----------------------------------------------------------------------------|
 //! | `SEGMENT add`             | [`add`]            | Create a new segment and enter its context.                                 |
 //! | `SEGMENT list`            | [`list`]           | List all segments in the current project.                                   |
-//! | `SEGMENT describe`        | [`describe`]       | Print details of a segment.                                                 |
+//! | `SEGMENT show`            | [`show`]           | Print details of a segment.                                                 |
 //! | `SEGMENT delete`          | [`delete`]         | Delete a segment by name.                                                   |
 //! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                                              |
-//! | `SET name`                | [`set_name`]       | Stage a segment name change.                                                |
-//! | `SET description`         | [`set_description`]| Stage a segment description change.                                         |
+//! | `SEGMENT name`            | [`set_name`]       | Stage a segment name change.                                                |
+//! | `SEGMENT description`     | [`set_description`]| Stage a segment description change.                                         |
 //! | `SET override`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
 //! | `UNSET override`          | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
 //! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.                                     |
@@ -42,7 +42,7 @@ fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Se
 }
 
 /// Resolves a staged `SetFeatureOverride`'s weights into fully-detailed `OverriddenVariant`s
-/// (with values and the control variant's auto-balanced remainder), so `SEGMENT describe`
+/// (with values and the control variant's auto-balanced remainder), so `SEGMENT show`
 /// can preview the pending state instead of the stale committed weights it's replacing.
 fn resolve_staged_weights(
     feature: &Feature,
@@ -138,10 +138,10 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Describe a segment by name, or the current segment context.
+/// Show a segment by name, or the current segment context.
 ///
 /// Expected args: `[name]`
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let segment = fetch_segment(name, session)?;
         let overrides = fetch_overridden_features(segment.id, session);
@@ -233,7 +233,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 pub fn set_name(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let name = args
         .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Usage: SET name <name>"))?;
+        .ok_or_else(|| anyhow::anyhow!("Usage: SEGMENT name <name>"))?;
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
@@ -322,7 +322,7 @@ fn current_weights_for<'a>(
 /// Updates a single variant's staged weight without touching others.
 ///
 /// Either way, every non-control variant ends up with an explicit entry (0 for any not
-/// touched) - so `FEATURE describe`'s OVERRIDES row always shows the full picture, since
+/// touched) - so `FEATURE show`'s OVERRIDES row always shows the full picture, since
 /// only variants with a stored weight row are displayed.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Collect everything we need under the read lock, then release before writing.
@@ -357,7 +357,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 
             // Every non-control variant gets an explicit entry (0 if not already weighted),
             // then the targeted one is updated - so untouched variants still show up in
-            // FEATURE describe's OVERRIDES row instead of being silently absent.
+            // FEATURE show's OVERRIDES row instead of being silently absent.
             let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
             let mut weights: Vec<SegmentVariantWeight> = variants
                 .iter()
@@ -628,9 +628,9 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section
     // just changed even though the feature itself has no pending patch of its own -
-    // show it too, so the user doesn't have to run `FEATURE describe` separately.
+    // show it too, so the user doesn't have to run `FEATURE show` separately.
     for feature_id in overridden_feature_ids {
-        features::describe_by_id(feature_id, session)?;
+        features::show_by_id(feature_id, session)?;
     }
 
     Ok(())

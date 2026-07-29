@@ -3,7 +3,10 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, project};
-use flagrant_types::{Environment, payload::NewEnvironmentPayload};
+use flagrant_types::{
+    Environment,
+    payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
+};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -92,6 +95,36 @@ pub async fn fetch_by_id_or_name(
         }
     };
     Ok(Json(env))
+}
+
+/// Updates an environment's description.
+#[utoipa::path(
+    put,
+    path = "/projects/{project}/envs/{env_id}",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("env_id" = String, Path, description = "Environment ID or name")
+    ),
+    request_body = UpdateEnvironmentPayload,
+    responses(
+        (status = 200, description = "Environment updated")
+    ),
+    tag = "environments"
+)]
+pub async fn update(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_id)): Path<(String, EnvironmentId)>,
+    Json(payload): Json<UpdateEnvironmentPayload>,
+) -> Result<Json<()>, ServiceError> {
+    let env = match env_id {
+        EnvironmentId::Id(id) => environment::get_by_id(&mut conn, id).await?,
+        EnvironmentId::Name(name) => {
+            let project = project::get_by_name(&mut conn, project_name).await?;
+            environment::get_by_name(&mut conn, &project, name).await?
+        }
+    };
+    environment::update(&mut conn, &env, payload.description.as_deref()).await?;
+    Ok(Json(()))
 }
 
 /// Lists environments with optional filtering.

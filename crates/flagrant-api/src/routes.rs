@@ -16,6 +16,7 @@ pub fn init_router() -> Router<Pool<Sqlite>> {
         .route("/envs", get(environments::list))
         .route("/envs", post(environments::create))
         .route("/envs/:env_id", get(environments::fetch_by_id_or_name))
+        .route("/envs/:env_id", put(environments::update))
         // Tags
         .route("/envs/:environment/tags", get(tags::list))
         // Features

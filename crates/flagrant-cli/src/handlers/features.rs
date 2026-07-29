@@ -8,10 +8,10 @@
 //! | `FEATURE list`       | [`list`]               | List features in the current environment.           |
 //! | `FEATURE add`        | [`add`]                | Create a new feature with a default value.          |
 //! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                      |
-//! | `FEATURE describe`   | [`describe`]           | Print details of a feature.                         |
+//! | `FEATURE show`       | [`show`]               | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
+//! | `FEATURE description`| [`set_description`]    | Stage a feature description.                        |
 //! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `SET description`    | [`set_description`]    | Stage a feature description.                        |
 //! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
 //! | `UNSET tags`         | [`unset_tags`]         | Stage removing tags from a feature.                 |
@@ -145,7 +145,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// (no argument, or naming the feature already in context) describes the feature in the
 /// current context, overlaying any pending staged changes - since pending state (feature
 /// patch, identity override, segment override) only exists for the in-context feature.
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let in_context = match args.get(1) {
         Some(name) => ctx
@@ -367,8 +367,8 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
 
     // If a segment override for this same feature is about to be committed too (as part of
-    // the same top-level COMMIT), skip printing here - `segments::describe_by_id` will show
-    // the feature afterward with the up-to-date overrides, so we don't print it twice.
+    // the same top-level COMMIT), skip printing here - `show_by_id` will show the feature
+    // afterward with the up-to-date overrides, so we don't print it twice.
     let defer_to_segment_commit = ctx.segment_patch.as_ref().is_some_and(|p| {
         p.ops.iter().any(|op| {
             matches!(op,
@@ -413,7 +413,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// itself has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
 /// section just changed and is worth showing. Refreshes the current feature context too,
 /// if it still refers to this feature.
-pub(crate) fn describe_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
+pub(crate) fn show_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
     let updated = fetch_feature(&feature_id.to_string(), session)?;
     let overrides = fetch_overrides(updated.id, session);
     updated.describe(None, &OverridesContext::committed_only(overrides));

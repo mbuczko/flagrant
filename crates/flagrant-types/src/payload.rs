@@ -54,6 +54,11 @@ pub struct NewEnvironmentPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UpdateEnvironmentPayload {
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewFeaturePayload {
     pub name: String,
     pub value: FeatureValue,

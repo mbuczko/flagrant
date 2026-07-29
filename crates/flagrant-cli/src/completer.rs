@@ -41,7 +41,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .into_iter()
                         .map(|t| format!("{}:", t.name))
                         .collect::<Vec<_>>(),
-                    "delete" | "describe" | "use" if arg_n == 2 => ctx
+                    "delete" | "show" | "use" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<IdentityWithTraits>>(
                             env_res.subpath(format!("/identities?prefix={prefix}")),
@@ -168,7 +168,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         }
                     }
                     // Auto-complete feature name
-                    "delete" | "describe" if arg_n == 2 => ctx
+                    "delete" | "show" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
                         .into_iter()
@@ -216,7 +216,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 Ok(match op {
                     // Since group labels are auto-generated, let's simplify the autocompletion
                     // and reduce it to "group-" only.
-                    "add" | "describe" | "delete" | "value" | "comparator" if arg_n == 2 => {
+                    "add" | "show" | "delete" | "value" | "comparator" if arg_n == 2 => {
                         filter_by_prefix(&["group-"], prefix)
                     }
                     "add" if arg_n == 3 => {
@@ -267,7 +267,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 Ok(match op {
                     "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
-                    "describe" | "delete" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
+                    "show" | "delete" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
                     _ => vec![],
                 })
             }
@@ -277,7 +277,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    "use" | "describe" | "delete" if arg_n == 2 => ctx
+                    "use" | "show" | "delete" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Segment>>(res.subpath(format!("/segments?prefix={prefix}")))?
                         .into_iter()

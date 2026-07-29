@@ -4,7 +4,7 @@
 //! |--------------------------------|-----------------|-----------------------------------------------------|
 //! | `IDENTITY add`                 | [`add`]         | Create or upsert an identity with optional traits.  |
 //! | `IDENTITY list`                | [`list`]        | List up to 10 identities, optionally filtered.      |
-//! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
+//! | `IDENTITY show`                | [`show`]        | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
 //! | `SET trait <name=value ...>`   | [`set_trait`]   | Stage one or more trait value changes.              |
@@ -42,7 +42,7 @@ use crate::{
 ///
 /// If an identity argument is provided, fetches and describes that identity.
 /// Otherwise describes the identity in the current context.
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     if let Some(identity_str) = args.get(1) {
         let identity = resolve_identity(&ctx, identity_str)?;
@@ -391,9 +391,9 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     // The feature's OVERRIDES section just changed even though the feature itself may have
     // no pending patch of its own (or had one that was already committed and printed before
     // this override existed) - show it again, so the user doesn't have to run `FEATURE
-    // describe` separately.
+    // show` separately.
     if let Some(feature_id) = touched_feature {
-        features::describe_by_id(feature_id, session)?;
+        features::show_by_id(feature_id, session)?;
     }
 
     Ok(())
