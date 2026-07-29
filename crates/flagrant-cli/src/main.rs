@@ -151,14 +151,14 @@ fn main() -> anyhow::Result<()> {
         Command::Feature.op("list", "status|tag|[pattern]", handlers::features::list),
         Command::Feature.op("add", "feature value", handlers::features::add),
         Command::Feature.op("show", "feature", handlers::features::show),
-        Command::Feature.op("delete", "feature", handlers::features::delete),
-        Command::Feature.op("use", "feature", handlers::features::r#use),
         Command::Feature.op_in_context(
             "describe",
             "[description]",
             handlers::features::describe,
             in_context!(feature_ctx),
         ),
+        Command::Feature.op("delete", "feature", handlers::features::delete),
+        Command::Feature.op("use", "feature", handlers::features::r#use),
         // Context-gated hint must come before the unconditional one below - `find()` takes
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
@@ -204,6 +204,102 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Variant.args_in_context("add · delete · weight · value", in_context!(feature_ctx)),
+        // Segments
+        Command::Segment.op("add", "name [description]", handlers::segments::add),
+        Command::Segment.op("list", "[pattern]", handlers::segments::list),
+        Command::Segment.op("show", "[name]", handlers::segments::show),
+        Command::Segment.op_in_context(
+            "describe",
+            "[description]",
+            handlers::segments::describe,
+            in_context!(segment_ctx),
+        ),
+        Command::Segment.op("delete", "name", handlers::segments::delete),
+        Command::Segment.op("use", "name", handlers::segments::r#use),
+        Command::Segment.op_in_context(
+            "rename",
+            "[name]",
+            handlers::segments::rename,
+            in_context!(segment_ctx),
+        ),
+        // Context-gated hint must come before the unconditional one below - see the
+        // Feature block above for why.
+        Command::Segment.args_in_context(
+            "add · delete · describe · list · rename · show · use",
+            in_context!(segment_ctx),
+        ),
+        Command::Segment.args("add · delete · list · show · use"),
+        // Groups (only in segment context)
+        Command::Group.op_in_context(
+            "add",
+            "[--and|--and-not] [description]",
+            handlers::groups::add,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.op_in_context(
+            "show",
+            "label",
+            handlers::groups::show,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.op_in_context(
+            "delete",
+            "label",
+            handlers::groups::delete,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.args_in_context("add · delete · show", in_context!(segment_ctx)),
+        // Rules (only in segment context)
+        Command::Rule.op_in_context(
+            "add",
+            "group-label <identity|trait|environment> comparator value",
+            handlers::rules::add,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.op_in_context(
+            "show",
+            "group-label rule-index",
+            handlers::rules::show,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.op_in_context(
+            "delete",
+            "group-label rule-index",
+            handlers::rules::delete,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.op_in_context(
+            "value",
+            "group-label rule-index [value]",
+            handlers::rules::value,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.op_in_context(
+            "comparator",
+            "group-label rule-index [comparator]",
+            handlers::rules::comparator,
+            in_context!(segment_ctx),
+        ),
+        Command::Rule.args_in_context(
+            "add · delete · show · value · comparator",
+            in_context!(segment_ctx),
+        ),
+        // Commit / discard (available when any context has pending changes)
+        Command::Commit.no_op_in_context(
+            "→ commit staged changes",
+            handlers::commit,
+            in_context!(pending_ctx),
+        ),
+        Command::Discard.no_op_in_context(
+            "→ discard staged changes",
+            handlers::discard,
+            in_context!(pending_ctx),
+        ),
+        Command::Reset.no_op_in_context(
+            "→ reset feature and identity context",
+            handlers::reset,
+            in_context!(any_ctx),
+        ),
         // Feature setters (only in feature context)
         Command::Set.op_in_context(
             "status",
@@ -290,102 +386,6 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Unset.args_in_context("trait", in_context!(identity_ctx)),
         Command::Unset.args_in_context("distribution · tags", in_context!(feature_ctx)),
-        // Segments
-        Command::Segment.op("add", "name [description]", handlers::segments::add),
-        Command::Segment.op("list", "[pattern]", handlers::segments::list),
-        Command::Segment.op("show", "[name]", handlers::segments::show),
-        Command::Segment.op("delete", "name", handlers::segments::delete),
-        Command::Segment.op("use", "name", handlers::segments::r#use),
-        Command::Segment.op_in_context(
-            "rename",
-            "[name]",
-            handlers::segments::rename,
-            in_context!(segment_ctx),
-        ),
-        Command::Segment.op_in_context(
-            "describe",
-            "[description]",
-            handlers::segments::describe,
-            in_context!(segment_ctx),
-        ),
-        // Context-gated hint must come before the unconditional one below - see the
-        // Feature block above for why.
-        Command::Segment.args_in_context(
-            "add · delete · describe · list · rename · show · use",
-            in_context!(segment_ctx),
-        ),
-        Command::Segment.args("add · delete · list · show · use"),
-        // Groups (only in segment context)
-        Command::Group.op_in_context(
-            "add",
-            "[--and|--and-not] [description]",
-            handlers::groups::add,
-            in_context!(segment_ctx),
-        ),
-        Command::Group.op_in_context(
-            "show",
-            "label",
-            handlers::groups::show,
-            in_context!(segment_ctx),
-        ),
-        Command::Group.op_in_context(
-            "delete",
-            "label",
-            handlers::groups::delete,
-            in_context!(segment_ctx),
-        ),
-        Command::Group.args_in_context("add · delete · show", in_context!(segment_ctx)),
-        // Rules (only in segment context)
-        Command::Rule.op_in_context(
-            "add",
-            "group-label <identity|trait|environment> comparator value",
-            handlers::rules::add,
-            in_context!(segment_ctx),
-        ),
-        Command::Rule.op_in_context(
-            "show",
-            "group-label rule-index",
-            handlers::rules::show,
-            in_context!(segment_ctx),
-        ),
-        Command::Rule.op_in_context(
-            "delete",
-            "group-label rule-index",
-            handlers::rules::delete,
-            in_context!(segment_ctx),
-        ),
-        Command::Rule.op_in_context(
-            "value",
-            "group-label rule-index [value]",
-            handlers::rules::value,
-            in_context!(segment_ctx),
-        ),
-        Command::Rule.op_in_context(
-            "comparator",
-            "group-label rule-index [comparator]",
-            handlers::rules::comparator,
-            in_context!(segment_ctx),
-        ),
-        Command::Rule.args_in_context(
-            "add · delete · show · value · comparator",
-            in_context!(segment_ctx),
-        ),
-        // Commit / discard (available when any context has pending changes)
-        Command::Commit.no_op_in_context(
-            "→ commit staged changes",
-            handlers::commit,
-            in_context!(pending_ctx),
-        ),
-        Command::Discard.no_op_in_context(
-            "→ discard staged changes",
-            handlers::discard,
-            in_context!(pending_ctx),
-        ),
-        Command::Reset.no_op_in_context(
-            "→ reset feature and identity context",
-            handlers::reset,
-            in_context!(any_ctx),
-        ),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
