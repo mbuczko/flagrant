@@ -101,19 +101,36 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage a feature description change.
 ///
-/// Expected args: `[description]` (omit to clear)
+/// Expected args: `[description]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the feature's current (or already-staged)
+/// description so it can be edited interactively; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let desc = args.get(1).map(|a| a.to_string()).unwrap_or_default();
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
-    ctx.get_or_init_pending().description = Some(desc.clone());
+
+    let desc = match args.get(1) {
+        Some(d) => d.to_string(),
+        None => {
+            let current: &str = ctx
+                .feature_patch
+                .as_ref()
+                .and_then(|p| p.description.as_deref())
+                .unwrap_or_else(|| ctx.feature.as_ref().unwrap().description.as_str());
+
+            open_in_editor(current)?
+        }
+    };
+
     println!(
         "Staged: description = {}",
         if desc.is_empty() { "(cleared)" } else { &desc }
     );
+
+    ctx.get_or_init_pending().description = Some(desc);
     Ok(())
 }
 

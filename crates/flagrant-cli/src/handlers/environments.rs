@@ -22,7 +22,7 @@ use flagrant_types::{
     payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
 };
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::open_in_editor, printer::tabular::Tabular};
 
 /// Create a new environment in the current project.
 ///
@@ -80,10 +80,21 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Update the current environment's description immediately (no staging/`COMMIT`).
 ///
-/// Expected args: `[description]` (omit to clear)
+/// Expected args: `[description]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the environment's current description so
+/// it can be edited interactively; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let desc = args.get(1).map(|a| a.to_string());
     let mut ctx = session.context.write().unwrap();
+    let desc = match args.get(1) {
+        Some(d) => Some(d.to_string()),
+        None => {
+            let current = ctx.environment.description.as_deref().unwrap_or_default();
+            let edited = open_in_editor(current)?;
+            (!edited.is_empty()).then_some(edited)
+        }
+    };
+
     let res = ctx.project.as_base_resource();
     let env_id = ctx.environment.id;
 

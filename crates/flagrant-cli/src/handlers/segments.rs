@@ -229,16 +229,41 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
 /// Stage a segment name change.
 ///
-/// Expected args: `<name>`
+/// Expected args: `[name]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
+/// name so it can be edited interactively. Unlike the description, the name can't be
+/// cleared - an empty result is rejected.
 pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let name = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Usage: SEGMENT rename <name>"))?;
     let mut ctx = session.context.write().unwrap();
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
     }
-    let op = SegmentPatchOp::SetName(name.to_string());
+
+    let name = match args.get(1) {
+        Some(n) => n.to_string(),
+        None => {
+            let current: &str = ctx
+                .segment_patch
+                .as_ref()
+                .and_then(|p| {
+                    p.ops.iter().find_map(|op| match op {
+                        SegmentPatchOp::SetName(n) => Some(n.as_str()),
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| ctx.segment.as_ref().unwrap().name.as_str());
+
+            open_in_editor(current)?
+        }
+    };
+    if name.is_empty() {
+        bail!("No name provided.");
+    }
+
+    println!("Staged: name = {name}");
+
+    let op = SegmentPatchOp::SetName(name);
     let patch = ctx.get_or_init_segment_patch();
     if let Some(existing) = patch
         .ops
@@ -249,20 +274,47 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     } else {
         patch.ops.push(op);
     }
-    println!("Staged: name = {name}");
     Ok(())
 }
 
 /// Stage a segment description change.
 ///
-/// Expected args: `[description]` (omit to clear)
+/// Expected args: `[description]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
+/// description so it can be edited interactively; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let desc = args.get(1).map(|a| a.to_string());
     let mut ctx = session.context.write().unwrap();
+
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
     }
-    let op = SegmentPatchOp::SetDescription(desc.clone());
+
+    let desc = match args.get(1) {
+        Some(d) => Some(d.to_string()),
+        None => {
+            let current: Option<&str> = ctx
+                .segment_patch
+                .as_ref()
+                .and_then(|p| {
+                    p.ops.iter().find_map(|op| match op {
+                        SegmentPatchOp::SetDescription(d) => Some(d.as_deref()),
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| ctx.segment.as_ref().unwrap().description.as_deref());
+
+            let edited = open_in_editor(current.unwrap_or(""))?;
+            (!edited.is_empty()).then_some(edited)
+        }
+    };
+
+    println!(
+        "Staged: description = {}",
+        desc.as_deref().unwrap_or_default()
+    );
+
+    let op = SegmentPatchOp::SetDescription(desc);
     let patch = ctx.get_or_init_segment_patch();
     if let Some(existing) = patch
         .ops
@@ -273,10 +325,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     } else {
         patch.ops.push(op);
     }
-    println!(
-        "Staged: description = {}",
-        desc.as_deref().unwrap_or("(cleared)")
-    );
     Ok(())
 }
 

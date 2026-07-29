@@ -298,13 +298,13 @@ fn main() -> anyhow::Result<()> {
         Command::Segment.op("use", "name", handlers::segments::r#use),
         Command::Segment.op_in_context(
             "rename",
-            "value",
+            "[name]",
             handlers::segments::rename,
             in_context!(segment_ctx),
         ),
         Command::Segment.op_in_context(
             "describe",
-            "value",
+            "[description]",
             handlers::segments::describe,
             in_context!(segment_ctx),
         ),

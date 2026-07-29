@@ -30,7 +30,9 @@ use flagrant_types::{
 use crate::{
     handlers::{
         features,
-        internal::{concat_values_for_arg, effectives as effective, extract_single_value, index, stage},
+        internal::{
+            concat_values_for_arg, effectives as effective, extract_single_value, index, stage,
+        },
         open_in_editor,
     },
     printer::tabular::Tabular,
@@ -292,19 +294,23 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         Some(v) => v,
         None => {
             // No matching variant - stage a new one with 0% weight.
-            let mut ctx = session.context.write().unwrap();
-            ctx.get_or_init_pending()
-                .variants
-                .push(VariantPatchOp::Add {
-                    value: parsed.clone(),
-                    weight: 0,
-                });
-            index::rebuild(&mut ctx);
             println!(
                 "No variant with value '{}' found. Staged new variant with 0% weight (run DISCARD to undo).",
                 parsed
             );
-            parsed.to_string()
+
+            let value_str = parsed.to_string();
+            let mut ctx = session.context.write().unwrap();
+
+            ctx.get_or_init_pending()
+                .variants
+                .push(VariantPatchOp::Add {
+                    value: parsed,
+                    weight: 0,
+                });
+
+            index::rebuild(&mut ctx);
+            value_str
         }
     };
 
@@ -438,7 +444,6 @@ fn resolve_identity(
             .subpath(format!("/identities/{identity_str}")),
     )
 }
-
 
 fn build_override_editor_content(
     feature: &Feature,
