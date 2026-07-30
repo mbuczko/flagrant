@@ -82,18 +82,6 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    "status" => filter_by_prefix(&["on", "off", "archived"], prefix),
-                    "tags" if arg_n >= 2 => {
-                        let ctx = self.session.context.read().unwrap();
-                        let res = ctx.env_resource();
-                        let clean_prefix = prefix.trim_start_matches(',').trim();
-
-                        ctx.client
-                            .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={clean_prefix}")))?
-                            .into_iter()
-                            .map(|t| t.name)
-                            .collect::<Vec<_>>()
-                    }
                     "trait" if arg_n >= 2 && !prefix.contains('=') => {
                         let ctx = self.session.context.read().unwrap();
                         let res = ctx.project.as_base_resource();
@@ -174,6 +162,30 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .into_iter()
                         .map(|c| c.name)
                         .collect::<Vec<_>>(),
+
+                    "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
+                    "tags" if arg_n >= 2 => {
+                        let (lhs, modifier, val) = strip_tag(prefix);
+
+                        ctx.client
+                            .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={val}")))?
+                            .into_iter()
+                            .map(|t| {
+                                let mut suggestion =
+                                    String::with_capacity(lhs.len() + t.name.len() + 2);
+
+                                suggestion.push_str(lhs);
+                                if !lhs.is_empty() {
+                                    suggestion.push(',');
+                                }
+                                if let Some(m) = modifier {
+                                    suggestion.push(m);
+                                }
+                                suggestion.push_str(&t.name);
+                                suggestion
+                            })
+                            .collect::<Vec<_>>()
+                    }
 
                     // Auto-complete feature attribute names like tags or status,
                     // along with the attribute value (if completable)

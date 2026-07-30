@@ -157,13 +157,25 @@ fn main() -> anyhow::Result<()> {
             handlers::features::describe,
             in_context!(feature_ctx),
         ),
+        Command::Feature.op_in_context(
+            "status",
+            "on|off|archived",
+            handlers::features::status,
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.op_in_context(
+            "tag",
+            "tag1[, tag2, ...]",
+            handlers::features::tag,
+            in_context!(feature_ctx),
+        ),
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
         // Context-gated hint must come before the unconditional one below - `find()` takes
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · show · use",
+            "add · delete · describe · list · show · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),
@@ -300,19 +312,6 @@ fn main() -> anyhow::Result<()> {
             handlers::reset,
             in_context!(any_ctx),
         ),
-        // Feature setters (only in feature context)
-        Command::Set.op_in_context(
-            "status",
-            "on|off|archived",
-            handlers::features::set_status,
-            in_context!(feature_ctx),
-        ),
-        Command::Set.op_in_context(
-            "tags",
-            "tag1[, tag2, ...]",
-            handlers::features::set_tags,
-            in_context!(feature_ctx),
-        ),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "trait",
@@ -333,27 +332,14 @@ fn main() -> anyhow::Result<()> {
             handlers::segments::set_override,
             in_context!(feature_ctx, segment_ctx),
         ),
-        Command::Set.args_in_context(
-            "status · tags · override",
-            in_context!(feature_ctx, segment_ctx),
-        ),
-        Command::Set.args_in_context(
-            "status · tags · trait · override",
-            in_context!(feature_ctx, identity_ctx),
-        ),
-        Command::Set.args_in_context("status · tags", in_context!(feature_ctx)),
+        Command::Set.args_in_context("override", in_context!(feature_ctx, segment_ctx)),
+        Command::Set.args_in_context("trait · override", in_context!(feature_ctx, identity_ctx)),
         Command::Set.args_in_context("trait", in_context!(identity_ctx)),
         // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
             "pattern",
             handlers::features::unset_distribution,
-            in_context!(feature_ctx),
-        ),
-        Command::Unset.op_in_context(
-            "tags",
-            "tag1[, tag2, ...]",
-            handlers::features::unset_tags,
             in_context!(feature_ctx),
         ),
         // UNSET (only in identity context)
@@ -377,15 +363,15 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Unset.args_in_context(
-            "distribution · tags · override",
+            "distribution · override",
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Unset.args_in_context(
-            "distribution · tags · trait · override",
+            "distribution · trait · override",
             in_context!(feature_ctx, identity_ctx),
         ),
         Command::Unset.args_in_context("trait", in_context!(identity_ctx)),
-        Command::Unset.args_in_context("distribution · tags", in_context!(feature_ctx)),
+        Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),

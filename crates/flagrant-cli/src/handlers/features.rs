@@ -11,8 +11,8 @@
 //! | `FEATURE show`       | [`show`]               | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
 //! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                        |
-//! | `SET status`         | [`set_status`]         | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `SET tags`           | [`set_tags`]           | Stage adding tags to a feature.                     |
+//! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived'). |
+//! | `FEATURE tag`        | [`tag`]                | Stage adding tags to a feature.                     |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
 //! | `UNSET tags`         | [`unset_tags`]         | Stage removing tags from a feature.                 |
 //! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
@@ -265,102 +265,91 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Stage a feature state change.
 ///
 /// Expected args: `on`, `off` and `archived`
-pub fn set_status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let (enabled, archived) = args
-        .get(1)
-        .map(|arg| match arg.to_lowercase().as_str() {
-            "on" => (true, false),
-            "archived" => (false, true),
-            _ => (false, false),
-        })
-        .unwrap();
+    let (enabled, archived, label) = match args.get(1).map(|arg| arg.to_lowercase()).as_deref() {
+        Some("on") => (true, false, "ON"),
+        Some("off") => (false, false, "OFF"),
+        Some("archived") => (false, true, "ARCHIVED"),
+        _ => bail!("Expected one of: on, off, archived"),
+    };
 
-    if ctx.feature.is_some() {
-        if archived {
-            ctx.get_or_init_pending().is_archived = Some(true);
-            ctx.get_or_init_pending().is_enabled = Some(false);
-            println!("Staged: status = ARCHIVED");
-        } else if enabled {
-            ctx.get_or_init_pending().is_enabled = Some(enabled);
-            ctx.get_or_init_pending().is_archived = Some(false);
-            println!("Staged: status = {}", if enabled { "ON" } else { "OFF" });
-        }
-        return Ok(());
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
-    bail!("Not enough arguments provided")
+
+    let pending = ctx.get_or_init_pending();
+    pending.is_enabled = Some(enabled);
+    pending.is_archived = Some(archived);
+
+    println!("Staged: status = {label}");
+    Ok(())
 }
 
-/// Stage adding one or more tags to the current feature.
+/// Stage adding or removing one or more tags on the current feature.
 ///
 /// Expected args: `tag1[, tag2, ...]`
 ///
-/// Tags may be separated by commas, whitespace, or both (e.g. `SET tags beta, experimental`).
-/// Adds to the feature's existing tag set - use `UNSET tags <tag1, ...>` to remove tags.
-pub fn set_tags(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+/// Tags may be separated by commas, whitespace, or both (e.g. `FEATURE tags beta, experimental`).
+/// Prefix a tag with `-` to remove it instead of adding it (e.g. `FEATURE tags experimental, -ui`).
+pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
 
-    let tags = parse_tags(&args[1..]);
-    if tags.is_empty() {
+    let ops = parse_tag_ops(&args[1..]);
+    if ops.is_empty() {
         bail!("No tags provided.");
     }
 
-    let display = tags.join(", ");
-    let pending = ctx.get_or_init_pending();
+    let added = ops
+        .iter()
+        .filter(|(_, add)| *add)
+        .map(|(tag, _)| tag.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let removed = ops
+        .iter()
+        .filter(|(_, add)| !*add)
+        .map(|(tag, _)| tag.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
 
-    for tag in tags {
-        stage::stage_tag(pending, tag, true);
+    let pending = ctx.get_or_init_pending();
+    for (tag, add) in ops {
+        stage::stage_tag(pending, tag, add);
     }
 
-    println!("Staged: + tags {display}");
+    if !added.is_empty() {
+        println!("Staged: + tags: {added}");
+    }
+    if !removed.is_empty() {
+        println!("Staged: - tags: {removed}");
+    }
     Ok(())
 }
 
-/// Stage removing one or more tags from the current feature.
+/// Parses a list of tag ops out of REPL args, splitting on commas and/or whitespace.
 ///
-/// Expected args: `tag1[, tag2, ...]`
-///
-/// Tags may be separated by commas, whitespace, or both (e.g. `UNSET tags beta, experimental`).
-pub fn unset_tags(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-
-    if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
-    }
-
-    let tags = parse_tags(&args[1..]);
-    if tags.is_empty() {
-        bail!("No tags provided.");
-    }
-
-    let display = tags.join(", ");
-    let pending = ctx.get_or_init_pending();
-
-    for tag in tags {
-        stage::stage_tag(pending, tag, false);
-    }
-
-    println!("Staged: - tags {display}");
-    Ok(())
-}
-
-/// Parses a list of tag names out of REPL args, splitting on commas and/or whitespace.
-/// Deduplicates and sorts the result.
-fn parse_tags(args: &[Arg]) -> Vec<String> {
-    let mut tags: Vec<String> = args
+/// A tag prefixed with `-` is a removal, otherwise it's an addition. Deduplicates by
+/// tag name (keeping the first occurrence) and sorts the result by name.
+fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
+    let mut ops: Vec<(String, bool)> = args
         .iter()
         .flat_map(|a| a.split(','))
-        .map(|t| t.trim().to_string())
+        .map(|t| t.trim())
         .filter(|t| !t.is_empty())
+        .map(|t| match t.strip_prefix('-') {
+            Some(rest) => (rest.trim().to_string(), false),
+            None => (t.to_string(), true),
+        })
         .collect();
 
-    tags.sort();
-    tags.dedup();
-    tags
+    ops.sort_by(|(a, _), (b, _)| a.cmp(b));
+    ops.dedup_by(|(a, _), (b, _)| a == b);
+    ops
 }
 
 /// Commits all staged changes for the current feature to the API atomically.
