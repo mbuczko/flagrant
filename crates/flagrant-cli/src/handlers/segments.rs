@@ -377,9 +377,11 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     let feature = ctx.feature.as_ref().ok_or_else(|| {
         anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
     })?;
+
+    let environment_id = ctx.environment.id;
     let feature_id = feature.id;
     let feature_name = feature.name.clone();
-    let environment_id = ctx.environment.id;
+
     let has_idx_arg = args.get(1).is_some();
     let current_weights = current_weights_for(&ctx, feature_id, environment_id);
 
@@ -398,6 +400,17 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 bail!("Segment overrides require committed variants. Commit the variant first.");
             }
         };
+
+        if feature
+            .variants
+            .iter()
+            .any(|v| v.id == variant_id && v.is_control())
+        {
+            bail!(
+                "Index {idx} is the control variant - segment overrides only apply to \
+                 non-control variants."
+            );
+        }
 
         // Every non-control variant gets an explicit entry (0 if not already weighted),
         // then the targeted one is updated - so untouched variants still show up in
