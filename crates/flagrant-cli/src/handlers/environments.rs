@@ -64,6 +64,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// Expected args: `[name]`
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
+
     if let Some(name) = args.get(1)
         && name.as_ref() != ctx.environment.name
     {
@@ -74,6 +75,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         env.display(None, &());
         return Ok(());
     }
+
     ctx.environment.display(None, &());
     Ok(())
 }

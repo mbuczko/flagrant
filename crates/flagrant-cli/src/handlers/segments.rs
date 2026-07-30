@@ -373,90 +373,81 @@ fn current_weights_for<'a>(
 /// touched) - so `FEATURE show`'s OVERRIDES row always shows the full picture, since
 /// only variants with a stored weight row are displayed.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    // Collect everything we need under the read lock, then release before writing.
-    // Returns None for variant_weights if the editor was closed without changes.
-    let (feature_id, feature_name, environment_id, variant_weights) = {
-        let ctx = session.context.read().unwrap();
-        let feature = ctx.feature.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
-        })?;
-        let feature_id = feature.id;
-        let environment_id = ctx.environment.id;
-        let has_idx_arg = args.get(1).is_some();
-        let current_weights = current_weights_for(&ctx, feature_id, environment_id);
+    let ctx = session.context.read().unwrap();
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+    })?;
+    let feature_id = feature.id;
+    let feature_name = feature.name.clone();
+    let environment_id = ctx.environment.id;
+    let has_idx_arg = args.get(1).is_some();
+    let current_weights = current_weights_for(&ctx, feature_id, environment_id);
 
-        let variant_weights: Option<Vec<SegmentVariantWeight>> = if has_idx_arg {
-            // Inline mode: always stages the result.
-            let idx = args.get(1).unwrap().parse::<usize>()?;
-            let weight = args
-                .get(2)
-                .ok_or_else(|| anyhow::anyhow!("Usage: SET override <variant-index> <weight>"))?
-                .parse::<u8>()?;
+    let variant_weights: Option<Vec<SegmentVariantWeight>> = if has_idx_arg {
+        // Inline mode: always stages the result.
+        let idx = args.get(1).unwrap().parse::<usize>()?;
+        let weight = args
+            .get(2)
+            .ok_or_else(|| anyhow::anyhow!("Usage: SET override <variant-index> <weight>"))?
+            .parse::<u8>()?;
 
-            let variant_ref = index::resolve(idx, &ctx)?;
-            let variant_id = match variant_ref {
-                VariantRef::Committed(id) => id,
-                VariantRef::Staged(_) => {
-                    bail!(
-                        "Segment overrides require committed variants. Commit the variant first."
-                    );
-                }
-            };
-
-            // Every non-control variant gets an explicit entry (0 if not already weighted),
-            // then the targeted one is updated - so untouched variants still show up in
-            // FEATURE show's OVERRIDES row instead of being silently absent.
-            let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
-            let mut weights: Vec<SegmentVariantWeight> = variants
-                .iter()
-                .filter(|v| !v.is_control && !v.is_deleted)
-                .filter_map(|v| v.id)
-                .map(|id| SegmentVariantWeight {
-                    variant_id: id,
-                    weight: current_weights
-                        .iter()
-                        .find(|w| w.variant_id == id)
-                        .map(|w| w.weight)
-                        .unwrap_or(0),
-                })
-                .collect();
-
-            if let Some(entry) = weights.iter_mut().find(|w| w.variant_id == variant_id) {
-                entry.weight = weight;
-            } else {
-                weights.push(SegmentVariantWeight { variant_id, weight });
-            }
-            Some(weights)
-        } else {
-            // Editor mode: prefer staged weights; fall back to committed weights from API.
-            let content = build_segment_override_editor_content(
-                feature,
-                ctx.feature_patch.as_ref(),
-                &current_weights,
-            );
-            let edited = open_in_editor(&content)?;
-            let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
-            let non_control: Vec<_> = variants
-                .iter()
-                .filter(|v| !v.is_control && !v.is_deleted)
-                .collect();
-            let parsed = parse_segment_override_content(&edited, &non_control, &current_weights)?;
-
-            // Skip staging if nothing changed.
-            if weights_equal(&parsed, &current_weights) {
-                None
-            } else {
-                Some(parsed)
+        let variant_ref = index::resolve(idx, &ctx)?;
+        let variant_id = match variant_ref {
+            VariantRef::Committed(id) => id,
+            VariantRef::Staged(_) => {
+                bail!("Segment overrides require committed variants. Commit the variant first.");
             }
         };
 
-        (
-            feature_id,
-            feature.name.clone(),
-            environment_id,
-            variant_weights,
-        )
+        // Every non-control variant gets an explicit entry (0 if not already weighted),
+        // then the targeted one is updated - so untouched variants still show up in
+        // FEATURE show's OVERRIDES row instead of being silently absent.
+        let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+        let mut weights: Vec<SegmentVariantWeight> = variants
+            .iter()
+            .filter(|v| !v.is_control && !v.is_deleted)
+            .filter_map(|v| v.id)
+            .map(|id| SegmentVariantWeight {
+                variant_id: id,
+                weight: current_weights
+                    .iter()
+                    .find(|w| w.variant_id == id)
+                    .map(|w| w.weight)
+                    .unwrap_or(0),
+            })
+            .collect();
+
+        if let Some(entry) = weights.iter_mut().find(|w| w.variant_id == variant_id) {
+            entry.weight = weight;
+        } else {
+            weights.push(SegmentVariantWeight { variant_id, weight });
+        }
+        Some(weights)
+    } else {
+        // Editor mode: prefer staged weights; fall back to committed weights from API.
+        let content = build_segment_override_editor_content(
+            feature,
+            ctx.feature_patch.as_ref(),
+            &current_weights,
+        );
+        let edited = open_in_editor(&content)?;
+        let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+        let non_control: Vec<_> = variants
+            .iter()
+            .filter(|v| !v.is_control && !v.is_deleted)
+            .collect();
+        let parsed = parse_segment_override_content(&edited, &non_control, &current_weights)?;
+
+        // Skip staging if nothing changed.
+        if weights_equal(&parsed, &current_weights) {
+            None
+        } else {
+            Some(parsed)
+        }
     };
+
+    // Release the read lock before acquiring the write lock below.
+    drop(ctx);
 
     let Some(variant_weights) = variant_weights else {
         return Ok(());
@@ -465,6 +456,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     // Stage under write lock: replace any existing SetFeatureOverride or UnsetFeatureOverride for this feature.
     let mut ctx = session.context.write().unwrap();
     let patch = ctx.get_or_init_segment_patch();
+
     patch.ops.retain(|op| {
         !matches!(op,
             SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. } |
