@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use sqlx::{Decode, Encode, Sqlite, Type, encode::IsNull, sqlite::SqliteValueRef};
 use std::{fmt, str::FromStr};
+use strum_macros::{Display, EnumIter, EnumString};
 use thiserror::Error;
 use utoipa::ToSchema;
 
@@ -143,20 +144,36 @@ pub enum SegmentDriver {
     Environment,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+/// `strum(serialize = ...)` below is the single source of truth for this enum's string
+/// form - `Display`/`FromStr` (used by the `Encode`/`Decode` impls below, and by the CLI's
+/// `Comparator::iter()`-driven parsing/display) all derive from it, so DB storage, the API
+/// wire format, and the CLI always agree and a new variant can't be missed in any of them.
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Display, EnumIter, EnumString,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Comparator {
+    #[strum(serialize = "exactly_matches")]
     ExactlyMatches,
+    #[strum(serialize = "does_not_match")]
     DoesNotMatch,
+    #[strum(serialize = "contains")]
     Contains,
+    #[strum(serialize = "does_not_contain")]
     DoesNotContain,
+    #[strum(serialize = "greater_than")]
     GreaterThan,
+    #[strum(serialize = "greater_equal_than")]
     GreaterEqualThan,
+    #[strum(serialize = "lower_than")]
     LowerThan,
+    #[strum(serialize = "lower_equal_than")]
     LowerEqualThan,
     /// Value must be a JSON array string, e.g. `["a","b"]`.
+    #[strum(serialize = "in")]
     In,
     /// Value must be a JSON array string.
+    #[strum(serialize = "not_in")]
     NotIn,
 }
 
@@ -217,37 +234,14 @@ impl Encode<'_, Sqlite> for Comparator {
         &self,
         buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
     ) -> Result<IsNull, sqlx::error::BoxDynError> {
-        let s = match self {
-            Self::ExactlyMatches => "exactly_matches",
-            Self::DoesNotMatch => "does_not_match",
-            Self::Contains => "contains",
-            Self::DoesNotContain => "does_not_contain",
-            Self::GreaterThan => "greater_than",
-            Self::GreaterEqualThan => "greater_equal_than",
-            Self::LowerThan => "lower_than",
-            Self::LowerEqualThan => "lower_equal_than",
-            Self::In => "in",
-            Self::NotIn => "not_in",
-        };
-        Encode::<Sqlite>::encode(s, buf)
+        Encode::<Sqlite>::encode(self.to_string(), buf)
     }
 }
 impl<'r> Decode<'r, Sqlite> for Comparator {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
-        match s {
-            "exactly_matches" => Ok(Self::ExactlyMatches),
-            "does_not_match" => Ok(Self::DoesNotMatch),
-            "contains" => Ok(Self::Contains),
-            "does_not_contain" => Ok(Self::DoesNotContain),
-            "greater_than" => Ok(Self::GreaterThan),
-            "greater_equal_than" => Ok(Self::GreaterEqualThan),
-            "lower_than" => Ok(Self::LowerThan),
-            "lower_equal_than" => Ok(Self::LowerEqualThan),
-            "in" => Ok(Self::In),
-            "not_in" => Ok(Self::NotIn),
-            _ => Err(format!("Unknown comparator: {s}").into()),
-        }
+        s.parse()
+            .map_err(|_| format!("Unknown comparator: {s}").into())
     }
 }
 

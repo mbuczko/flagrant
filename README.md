@@ -46,7 +46,7 @@ FEATURE use <feature>
 
 The prompt then shows the active feature, and these become available:
 
-- `SET status on|off|archived`, `SET value <value>`, `SET description [description]`
+- `FEATURE status on|off|archived`, `SET value <value>`, `FEATURE describe [description]`
 - `VARIANT add <weight> <value>` - stage a new variant
 - `VARIANT value <index> <value>` / `VARIANT weight <index> [+/-]weight` - edit an existing one
 - `VARIANT delete <index>` / `VARIANT discard <index>` - remove a variant (or drop a still-staged one)
@@ -65,7 +65,7 @@ IDENTITY use <identity>
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
-- `SET trait <name=value>` / `UNSET trait <name>` - stage a trait change
+- `IDENTITY trait <name:value|-name ...>` - stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
 - `SET override [value]` / `UNSET override` - see Overrides below
 
 ### Segments

@@ -53,6 +53,10 @@ pub(crate) struct EffectiveRule {
     pub value: String,
     pub is_staged_add: bool,
     pub is_deleted: bool,
+    /// True when a staged `SetRuleValue` op changed the committed value.
+    pub value_modified: bool,
+    /// True when a staged `SetRuleComparator` op changed the committed comparator.
+    pub comparator_modified: bool,
 }
 
 pub(crate) struct EffectiveGroup {
@@ -261,6 +265,24 @@ pub(crate) fn effective_segment(
         })
         .collect();
 
+    let rule_value_overrides: HashMap<i32, &str> = ops
+        .iter()
+        .filter_map(|op| match op {
+            SegmentPatchOp::SetRuleValue { rule_id, value } => Some((*rule_id, value.as_str())),
+            _ => None,
+        })
+        .collect();
+
+    let rule_comparator_overrides: HashMap<i32, &Comparator> = ops
+        .iter()
+        .filter_map(|op| match op {
+            SegmentPatchOp::SetRuleComparator { rule_id, comparator } => {
+                Some((*rule_id, comparator))
+            }
+            _ => None,
+        })
+        .collect();
+
     let mut staged_rules_by_label: HashMap<&str, Vec<&SegmentPatchOp>> = HashMap::new();
     for op in ops {
         if let SegmentPatchOp::AddRule { group_label, .. } = op {
@@ -279,12 +301,26 @@ pub(crate) fn effective_segment(
             let mut rules: Vec<EffectiveRule> = g
                 .rules
                 .iter()
-                .map(|r| EffectiveRule {
-                    driver: r.driver.clone(),
-                    comparator: r.comparator.clone(),
-                    value: r.value.clone(),
-                    is_staged_add: false,
-                    is_deleted: !is_deleted && deleted_rule_ids.contains(&r.id),
+                .map(|r| {
+                    let rule_is_deleted = !is_deleted && deleted_rule_ids.contains(&r.id);
+                    let value_modified = !rule_is_deleted && rule_value_overrides.contains_key(&r.id);
+                    let comparator_modified =
+                        !rule_is_deleted && rule_comparator_overrides.contains_key(&r.id);
+                    EffectiveRule {
+                        driver: r.driver.clone(),
+                        comparator: rule_comparator_overrides
+                            .get(&r.id)
+                            .map(|c| (*c).clone())
+                            .unwrap_or_else(|| r.comparator.clone()),
+                        value: rule_value_overrides
+                            .get(&r.id)
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| r.value.clone()),
+                        is_staged_add: false,
+                        is_deleted: rule_is_deleted,
+                        value_modified,
+                        comparator_modified,
+                    }
                 })
                 .collect();
 
@@ -303,6 +339,8 @@ pub(crate) fn effective_segment(
                             value: value.clone(),
                             is_staged_add: true,
                             is_deleted: false,
+                            value_modified: false,
+                            comparator_modified: false,
                         });
                     }
                 }
@@ -362,6 +400,8 @@ pub(crate) fn effective_segment(
                                     value: value.clone(),
                                     is_staged_add: true,
                                     is_deleted: false,
+                                    value_modified: false,
+                                    comparator_modified: false,
                                 })
                             } else {
                                 None

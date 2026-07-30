@@ -58,11 +58,69 @@ pub async fn delete(
     Ok(())
 }
 
+/// Updates a rule's value, then reconciles already-distributed identities against the
+/// segment's updated rules (see [`add`] for why this lives at the mutation point).
+pub async fn set_value(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    rule_id: i32,
+    value: String,
+) -> anyhow::Result<()> {
+    SQLSegments::update_rule_value::<_>(&mut *conn, params![rule_id, value])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update rule value", e))?;
+
+    segment::reconcile_rules_changed(conn, segment_id).await?;
+    Ok(())
+}
+
+/// Updates a rule's comparator, then reconciles already-distributed identities against the
+/// segment's updated rules (see [`add`] for why this lives at the mutation point).
+pub async fn set_comparator(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    rule_id: i32,
+    comparator: Comparator,
+) -> anyhow::Result<()> {
+    SQLSegments::update_rule_comparator::<_>(&mut *conn, params![rule_id, comparator])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update rule comparator", e))?;
+
+    segment::reconcile_rules_changed(conn, segment_id).await?;
+    Ok(())
+}
+
 /// Removes rules from each group's in-memory list - mirrors a committed `DeleteRule` op
 /// without hitting the DB again.
 pub(crate) fn remove_from_groups(groups: &mut [SegmentGroup], rule_id: i32) {
     for g in groups {
         g.rules.retain(|r| r.id != rule_id);
+    }
+}
+
+/// Updates a rule's value in each group's in-memory list - mirrors a committed
+/// `SetRuleValue` op without hitting the DB again.
+pub(crate) fn update_value_in_groups(groups: &mut [SegmentGroup], rule_id: i32, value: String) {
+    for g in groups {
+        if let Some(r) = g.rules.iter_mut().find(|r| r.id == rule_id) {
+            r.value = value;
+            return;
+        }
+    }
+}
+
+/// Updates a rule's comparator in each group's in-memory list - mirrors a committed
+/// `SetRuleComparator` op without hitting the DB again.
+pub(crate) fn update_comparator_in_groups(
+    groups: &mut [SegmentGroup],
+    rule_id: i32,
+    comparator: Comparator,
+) {
+    for g in groups {
+        if let Some(r) = g.rules.iter_mut().find(|r| r.id == rule_id) {
+            r.comparator = comparator;
+            return;
+        }
     }
 }
 

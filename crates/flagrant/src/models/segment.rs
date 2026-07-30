@@ -358,6 +358,17 @@ pub async fn patch(
                 rule::delete(conn, segment.id, rule_id).await?;
                 rule::remove_from_groups(&mut segment.groups, rule_id);
             }
+            SegmentPatchOp::SetRuleValue { rule_id, value } => {
+                rule::set_value(conn, segment.id, rule_id, value.clone()).await?;
+                rule::update_value_in_groups(&mut segment.groups, rule_id, value);
+            }
+            SegmentPatchOp::SetRuleComparator {
+                rule_id,
+                comparator,
+            } => {
+                rule::set_comparator(conn, segment.id, rule_id, comparator.clone()).await?;
+                rule::update_comparator_in_groups(&mut segment.groups, rule_id, comparator);
+            }
             SegmentPatchOp::SetFeatureOverride {
                 feature_id,
                 environment_id,

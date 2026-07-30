@@ -3,7 +3,7 @@
 //! | Command                          | Handler      | Description                                          |
 //! |----------------------------------|--------------|------------------------------------------------------|
 //! | `GROUP add [--and|--and-not]`    | [`add`]      | Stage a new group on the current segment.            |
-//! | `GROUP describe <label>`         | [`describe`] | Print details of a group with its rules.             |
+//! | `GROUP show <label>`             | [`show`]     | Print details of a group with its rules.             |
 //! | `GROUP delete <label>`           | [`delete`]   | Stage a group deletion by label.                     |
 
 use anyhow::bail;
@@ -62,9 +62,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// Print details of a single group, overlaying any staged changes.
 ///
 /// Expected args: `<label>`
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let label = args.get(1).ok_or_else(|| {
-        anyhow::anyhow!("No group label provided. Use: `GROUP describe <label>`.")
+        anyhow::anyhow!("No group label provided. Use: `GROUP show <label>`.")
     })?;
 
     let ctx = session.context.read().unwrap();
@@ -79,7 +79,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
 
-    group.describe(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
+    group.display(ctx.segment_patch.as_ref().filter(|p| !p.is_empty()), &());
     Ok(())
 }
 

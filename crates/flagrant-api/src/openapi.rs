@@ -9,6 +9,7 @@ use utoipa::OpenApi;
         crate::handlers::environments::list,
         crate::handlers::environments::fetch_by_id_or_name,
         crate::handlers::environments::create,
+        crate::handlers::environments::update,
         crate::handlers::features::list,
         crate::handlers::features::fetch_by_id_or_name,
         crate::handlers::features::create,
@@ -60,6 +61,7 @@ use utoipa::OpenApi;
             flagrant_types::payload::NewProjectPayload,
             flagrant_types::payload::ProjectCreatedResponse,
             flagrant_types::payload::NewEnvironmentPayload,
+            flagrant_types::payload::UpdateEnvironmentPayload,
             flagrant_types::payload::NewFeaturePayload,
             flagrant_types::payload::NewVariantPayload,
             flagrant_types::payload::FeaturePatch,
@@ -94,7 +96,7 @@ use utoipa::OpenApi;
     ),
     info(
         title = "Flagrant API",
-        version = "0.0.10",
+        version = "0.0.11",
         description = "CLI-powered feature-flagging service"
     )
 )]

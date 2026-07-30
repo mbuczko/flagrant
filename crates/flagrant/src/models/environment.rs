@@ -125,6 +125,19 @@ pub async fn get_by_name(
     Ok(env)
 }
 
+/// Updates an environment's description.
+pub async fn update(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    description: Option<&str>,
+) -> anyhow::Result<()> {
+    SQLEnvironments::update_environment::<_>(&mut *conn, params![environment.id, description])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update environment", e))?;
+
+    Ok(())
+}
+
 pub async fn list(
     conn: &mut SqliteConnection,
     project: &Project,

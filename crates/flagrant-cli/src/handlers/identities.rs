@@ -1,18 +1,17 @@
 //! REPL command handlers for identity management.
 //!
-//! | Command                        | Handler         | Description                                         |
-//! |--------------------------------|-----------------|-----------------------------------------------------|
-//! | `IDENTITY add`                 | [`add`]         | Create or upsert an identity with optional traits.  |
-//! | `IDENTITY list`                | [`list`]        | List up to 10 identities, optionally filtered.      |
-//! | `IDENTITY describe`            | [`describe`]    | Print details of an identity with its traits.       |
-//! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
-//! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
-//! | `SET trait <name=value ...>`   | [`set_trait`]   | Stage one or more trait value changes.              |
-//! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
-//! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
-//! | `UNSET override`               | [`unset_trait`] | Unpin the identitfy from pinned feature variant.    |
-//! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
-//! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
+//! | Command                          | Handler           | Description                                         |
+//! |----------------------------------|-------------------|-----------------------------------------------------|
+//! | `IDENTITY add`                   | [`add`]           | Create or upsert an identity with optional traits.  |
+//! | `IDENTITY list`                  | [`list`]          | List up to 10 identities, optionally filtered.      |
+//! | `IDENTITY show`                  | [`show`]          | Print details of an identity with its traits.       |
+//! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
+//! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
+//! | `IDENTITY trait <name:value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
+//! | `SET override [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
+//! | `UNSET override`                 | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
+//! | `COMMIT`                         | [`commit`]        | Send staged trait changes to the API.               |
+//! | `DISCARD`                        | [`discard`]       | Drop all staged trait changes.                      |
 
 use std::ops::Deref;
 
@@ -30,7 +29,9 @@ use flagrant_types::{
 use crate::{
     handlers::{
         features,
-        internal::{concat_values_for_arg, effectives as effective, index, stage},
+        internal::{
+            concat_values_for_arg, effectives as effective, extract_single_value, index, stage,
+        },
         open_in_editor,
     },
     printer::tabular::Tabular,
@@ -42,14 +43,14 @@ use crate::{
 ///
 /// If an identity argument is provided, fetches and describes that identity.
 /// Otherwise describes the identity in the current context.
-pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     if let Some(identity_str) = args.get(1) {
         let identity = resolve_identity(&ctx, identity_str)?;
-        identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+        identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     } else if let Some(identity) = &ctx.identity {
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
-        identity.describe(patch, &fetch_variant_assignments(&ctx, identity));
+        identity.display(patch, &fetch_variant_assignments(&ctx, identity));
     } else {
         bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
     }
@@ -90,7 +91,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 },
             )?
         };
-        identity.describe(None, &vec![]);
+        identity.display(None, &vec![]);
 
         let mut ctx = session.context.write().unwrap();
         ctx.identity = Some(identity);
@@ -155,8 +156,8 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `<identity>`
 ///
-/// Fetches the identity and stores it in the session so that subsequent `SET`
-/// and `UNSET` commands stage trait changes for it. Fails if there are
+/// Fetches the identity and stores it in the session so that subsequent `IDENTITY
+/// trait` and `SET`/`UNSET` commands stage changes for it. Fails if there are
 /// uncommitted staged trait changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
@@ -173,7 +174,7 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     stage::ensure_no_pending(session)?;
     let ctx = session.context.read().unwrap();
     let identity = resolve_identity(&ctx, identity_str)?;
-    identity.describe(None, &fetch_variant_assignments(&ctx, &identity));
+    identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     drop(ctx);
 
     let mut ctx = session.context.write().unwrap();
@@ -183,49 +184,61 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
-/// Stage one or more trait value changes for the current identity.
+/// Stage adding/changing or removing one or more traits on the current identity.
 ///
-/// Expected args: `trait <name=value> [name=value ...]`
+/// Expected args: `name:value [name2:value2 ...] [-name3 ...]`
 ///
-/// Each value is auto-typed (bool → i32 → f32 → str).
-pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let pairs: Vec<(&str, &str)> = args[1..]
-        .iter()
-        .filter_map(|arg| arg.split_once('='))
-        .collect();
+/// Traits are separated by whitespace, each given as `name:value`. Values are
+/// auto-typed (bool → i32 → f32 → str). Prefix a name with `-` to remove that trait
+/// instead of setting it (e.g. `IDENTITY trait country:pl -org`).
+pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if args.len() < 2 {
+        bail!("Usage: IDENTITY trait <name:value> [-name ...]");
+    }
 
-    if pairs.is_empty() {
-        bail!("Usage: SET trait <name=value> [name=value ...]");
+    let mut sets: Vec<(String, TraitValue)> = Vec::new();
+    let mut unsets: Vec<String> = Vec::new();
+
+    for arg in &args[1..] {
+        match arg.strip_prefix('-') {
+            Some(name) => {
+                let name = name.split_once(':').map_or(name, |(n, _)| n);
+                if name.is_empty() {
+                    bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset.");
+                }
+                unsets.push(name.to_string());
+            }
+            None => match arg.split_once(':') {
+                Some((name, value)) if !name.is_empty() => {
+                    sets.push((name.to_string(), TraitValue::build(value)))
+                }
+                _ => bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset."),
+            },
+        }
     }
 
     let mut ctx = session.context.write().unwrap();
-    if let Some(identity) = &ctx.identity {
-        let existing: Vec<String> = identity.traits.iter().map(|t| t.name.clone()).collect();
-        let patch = ctx.get_or_init_identity_patch();
-
-        for (name, value) in pairs {
-            let trait_exists = existing.iter().any(|n| n == name);
-            let trait_value = TraitValue::build(value);
-            stage::stage_trait(patch, trait_exists, name.to_string(), trait_value);
-        }
-        return Ok(());
+    if ctx.identity.is_none() {
+        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
     }
-    bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
-}
+    let existing: Vec<String> = ctx
+        .identity
+        .as_ref()
+        .unwrap()
+        .traits
+        .iter()
+        .map(|t| t.name.clone())
+        .collect();
 
-/// Stage a trait removal for the current identity.
-///
-/// Expected args: `trait <name>`
-pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let mut ctx = session.context.write().unwrap();
-        if ctx.identity.is_none() {
-            bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
-        }
-        stage::stage_trait_delete(ctx.get_or_init_identity_patch(), name.to_string());
-        return Ok(());
+    let patch = ctx.get_or_init_identity_patch();
+    for (name, value) in sets {
+        let trait_exists = existing.iter().any(|n| n == &name);
+        stage::stage_trait(patch, trait_exists, name, value);
     }
-    bail!("Usage: UNSET trait <name>")
+    for name in unsets {
+        stage::stage_trait_delete(patch, name);
+    }
+    Ok(())
 }
 
 /// Pins the variant to current identity for the current feature, which results in
@@ -292,19 +305,23 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         Some(v) => v,
         None => {
             // No matching variant - stage a new one with 0% weight.
-            let mut ctx = session.context.write().unwrap();
-            ctx.get_or_init_pending()
-                .variants
-                .push(VariantPatchOp::Add {
-                    value: parsed.clone(),
-                    weight: 0,
-                });
-            index::rebuild(&mut ctx);
             println!(
                 "No variant with value '{}' found. Staged new variant with 0% weight (run DISCARD to undo).",
                 parsed
             );
-            parsed.to_string()
+
+            let value_str = parsed.to_string();
+            let mut ctx = session.context.write().unwrap();
+
+            ctx.get_or_init_pending()
+                .variants
+                .push(VariantPatchOp::Add {
+                    value: parsed,
+                    weight: 0,
+                });
+
+            index::rebuild(&mut ctx);
+            value_str
         }
     };
 
@@ -383,7 +400,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .patch::<_, IdentityWithTraits>(path, patch)
         .map_err(|err| anyhow::anyhow!("Identity commit failed: {err}"))?;
 
-    updated.describe(None, &fetch_variant_assignments(&ctx, &updated));
+    updated.display(None, &fetch_variant_assignments(&ctx, &updated));
     ctx.identity_patch = None;
     ctx.identity = Some(updated);
     drop(ctx);
@@ -391,9 +408,9 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     // The feature's OVERRIDES section just changed even though the feature itself may have
     // no pending patch of its own (or had one that was already committed and printed before
     // this override existed) - show it again, so the user doesn't have to run `FEATURE
-    // describe` separately.
+    // show` separately.
     if let Some(feature_id) = touched_feature {
-        features::describe_by_id(feature_id, session)?;
+        features::show_by_id(feature_id, session)?;
     }
 
     Ok(())
@@ -437,34 +454,6 @@ fn resolve_identity(
         ctx.env_resource()
             .subpath(format!("/identities/{identity_str}")),
     )
-}
-
-/// Strips comment lines from editor content and returns the single remaining
-/// paragraph (a run of non-blank lines). Values may legitimately span several
-/// lines (e.g. pretty-printed JSON), so a paragraph - not a single line - is
-/// the unit of a value. Errors if the content yields zero or more than one
-/// paragraph, which happens e.g. when the editor is closed unedited and all
-/// listed variants remain uncommented.
-fn extract_single_value(text: &str) -> anyhow::Result<String> {
-    let stripped = text
-        .lines()
-        .filter(|line| !line.starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let paragraphs: Vec<&str> = stripped
-        .split("\n\n")
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect();
-
-    match paragraphs.as_slice() {
-        [] => bail!("No value provided."),
-        [value] => Ok(value.to_string()),
-        _ => bail!(
-            "Expected a single variant value, found {}. Leave exactly one variant's value uncommented.",
-            paragraphs.len()
-        ),
-    }
 }
 
 fn build_override_editor_content(

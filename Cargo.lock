@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "chrono",
@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-api"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "axum",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-bombardier"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "argh",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-cli"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "argh",
@@ -733,6 +733,7 @@ dependencies = [
  "reqwest",
  "rustyline",
  "serde",
+ "serde_json",
  "strum",
  "strum_macros",
  "tempfile",
@@ -740,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-client"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "flagrant-types",
@@ -750,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-repl"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "rustyline",
@@ -758,13 +759,15 @@ dependencies = [
 
 [[package]]
 name = "flagrant-types"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "chrono",
  "regex",
  "serde",
  "serde_valid",
  "sqlx",
+ "strum",
+ "strum_macros",
  "thiserror 1.0.64",
  "utoipa",
 ]

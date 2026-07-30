@@ -99,3 +99,11 @@ ORDER BY g.segment_id, g.position, r.rule_id
 -- :name delete_rule :<> :!
 -- :doc Deletes a rule by id
 DELETE FROM segment_rules WHERE rule_id = $1
+
+-- :name update_rule_value :<> :!
+-- :doc Updates a rule's value
+UPDATE segment_rules SET value = $2 WHERE rule_id = $1
+
+-- :name update_rule_comparator :<> :!
+-- :doc Updates a rule's comparator
+UPDATE segment_rules SET comparator = $2 WHERE rule_id = $1

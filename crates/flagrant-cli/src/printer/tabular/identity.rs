@@ -39,7 +39,7 @@ impl Tabular for IdentityWithTraits {
             .render(rows);
     }
 
-    fn describe(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
+    fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
         let title = format!("Identity: {} (ID={})", self.value, self.id);
         let eff_traits = effective::effective_identity_traits(self, patch);
 
@@ -54,21 +54,21 @@ impl Tabular for IdentityWithTraits {
                         .dimmed()
                         .to_string(),
                 );
-                trait_stage.push("▪ deleting".red().to_string());
+                trait_stage.push("✕ deleting".red().to_string());
             } else if t.value_modified {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .yellow()
                         .to_string(),
                 );
-                trait_stage.push("▪ updating".yellow().to_string());
+                trait_stage.push("‣ updating".yellow().to_string());
             } else if t.is_staged_add {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .green()
                         .to_string(),
                 );
-                trait_stage.push("▪ adding".green().to_string());
+                trait_stage.push("‣ adding".green().to_string());
             } else {
                 trait_lines.push(format_trait_value(&name, &t.value, true));
                 trait_stage.push(String::new());
@@ -97,7 +97,7 @@ impl Tabular for IdentityWithTraits {
             {
                 // Staged override: show the new value
                 variant_lines.push(format!("{feature} → {}", pin.variant_value.green()));
-                variant_stage.push("▪ override".yellow().to_string());
+                variant_stage.push("‣ override".yellow().to_string());
             } else if staged_unpins.contains(&iv.feature_name) {
                 // Staged unoverride
                 variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));

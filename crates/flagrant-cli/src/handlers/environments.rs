@@ -1,20 +1,28 @@
 //! REPL command handlers for environment management.
 //!
-//! Each public function corresponds to an `ENV <op>` command:
+//! Each public function corresponds to an `ENVIRONMENT <op>` command:
 //!
-//! | Command       | Handler    | Description                              |
-//! |---------------|------------|------------------------------------------|
-//! | `ENV add`     | [`add`]    | Create a new environment in the project. |
-//! | `ENV list`    | [`list`]   | Print all environments in the project.   |
-//! | `ENV use`     | [`r#use`]  | Switch the active environment.           |
+//! | Command                  | Handler            | Description                                |
+//! |--------------------------|--------------------|--------------------------------------------|
+//! | `ENVIRONMENT add`        | [`add`]            | Create a new environment in the project.   |
+//! | `ENVIRONMENT list`       | [`list`]           | Print all environments in the project.     |
+//! | `ENVIRONMENT show`       | [`show`]           | Print details of an environment.           |
+//! | `ENVIRONMENT describe`   | [`describe`]       | Update an environment's description.       |
+//! | `ENVIRONMENT use`        | [`r#use`]          | Switch the active environment.             |
+//!
+//! Unlike `FEATURE`/`SEGMENT`, environment mutations apply immediately - there is no
+//! patch/`COMMIT`/`DISCARD` staging concept for environments.
 
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{Environment, payload::NewEnvironmentPayload};
+use flagrant_types::{
+    Environment,
+    payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
+};
 
-use crate::printer::tabular::Tabular;
+use crate::{handlers::open_in_editor, printer::tabular::Tabular};
 
 /// Create a new environment in the current project.
 ///
@@ -32,7 +40,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?;
 
-        env.describe(None, &());
+        env.display(None, &());
         return Ok(());
     }
     bail!("No environment name provided.")
@@ -48,6 +56,59 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             .get::<Vec<Environment>>(res.subpath("/envs"))?
             .as_ref(),
     );
+    Ok(())
+}
+
+/// Print details of an environment by name, or the current environment.
+///
+/// Expected args: `[name]`
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+
+    if let Some(name) = args.get(1)
+        && name.as_ref() != ctx.environment.name
+    {
+        let res = ctx.project.as_base_resource();
+        let env = ctx
+            .client
+            .get::<Environment>(res.subpath(format!("/envs/{name}")))?;
+        env.display(None, &());
+        return Ok(());
+    }
+
+    ctx.environment.display(None, &());
+    Ok(())
+}
+
+/// Update the current environment's description immediately (no staging/`COMMIT`).
+///
+/// Expected args: `[description]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the environment's current description so
+/// it can be edited interactively; leaving it blank clears the description.
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let desc = match args.get(1) {
+        Some(d) => Some(d.to_string()),
+        None => {
+            let current = ctx.environment.description.as_deref().unwrap_or_default();
+            let edited = open_in_editor(current)?;
+            (!edited.is_empty()).then_some(edited)
+        }
+    };
+
+    let res = ctx.project.as_base_resource();
+    let env_id = ctx.environment.id;
+
+    ctx.client.put(
+        res.subpath(format!("/envs/{env_id}")),
+        UpdateEnvironmentPayload {
+            description: desc.clone(),
+        },
+    )?;
+
+    ctx.environment.description = desc;
+    ctx.environment.display(None, &());
     Ok(())
 }
 

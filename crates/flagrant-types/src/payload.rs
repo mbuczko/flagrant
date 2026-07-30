@@ -54,6 +54,11 @@ pub struct NewEnvironmentPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UpdateEnvironmentPayload {
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewFeaturePayload {
     pub name: String,
     pub value: FeatureValue,
@@ -186,6 +191,14 @@ pub enum SegmentPatchOp {
     },
     DeleteRule {
         rule_id: i32,
+    },
+    SetRuleValue {
+        rule_id: i32,
+        value: String,
+    },
+    SetRuleComparator {
+        rule_id: i32,
+        comparator: Comparator,
     },
     /// Stores per-environment weight overrides for a feature's variants within this segment.
     SetFeatureOverride {
