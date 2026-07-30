@@ -1,18 +1,17 @@
 //! REPL command handlers for identity management.
 //!
-//! | Command                        | Handler         | Description                                         |
-//! |--------------------------------|-----------------|-----------------------------------------------------|
-//! | `IDENTITY add`                 | [`add`]         | Create or upsert an identity with optional traits.  |
-//! | `IDENTITY list`                | [`list`]        | List up to 10 identities, optionally filtered.      |
-//! | `IDENTITY show`                | [`show`]        | Print details of an identity with its traits.       |
-//! | `IDENTITY delete`              | [`delete`]      | Delete identities matching a pattern (`*` wildcard).|
-//! | `IDENTITY use`                 | [`r#use`]       | Switch into an identity context.                    |
-//! | `SET trait <name=value ...>`   | [`set_trait`]   | Stage one or more trait value changes.              |
-//! | `SET override [value]`         | [`set_override`]| Pin the identity to a specific feature variant.     |
-//! | `UNSET trait <name>`           | [`unset_trait`] | Stage a trait removal for the current identity.     |
-//! | `UNSET override`               | [`unset_trait`] | Unpin the identitfy from pinned feature variant.    |
-//! | `COMMIT`                       | [`commit`]      | Send staged trait changes to the API.               |
-//! | `DISCARD`                      | [`discard`]     | Drop all staged trait changes.                      |
+//! | Command                          | Handler           | Description                                         |
+//! |----------------------------------|-------------------|-----------------------------------------------------|
+//! | `IDENTITY add`                   | [`add`]           | Create or upsert an identity with optional traits.  |
+//! | `IDENTITY list`                  | [`list`]          | List up to 10 identities, optionally filtered.      |
+//! | `IDENTITY show`                  | [`show`]          | Print details of an identity with its traits.       |
+//! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
+//! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
+//! | `IDENTITY trait <name:value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
+//! | `SET override [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
+//! | `UNSET override`                 | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
+//! | `COMMIT`                         | [`commit`]        | Send staged trait changes to the API.               |
+//! | `DISCARD`                        | [`discard`]       | Drop all staged trait changes.                      |
 
 use std::ops::Deref;
 
@@ -157,8 +156,8 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `<identity>`
 ///
-/// Fetches the identity and stores it in the session so that subsequent `SET`
-/// and `UNSET` commands stage trait changes for it. Fails if there are
+/// Fetches the identity and stores it in the session so that subsequent `IDENTITY
+/// trait` and `SET`/`UNSET` commands stage changes for it. Fails if there are
 /// uncommitted staged trait changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
@@ -185,49 +184,61 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
-/// Stage one or more trait value changes for the current identity.
+/// Stage adding/changing or removing one or more traits on the current identity.
 ///
-/// Expected args: `trait <name=value> [name=value ...]`
+/// Expected args: `name:value [name2:value2 ...] [-name3 ...]`
 ///
-/// Each value is auto-typed (bool → i32 → f32 → str).
-pub fn set_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let pairs: Vec<(&str, &str)> = args[1..]
-        .iter()
-        .filter_map(|arg| arg.split_once('='))
-        .collect();
+/// Traits are separated by whitespace, each given as `name:value`. Values are
+/// auto-typed (bool → i32 → f32 → str). Prefix a name with `-` to remove that trait
+/// instead of setting it (e.g. `IDENTITY trait country:pl -org`).
+pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    if args.len() < 2 {
+        bail!("Usage: IDENTITY trait <name:value> [-name ...]");
+    }
 
-    if pairs.is_empty() {
-        bail!("Usage: SET trait <name=value> [name=value ...]");
+    let mut sets: Vec<(String, TraitValue)> = Vec::new();
+    let mut unsets: Vec<String> = Vec::new();
+
+    for arg in &args[1..] {
+        match arg.strip_prefix('-') {
+            Some(name) => {
+                let name = name.split_once(':').map_or(name, |(n, _)| n);
+                if name.is_empty() {
+                    bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset.");
+                }
+                unsets.push(name.to_string());
+            }
+            None => match arg.split_once(':') {
+                Some((name, value)) if !name.is_empty() => {
+                    sets.push((name.to_string(), TraitValue::build(value)))
+                }
+                _ => bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset."),
+            },
+        }
     }
 
     let mut ctx = session.context.write().unwrap();
-    if let Some(identity) = &ctx.identity {
-        let existing: Vec<String> = identity.traits.iter().map(|t| t.name.clone()).collect();
-        let patch = ctx.get_or_init_identity_patch();
-
-        for (name, value) in pairs {
-            let trait_exists = existing.iter().any(|n| n == name);
-            let trait_value = TraitValue::build(value);
-            stage::stage_trait(patch, trait_exists, name.to_string(), trait_value);
-        }
-        return Ok(());
+    if ctx.identity.is_none() {
+        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
     }
-    bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
-}
+    let existing: Vec<String> = ctx
+        .identity
+        .as_ref()
+        .unwrap()
+        .traits
+        .iter()
+        .map(|t| t.name.clone())
+        .collect();
 
-/// Stage a trait removal for the current identity.
-///
-/// Expected args: `trait <name>`
-pub fn unset_trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let mut ctx = session.context.write().unwrap();
-        if ctx.identity.is_none() {
-            bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
-        }
-        stage::stage_trait_delete(ctx.get_or_init_identity_patch(), name.to_string());
-        return Ok(());
+    let patch = ctx.get_or_init_identity_patch();
+    for (name, value) in sets {
+        let trait_exists = existing.iter().any(|n| n == &name);
+        stage::stage_trait(patch, trait_exists, name, value);
     }
-    bail!("Usage: UNSET trait <name>")
+    for name in unsets {
+        stage::stage_trait_delete(patch, name);
+    }
+    Ok(())
 }
 
 /// Pins the variant to current identity for the current feature, which results in

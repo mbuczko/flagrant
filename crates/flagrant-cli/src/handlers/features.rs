@@ -12,9 +12,8 @@
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
 //! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                        |
 //! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `FEATURE tag`        | [`tag`]                | Stage adding tags to a feature.                     |
+//! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.            |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
-//! | `UNSET tags`         | [`unset_tags`]         | Stage removing tags from a feature.                 |
 //! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
 //! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.    |
 
@@ -288,10 +287,10 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
 /// Stage adding or removing one or more tags on the current feature.
 ///
-/// Expected args: `tag1[, tag2, ...]`
+/// Expected args: `tag1 [tag2 ...]`
 ///
-/// Tags may be separated by commas, whitespace, or both (e.g. `FEATURE tags beta, experimental`).
-/// Prefix a tag with `-` to remove it instead of adding it (e.g. `FEATURE tags experimental, -ui`).
+/// Tags are separated by whitespace. Prefix a tag with `-` to remove it instead of
+/// adding it (e.g. `FEATURE tag experimental -ui`).
 pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -331,18 +330,17 @@ pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Parses a list of tag ops out of REPL args, splitting on commas and/or whitespace.
+/// Parses a list of tag ops out of REPL args, one tag per (whitespace-separated) arg.
 ///
 /// A tag prefixed with `-` is a removal, otherwise it's an addition. Deduplicates by
 /// tag name (keeping the first occurrence) and sorts the result by name.
 fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
     let mut ops: Vec<(String, bool)> = args
         .iter()
-        .flat_map(|a| a.split(','))
-        .map(|t| t.trim())
+        .map(|a| a.trim())
         .filter(|t| !t.is_empty())
         .map(|t| match t.strip_prefix('-') {
-            Some(rest) => (rest.trim().to_string(), false),
+            Some(rest) => (rest.to_string(), false),
             None => (t.to_string(), true),
         })
         .collect();

@@ -41,6 +41,30 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .into_iter()
                         .map(|t| format!("{}:", t.name))
                         .collect::<Vec<_>>(),
+                    // Auto-complete trait names for `IDENTITY trait`. A `-` prefix means
+                    // removal, so it's carried through without appending `:` (no value needed).
+                    "trait" if arg_n >= 2 && !prefix.contains(':') => {
+                        let (modifier, val) = match prefix.strip_prefix('-') {
+                            Some(rest) => (Some('-'), rest),
+                            None => (None, prefix),
+                        };
+
+                        ctx.client
+                            .get::<Vec<Trait>>(project_res.subpath(format!("/traits?prefix={val}")))?
+                            .into_iter()
+                            .map(|t| {
+                                let mut name = String::new();
+                                if let Some(m) = modifier {
+                                    name.push(m);
+                                }
+                                name.push_str(&t.name);
+                                if modifier.is_none() {
+                                    name.push(':');
+                                }
+                                name
+                            })
+                            .collect::<Vec<_>>()
+                    }
                     "delete" | "show" | "use" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<IdentityWithTraits>>(
@@ -75,56 +99,6 @@ impl AutoCompleter for ArgCompleter<'_> {
                         None => filter_by_prefix(&["trait"], prefix),
                         _ => vec![],
                     },
-                    _ => vec![],
-                })
-            }
-            "SET" if arg_n >= 2 => {
-                let op: &str = &args[1];
-
-                Ok(match op {
-                    "trait" if arg_n >= 2 && !prefix.contains('=') => {
-                        let ctx = self.session.context.read().unwrap();
-                        let res = ctx.project.as_base_resource();
-
-                        ctx.client
-                            .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
-                            .into_iter()
-                            .map(|t| format!("{}=", t.name))
-                            .collect::<Vec<_>>()
-                    }
-                    _ => vec![],
-                })
-            }
-            "UNSET" if arg_n >= 2 => {
-                let op: &str = &args[1];
-
-                Ok(match op {
-                    "trait" if arg_n == 2 => {
-                        let ctx = self.session.context.read().unwrap();
-                        let res = ctx.project.as_base_resource();
-
-                        ctx.client
-                            .get::<Vec<Trait>>(res.subpath(format!("/traits?prefix={prefix}")))?
-                            .into_iter()
-                            .map(|t| t.name)
-                            .collect::<Vec<_>>()
-                    }
-                    "tags" if arg_n >= 2 => {
-                        let ctx = self.session.context.read().unwrap();
-                        let clean_prefix = prefix.trim_start_matches(',').trim();
-
-                        ctx.feature
-                            .as_ref()
-                            .map(|f| {
-                                f.tags
-                                    .0
-                                    .iter()
-                                    .map(|t| t.name.clone())
-                                    .filter(|n| n.starts_with(clean_prefix))
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default()
-                    }
                     _ => vec![],
                 })
             }
@@ -164,25 +138,19 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .collect::<Vec<_>>(),
 
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
-                    "tags" if arg_n >= 2 => {
-                        let (lhs, modifier, val) = strip_tag(prefix);
+                    // Auto-complete tag names for `FEATURE tag`. A `-` prefix means removal.
+                    "tag" if arg_n >= 2 => {
+                        let (modifier, val) = match prefix.strip_prefix('-') {
+                            Some(rest) => (Some('-'), rest),
+                            None => (None, prefix),
+                        };
 
                         ctx.client
                             .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={val}")))?
                             .into_iter()
-                            .map(|t| {
-                                let mut suggestion =
-                                    String::with_capacity(lhs.len() + t.name.len() + 2);
-
-                                suggestion.push_str(lhs);
-                                if !lhs.is_empty() {
-                                    suggestion.push(',');
-                                }
-                                if let Some(m) = modifier {
-                                    suggestion.push(m);
-                                }
-                                suggestion.push_str(&t.name);
-                                suggestion
+                            .map(|t| match modifier {
+                                Some(m) => format!("{m}{}", t.name),
+                                None => t.name,
                             })
                             .collect::<Vec<_>>()
                     }

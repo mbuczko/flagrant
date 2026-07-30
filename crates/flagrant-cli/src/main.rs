@@ -189,6 +189,18 @@ fn main() -> anyhow::Result<()> {
         Command::Identity.op("show", "[identity]", handlers::identities::show),
         Command::Identity.op("delete", "pattern", handlers::identities::delete),
         Command::Identity.op("use", "identity", handlers::identities::r#use),
+        Command::Identity.op_in_context(
+            "trait",
+            "name:value|-name [...]",
+            handlers::identities::r#trait,
+            in_context!(identity_ctx),
+        ),
+        // Context-gated hint must come before the unconditional one below - see the
+        // Feature block above for why.
+        Command::Identity.args_in_context(
+            "add · delete · list · show · trait · use",
+            in_context!(identity_ctx),
+        ),
         Command::Identity.args("add · delete · list · show · use"),
         // Variants
         Command::Variant.op_in_context(
@@ -314,12 +326,6 @@ fn main() -> anyhow::Result<()> {
         ),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
-            "trait",
-            "name=value [name=value ...]",
-            handlers::identities::set_trait,
-            in_context!(identity_ctx),
-        ),
-        Command::Set.op_in_context(
             "override",
             "[value]",
             handlers::identities::set_override,
@@ -333,8 +339,7 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Set.args_in_context("override", in_context!(feature_ctx, segment_ctx)),
-        Command::Set.args_in_context("trait · override", in_context!(feature_ctx, identity_ctx)),
-        Command::Set.args_in_context("trait", in_context!(identity_ctx)),
+        Command::Set.args_in_context("override", in_context!(identity_ctx)),
         // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
@@ -343,12 +348,6 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         // UNSET (only in identity context)
-        Command::Unset.op_in_context(
-            "trait",
-            "name",
-            handlers::identities::unset_trait,
-            in_context!(identity_ctx),
-        ),
         Command::Unset.op_in_context(
             "override",
             "",
@@ -367,10 +366,10 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx, segment_ctx),
         ),
         Command::Unset.args_in_context(
-            "distribution · trait · override",
+            "distribution · override",
             in_context!(feature_ctx, identity_ctx),
         ),
-        Command::Unset.args_in_context("trait", in_context!(identity_ctx)),
+        Command::Unset.args_in_context("override", in_context!(identity_ctx)),
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
     let overlays = vec![

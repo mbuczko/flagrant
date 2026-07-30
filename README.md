@@ -65,7 +65,7 @@ IDENTITY use <identity>
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
-- `SET trait <name=value>` / `UNSET trait <name>` - stage a trait change
+- `IDENTITY trait <name:value|-name ...>` - stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
 - `SET override [value]` / `UNSET override` - see Overrides below
 
 ### Segments
