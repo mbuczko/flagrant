@@ -131,6 +131,74 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     assert_eq!(by_id, expected);
 }
 
+/// Creating a new variant for a feature that's already segment-overridden should seed that
+/// variant into the overriding segment at 0% weight - materializing it there (so it shows
+/// up in listings/the editor) without disturbing the segment's control-variant remainder,
+/// since a 0-weight row doesn't change the sum it's computed from.
+#[sqlx::test]
+async fn creating_a_variant_seeds_it_into_overriding_segments_at_zero_weight(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+
+    let patch = SegmentPatch {
+        ops: vec![SegmentPatchOp::SetFeatureOverride {
+            feature_id: feature.id,
+            environment_id: environment.id,
+            variant_weights: vec![SegmentVariantWeight {
+                variant_id: alt.id,
+                weight: 30,
+            }],
+        }],
+    };
+    segment::patch(&mut conn, &project, segment.clone(), patch)
+        .await
+        .unwrap();
+
+    // New variant, created after the segment override already exists.
+    let beta = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("beta"),
+        20,
+    )
+    .await
+    .unwrap();
+
+    // beta is seeded into the segment at 0% - present as an explicit override row, not just
+    // defaulting to 0 via COALESCE on a missing row.
+    let mut overrides =
+        variant::get_segment_weights(&mut conn, segment.id, feature.id, environment.id)
+            .await
+            .unwrap();
+    overrides.sort();
+    assert_eq!(overrides, vec![(alt.id, 30), (beta.id, 0)]);
+
+    // The segment's control-variant remainder is untouched by beta's arrival: still 70,
+    // exactly as it was before beta existed - no rebalancing was needed.
+    let scoped = variant::get_for_feature(&mut conn, &environment, feature.id, Some(segment.id))
+        .await
+        .unwrap();
+    assert_eq!(scoped.iter().find(|v| v.is_control()).unwrap().weight, 70);
+    assert_eq!(scoped.iter().find(|v| v.id == beta.id).unwrap().weight, 0);
+}
+
 /// Deleting a variant that carries a segment-scoped weight override must remove that
 /// override and rebalance the segment's control-variant remainder - otherwise the segment
 /// is left overriding a now-nonexistent variant and its remainder is stale.

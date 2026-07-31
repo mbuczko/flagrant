@@ -94,8 +94,24 @@ pub async fn create(
         .map_err(|e| FlagrantError::QueryFailed("Could not insert a variant weight", e))?;
 
     balance_control_weight(&mut tx, environment, feature.id, variant_id, weight as i8).await?;
-    tx.commit().await?;
 
+    // Seed this variant into every segment that already overrides this feature in this
+    // environment, at 0% weight - so it's materialized there (visible in the editor/listing)
+    // without needing to rebalance the segment's control-variant remainder: a 0-weight row
+    // and no row at all are equivalent for that sum.
+    let mut overriding_segments: Vec<i32> =
+        get_segment_overrides_with_weights(&mut tx, feature.id, environment.id)
+            .await?
+            .into_iter()
+            .map(|(segment_id, ..)| segment_id)
+            .collect();
+
+    overriding_segments.dedup();
+    for segment_id in overriding_segments {
+        set_segment_weight(&mut tx, environment, segment_id, variant_id, 0).await?;
+    }
+
+    tx.commit().await?;
     Ok(Variant::build(variant_id, value, weight))
 }
 
@@ -536,7 +552,9 @@ pub(crate) async fn get_segment_override_scopes(
 ) -> anyhow::Result<Vec<(i32, i32)>> {
     SQLVariants::fetch_segment_override_scopes(conn, params![segment_id])
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment override scopes", e).into())
+        .map_err(|e| {
+            FlagrantError::QueryFailed("Could not fetch segment override scopes", e).into()
+        })
 }
 
 /// Returns true if variant is default one within given environment.
