@@ -90,22 +90,47 @@ impl Tabular for Feature {
         let title = format!("Feature: {} (ID={})", self.name, self.id);
         let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if has_tag_ops {
-            let mut effective: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
+            let names: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
+            let mut added: Vec<&str> = Vec::new();
+            let mut removed: Vec<&str> = Vec::new();
+
             for op in patch.into_iter().flat_map(|p| &p.tags) {
                 match op {
                     TagPatchOp::Add(t) => {
-                        if !effective.contains(&t.as_str()) {
-                            effective.push(t.as_str());
+                        if !names.contains(&t.as_str()) {
+                            added.push(t.as_str());
                         }
                     }
-                    TagPatchOp::Remove(t) => effective.retain(|x| *x != t.as_str()),
+                    // Kept visible (not dropped) so a tag staged for removal still shows
+                    // up in the list, colored red below, instead of silently vanishing.
+                    TagPatchOp::Remove(t) => {
+                        if names.contains(&t.as_str()) {
+                            removed.push(t.as_str());
+                        }
+                    }
                 }
             }
+
+            let mut effective: Vec<&str> = names.iter().chain(added.iter()).copied().collect();
             effective.sort();
+            effective.dedup();
+
             if effective.is_empty() {
                 "(none)".yellow().to_string()
             } else {
-                effective.join(", ").yellow().to_string()
+                effective
+                    .iter()
+                    .map(|t| {
+                        if removed.contains(t) {
+                            t.red().to_string()
+                        } else if added.contains(t) {
+                            t.green().to_string()
+                        } else {
+                            t.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
             }
         } else {
             self.tags.to_string().blue().to_string()
