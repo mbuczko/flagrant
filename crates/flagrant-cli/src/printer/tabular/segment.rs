@@ -83,7 +83,7 @@ impl Tabular for Segment {
                 let sym_colored = if group.is_staged_add {
                     sym.green()
                 } else if group.is_deleted {
-                    sym.dimmed()
+                    sym.red()
                 } else {
                     sym.bright_cyan()
                 };
@@ -100,7 +100,7 @@ impl Tabular for Segment {
             }
 
             let label_colored = if group.is_deleted {
-                group.label.dimmed()
+                group.label.red()
             } else if group.is_staged_add {
                 group.label.green()
             } else {
@@ -146,10 +146,10 @@ impl Tabular for Segment {
                     let (idx_str, driver_s, cmp_s, val_s, rule_stage) =
                         if group.is_deleted || r.is_deleted {
                             (
-                                display_idx.to_string().dimmed(),
-                                driver.dimmed(),
-                                cmp.dimmed(),
-                                r.value.dimmed(),
+                                display_idx.to_string().red(),
+                                driver.red(),
+                                cmp.red(),
+                                r.value.red(),
                                 if r.is_deleted {
                                     "✕ deleting".red().to_string()
                                 } else {
@@ -232,7 +232,7 @@ impl Tabular for Segment {
 
             match pending_op {
                 Some(SegmentPatchOp::UnsetFeatureOverride { .. }) => {
-                    overrides_lines.push(plain_line.dimmed().to_string());
+                    overrides_lines.push(plain_line.red().to_string());
                     overrides_stages.push("‣ removing".red().to_string());
                 }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
@@ -406,7 +406,9 @@ impl Tabular for SegmentGroup {
             .map(format_connector)
             .unwrap_or("(first group)");
 
-        let sym_colored = if is_deleted || sym.len() >= 10 {
+        let sym_colored = if is_deleted {
+            sym.red().to_string()
+        } else if sym.len() >= 10 {
             sym.dimmed().to_string()
         } else {
             sym.bright_cyan().to_string()
@@ -422,7 +424,7 @@ impl Tabular for SegmentGroup {
         let mut group_stage: Vec<String> = Vec::new();
 
         let (frame, label_colored) = if is_deleted {
-            (UTF_TOP_CORNER.dimmed(), group.label.dimmed())
+            (UTF_TOP_CORNER.dimmed(), group.label.red())
         } else {
             (UTF_TOP_CORNER.dimmed(), group.label.yellow())
         };
@@ -481,10 +483,10 @@ impl Tabular for SegmentGroup {
                     if is_deleted || rule_deleted {
                         (
                             UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().dimmed(),
-                            driver.dimmed(),
-                            cmp.dimmed(),
-                            r.value.dimmed(),
+                            display_idx.to_string().red(),
+                            driver.red(),
+                            cmp.red(),
+                            r.value.red(),
                             if rule_deleted {
                                 "✕ deleting".red().to_string()
                             } else {
@@ -636,9 +638,9 @@ impl Tabular for SegmentRule {
         let (driver_s, comparator_s, value_s, driver_stage, comparator_stage, value_stage) =
             if is_deleted {
                 (
-                    format_driver(&rule.driver).dimmed(),
-                    format_comparator(&rule.comparator).dimmed(),
-                    rule.value.dimmed(),
+                    format_driver(&rule.driver).red(),
+                    format_comparator(&rule.comparator).red(),
+                    rule.value.red(),
                     "✕ deleting".red().to_string(),
                     "✕ deleting".red().to_string(),
                     "✕ deleting".red().to_string(),

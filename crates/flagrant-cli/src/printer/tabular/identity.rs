@@ -51,7 +51,7 @@ impl Tabular for IdentityWithTraits {
             if t.is_deleted {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
-                        .dimmed()
+                        .red()
                         .to_string(),
                 );
                 trait_stage.push("✕ deleting".red().to_string());
@@ -100,7 +100,7 @@ impl Tabular for IdentityWithTraits {
                 variant_stage.push("‣ override".yellow().to_string());
             } else if staged_unpins.contains(&iv.feature_name) {
                 // Staged unoverride
-                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));
+                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".red()));
                 variant_stage.push("- override".red().to_string());
             } else if iv.identity_id.is_some() {
                 let pin_marker = if iv.pinned_at.is_some() {

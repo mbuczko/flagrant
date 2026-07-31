@@ -197,7 +197,7 @@ impl Tabular for Feature {
             );
 
             if e.is_deleted {
-                variant_lines.push(line.dimmed().to_string());
+                variant_lines.push(line.red().to_string());
                 variant_stage.push("✕ deleting".red().to_string());
             } else if e.is_staged_add {
                 variant_lines.push(line.green().to_string());
@@ -261,12 +261,12 @@ impl Tabular for Feature {
                 .iter()
                 .map(|id| match &ctx.identity_pending {
                     Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
-                        id.dimmed().to_string()
+                        id.red().to_string()
                     }
                     Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
                         id.green().to_string()
                     }
-                    _ => id.to_string(),
+                    _ => id.dimmed().to_string(),
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -327,7 +327,7 @@ impl Tabular for Feature {
                                 name.dimmed(),
                                 parts.join(", ")
                             )
-                            .dimmed()
+                            .red()
                             .to_string();
                             (line, "‣ removing".red().to_string())
                         }
