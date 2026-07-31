@@ -172,15 +172,17 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// shortcut. Fails if there are uncommitted staged trait changes.
 pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
+
     let ctx = session.context.read().unwrap();
     let identity = resolve_identity(&ctx, identity_str)?;
+
     identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     drop(ctx);
 
     let mut ctx = session.context.write().unwrap();
+
     ctx.identity = Some(identity);
     ctx.segment = None;
-
     Ok(())
 }
 
@@ -218,9 +220,11 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     }
 
     let mut ctx = session.context.write().unwrap();
+
     if ctx.identity.is_none() {
         bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
     }
+
     let existing: Vec<String> = ctx
         .identity
         .as_ref()
@@ -229,8 +233,8 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .iter()
         .map(|t| t.name.clone())
         .collect();
-
     let patch = ctx.get_or_init_identity_patch();
+
     for (name, value) in sets {
         let trait_exists = existing.iter().any(|n| n == &name);
         stage::stage_trait(patch, trait_exists, name, value);
@@ -254,20 +258,17 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// first create a variant with `VARIANT add`.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     // Gather everything under a read lock, including opening the editor if needed.
-    let (feature_name, identity_value, raw) = {
-        let ctx = session.context.read().unwrap();
-        let feature = ctx.feature.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
-        })?;
-        let identity = ctx.identity.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(
-                "Not in an identity context. Use \"IDENTITY use ...\" to set a context."
-            )
-        })?;
+    let ctx = session.context.read().unwrap();
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+    })?;
+    let identity = ctx.identity.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY use ...\" to set a context.")
+    })?;
 
-        let raw = if let Some(val) = args.get(1) {
-            val.to_string()
-        } else {
+    let raw = match args.get(1) {
+        Some(val) => val.to_string(),
+        None => {
             let current_variant_id = fetch_variant_assignments(&ctx, identity)
                 .into_iter()
                 .find(|iv| iv.feature_id == feature.id && iv.identity_id.is_some())
@@ -278,16 +279,16 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 ctx.feature_patch.as_ref(),
                 current_variant_id,
             );
-            let edited = open_in_editor(&content)?;
-            extract_single_value(&edited)?
-        };
-
-        (feature.name.clone(), identity.value.clone(), raw)
+            extract_single_value(&open_in_editor(&content)?)?
+        }
     };
 
     if raw.is_empty() {
         bail!("No value provided.");
     }
+
+    let (feature_name, identity_value) = (feature.name.clone(), identity.value.clone());
+    drop(ctx);
 
     let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
 
@@ -356,10 +357,11 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
 
     let feature_name = feature.name.clone();
     let identity_value = identity.value.clone();
-
     let pending = ctx.get_or_init_identity_patch();
+
     // Remove any staged pin for the same feature (unpin supersedes it).
     pending.overrides.retain(|o| o.feature_name != feature_name);
+
     // Avoid duplicate unpin entries.
     if !pending.unpins.contains(&feature_name) {
         pending.unpins.push(feature_name.clone());

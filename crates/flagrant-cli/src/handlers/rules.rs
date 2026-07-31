@@ -1,12 +1,12 @@
 //! REPL command handlers for segment rule management.
 //!
-//! | Command                              | Handler      | Description                                        |
-//! |--------------------------------------|--------------|----------------------------------------------------|
-//! | `RULE add <label> <driver> <cmp> <v>`| [`add`]      | Stage a new rule on a group in the current segment.|
-//! | `RULE delete <label> <index>`        | [`delete`]   | Stage a rule deletion by 1-based index.            |
-//! | `RULE show <label> <index>`          | [`show`]     | Print details of a single rule within a group.     |
-//! | `RULE value <label> <index> [v]`     | [`value`]    | Stage a value change for an existing rule.         |
-//! | `RULE comparator <label> <index> [c]`| [`comparator`] | Stage a comparator change for an existing rule.  |
+//! | Command                              | Handler        | Description                                        |
+//! |--------------------------------------|----------------|----------------------------------------------------|
+//! | `RULE add <label> <driver> <cmp> <v>`| [`add`]        | Stage a new rule on a group in the current segment.|
+//! | `RULE delete <label> <index>`        | [`delete`]     | Stage a rule deletion by 1-based index.            |
+//! | `RULE show <label> <index>`          | [`show`]       | Print details of a single rule within a group.     |
+//! | `RULE value <label> <index> [v]`     | [`value`]      | Stage a value change for an existing rule.         |
+//! | `RULE comparator <label> <index> [c]`| [`comparator`] | Stage a comparator change for an existing rule.    |
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
@@ -21,49 +21,6 @@ use crate::{
     handlers::internal::{extract_single_value, open_in_editor},
     printer::tabular::Tabular,
 };
-
-/// Print details of a single rule within a group, overlaying any staged changes.
-///
-/// Expected args: `<group-label> <rule-index>`
-pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let label = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;
-    let index_str = args
-        .get(2)
-        .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
-    let index: usize = index_str.parse::<usize>().map_err(|_| {
-        anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
-    })?;
-    if index == 0 {
-        bail!("Rule index is 1-based; use 1 for the first rule.");
-    }
-
-    let ctx = session.context.read().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-
-    let group = segment
-        .groups
-        .iter()
-        .find(|g| g.label == label.as_ref())
-        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-
-    let rule = group.rules.get(index - 1).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No rule at index {index} in [{label}] (has {} rule(s)).",
-            group.rules.len()
-        )
-    })?;
-
-    rule.display(
-        ctx.segment_patch.as_ref().filter(|p| !p.is_empty()),
-        &(label.to_string(), index),
-    );
-    Ok(())
-}
 
 /// Stage a rule addition on a group in the current segment.
 ///
@@ -86,8 +43,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let driver = parse_driver(driver_str)?;
     let comparator = parse_comparator(comparator_str)?;
-
     let mut ctx = session.context.write().unwrap();
+
     if ctx.segment.is_none() {
         bail!("Not in a segment context. Use `SEGMENT use <name>` first.");
     }
@@ -99,6 +56,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             comparator,
             value: value.to_string(),
         });
+
     println!("Staged: add rule to [{}]", label);
     Ok(())
 }
@@ -112,16 +70,17 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-
     let label = args
         .get(1)
         .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;
     let index_str = args
         .get(2)
         .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
+
     let index: usize = index_str.parse::<usize>().map_err(|_| {
         anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
     })?;
+
     if index == 0 {
         bail!("Rule index is 1-based; use 1 for the first rule.");
     }
@@ -131,15 +90,18 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-    let rule = group.rules.get(index - 1).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No rule at index {index} in [{}] (has {} rule(s)).",
-            label,
-            group.rules.len()
-        )
-    })?;
+    let rule_id = group
+        .rules
+        .get(index - 1)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No rule at index {index} in [{}] (has {} rule(s)).",
+                label,
+                group.rules.len()
+            )
+        })?
+        .id;
 
-    let rule_id = rule.id;
     drop(ctx);
 
     let mut ctx = session.context.write().unwrap();
@@ -148,6 +110,48 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .push(SegmentPatchOp::DeleteRule { rule_id });
 
     println!("Staged: delete rule #{index} from [{}]", label);
+    Ok(())
+}
+
+/// Print details of a single rule within a group, overlaying any staged changes.
+///
+/// Expected args: `<group-label> <rule-index>`
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let label = args
+        .get(1)
+        .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;
+    let index_str = args
+        .get(2)
+        .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
+    let index: usize = index_str.parse::<usize>().map_err(|_| {
+        anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
+    })?;
+
+    if index == 0 {
+        bail!("Rule index is 1-based. Use 1 for the first rule.");
+    }
+
+    let ctx = session.context.read().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
+    let group = segment
+        .groups
+        .iter()
+        .find(|g| g.label == label.as_ref())
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
+    let rule = group.rules.get(index - 1).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No rule at index {index} in [{label}] (has {} rule(s)).",
+            group.rules.len()
+        )
+    })?;
+
+    rule.display(
+        ctx.segment_patch.as_ref().filter(|p| !p.is_empty()),
+        &(label.to_string(), index),
+    );
     Ok(())
 }
 
@@ -161,25 +165,24 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (label, index, rule_id, effective_comparator, effective_value) =
         resolve_rule(args, session)?;
-
-    let raw = match args.get(3) {
+    let value = match args.get(3) {
         Some(v) => v.to_string(),
         None => open_in_editor(&effective_value)?,
-    };
-    let new_value = raw.trim().to_string();
-    if new_value.is_empty() {
+    }
+    .trim()
+    .to_string();
+
+    if value.is_empty() {
         bail!("No value provided.");
     }
-    validate_value_for_comparator(&effective_comparator, &new_value)?;
 
-    println!("Staged: rule #{index} in [{label}] value = {new_value}");
+    validate_value_for_comparator(&effective_comparator, &value)?;
+    println!("Staged: rule #{index} in [{label}] value = {value}");
 
     let mut ctx = session.context.write().unwrap();
     let patch = ctx.get_or_init_segment_patch();
-    let op = SegmentPatchOp::SetRuleValue {
-        rule_id,
-        value: new_value,
-    };
+    let op = SegmentPatchOp::SetRuleValue { rule_id, value };
+
     if let Some(existing) = patch
         .ops
         .iter_mut()
@@ -203,25 +206,26 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (label, index, rule_id, effective_comparator, effective_value) =
         resolve_rule(args, session)?;
-
-    let raw = match args.get(3) {
-        Some(c) => c.to_string(),
-        None => {
-            let content = build_comparator_editor_content(&effective_comparator);
-            let edited = open_in_editor(&content)?;
-            extract_single_value(&edited)?
+    let comparator = parse_comparator(
+        match args.get(3) {
+            Some(c) => c.to_string(),
+            None => {
+                let content = build_comparator_editor_content(&effective_comparator);
+                let edited = open_in_editor(&content)?;
+                extract_single_value(&edited)?
+            }
         }
-    };
-    let new_comparator = parse_comparator(raw.trim())?;
-    validate_value_for_comparator(&new_comparator, &effective_value)?;
+        .trim(),
+    )?;
 
-    println!("Staged: rule #{index} in [{label}] comparator = {new_comparator}");
+    validate_value_for_comparator(&comparator, &effective_value)?;
+    println!("Staged: rule #{index} in [{label}] comparator = {comparator}");
 
     let mut ctx = session.context.write().unwrap();
     let patch = ctx.get_or_init_segment_patch();
     let op = SegmentPatchOp::SetRuleComparator {
         rule_id,
-        comparator: new_comparator,
+        comparator,
     };
     if let Some(existing) = patch.ops.iter_mut().find(
         |o| matches!(o, SegmentPatchOp::SetRuleComparator { rule_id: rid, .. } if *rid == rule_id),
@@ -249,6 +253,7 @@ fn resolve_rule(
     let index: usize = index_str.parse::<usize>().map_err(|_| {
         anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
     })?;
+
     if index == 0 {
         bail!("Rule index is 1-based; use 1 for the first rule.");
     }
@@ -258,13 +263,11 @@ fn resolve_rule(
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-
     let group = segment
         .groups
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-
     let rule = group.rules.get(index - 1).ok_or_else(|| {
         anyhow::anyhow!(
             "No rule at index {index} in [{label}] (has {} rule(s)).",
@@ -296,7 +299,6 @@ fn effective_rule_state(rule: &SegmentRule, patch: Option<&SegmentPatch>) -> (Co
             _ => {}
         }
     }
-
     (comparator, value)
 }
 
@@ -306,7 +308,7 @@ fn validate_value_for_comparator(comparator: &Comparator, value: &str) -> anyhow
         && serde_json::from_str::<Vec<serde_json::Value>>(value).is_err()
     {
         bail!(
-            "Value must be a valid JSON array for the 'in'/'not-in' comparator, e.g. [\"a\",\"b\"]."
+            "Value must be a valid JSON array for the 'in'/'not_in' comparator, e.g. [\"a\",\"b\"]."
         );
     }
     Ok(())
@@ -327,7 +329,6 @@ fn build_comparator_editor_content(current: &Comparator) -> String {
         let marker = if &cmp == current { " (current)" } else { "" };
         content.push_str(&format!("# {cmp}{marker}\n{cmp}\n\n"));
     }
-
     content
 }
 

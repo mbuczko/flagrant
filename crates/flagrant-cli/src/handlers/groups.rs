@@ -63,16 +63,15 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<label>`
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let label = args.get(1).ok_or_else(|| {
-        anyhow::anyhow!("No group label provided. Use: `GROUP show <label>`.")
-    })?;
+    let label = args
+        .get(1)
+        .ok_or_else(|| anyhow::anyhow!("No group label provided. Use: `GROUP show <label>`."))?;
 
     let ctx = session.context.read().unwrap();
     let segment = ctx
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-
     let group = segment
         .groups
         .iter()

@@ -98,6 +98,7 @@ pub(crate) fn fetch_overridden_features(
 /// Expected args: `<name> [description]`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
+
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
@@ -112,13 +113,14 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             },
         )?
     };
+
     // A brand-new segment can't override anything yet.
     segment.display(None, &SegmentContext::default());
 
     let mut ctx = session.context.write().unwrap();
+
     ctx.segment = Some(segment);
     ctx.identity = None;
-
     Ok(())
 }
 
@@ -145,15 +147,18 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let segment = fetch_segment(name, session)?;
         let overrides = fetch_overridden_features(segment.id, session);
+
         segment.display(None, &SegmentContext { overrides });
     } else {
-        let (segment_id, in_context_feature_id) = {
-            let ctx = session.context.read().unwrap();
-            let segment = ctx.segment.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
-            })?;
-            (segment.id, ctx.feature.as_ref().map(|f| f.id))
-        };
+        let ctx = session.context.read().unwrap();
+        let segment = ctx.segment.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
+        })?;
+        let segment_id = segment.id;
+        let in_context_feature_id = ctx.feature.as_ref().map(|f| f.id);
+
+        drop(ctx);
+
         let mut overrides = fetch_overridden_features(segment_id, session);
 
         // Nothing mutates the session between the lock above and the one below - just a
@@ -220,6 +225,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     }
 
     let mut ctx = session.context.write().unwrap();
+
     if ctx.segment.as_ref().map(|s| s.id) == Some(segment.id) {
         ctx.segment = None;
     }
@@ -236,6 +242,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// cleared - an empty result is rejected.
 pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
+
     if ctx.segment.is_none() {
         bail!("Not in a segment context.");
     }
@@ -257,14 +264,15 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
             open_in_editor(current)?
         }
     };
+
     if name.is_empty() {
         bail!("No name provided.");
     }
-
     println!("Staged: name = {name}");
 
     let op = SegmentPatchOp::SetName(name);
     let patch = ctx.get_or_init_segment_patch();
+
     if let Some(existing) = patch
         .ops
         .iter_mut()
@@ -316,6 +324,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 
     let op = SegmentPatchOp::SetDescription(desc);
     let patch = ctx.get_or_init_segment_patch();
+
     if let Some(existing) = patch
         .ops
         .iter_mut()
@@ -482,6 +491,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         environment_id,
         variant_weights: variant_weights.clone(),
     });
+
     println!(
         "Staged: segment override for '{}' ({} variant weight(s))",
         feature_name,
@@ -508,6 +518,7 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
     }
 
     let patch = ctx.get_or_init_segment_patch();
+
     patch.ops.retain(|op| {
         !matches!(op,
             SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. } |
@@ -519,6 +530,7 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
         feature_id,
         environment_id,
     });
+
     println!("Staged: unset segment override for '{feature_name}'");
     Ok(())
 }
@@ -557,6 +569,7 @@ fn build_segment_override_editor_content(
             ev.weight, staged
         ));
     }
+
     let default_value = variants
         .iter()
         .find(|v| v.is_control && !v.is_deleted)
@@ -565,6 +578,7 @@ fn build_segment_override_editor_content(
             bare.lines().next().unwrap_or(bare).to_string()
         })
         .unwrap_or_default();
+
     content.push_str(&format!(
         "# default value ({default_value}) auto-adjusts to the remainder (= 100 - sum of above)"
     ));
@@ -623,8 +637,10 @@ fn weights_equal(a: &[SegmentVariantWeight], b: &[SegmentVariantWeight]) -> bool
     if a.len() != b.len() {
         return false;
     }
+
     let mut a_sorted: Vec<_> = a.iter().collect();
     let mut b_sorted: Vec<_> = b.iter().collect();
+
     a_sorted.sort_by_key(|w| w.variant_id);
     b_sorted.sort_by_key(|w| w.variant_id);
     a_sorted
@@ -692,6 +708,7 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 /// Drop all staged segment changes.
 pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
+
     if ctx.has_segment_pending() {
         ctx.discard_segment_patch();
         println!("Pending changes discarded.");
@@ -704,9 +721,11 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Expected args: `<name>`
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
+
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
+
     let segment = fetch_segment(name, session)?;
     let overrides = fetch_overridden_features(segment.id, session);
     segment.display(None, &SegmentContext { overrides });

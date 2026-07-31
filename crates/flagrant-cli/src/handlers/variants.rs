@@ -57,6 +57,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             &VariantRef::Staged(usize::MAX),
             weight,
         );
+
     if total > 100 {
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
@@ -129,6 +130,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             _ => false,
         })
     });
+
     if duplicate {
         bail!("A variant with this value already exists for this feature.");
     }
@@ -210,6 +212,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         &variant_ref,
         new_weight,
     );
+
     if total > 100 {
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
@@ -232,10 +235,12 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
+
     let variant_ref = match args.get(1) {
         Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
         None => bail!("No variant index provided."),
     };
+
     if let VariantRef::Committed(id) = &variant_ref {
         let is_control = ctx
             .feature
@@ -248,6 +253,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
             bail!("Control variant is managed automatically and cannot be deleted.");
         }
     }
+
     let variant_id = match variant_ref {
         VariantRef::Committed(id) => id,
         VariantRef::Staged(_) => {
