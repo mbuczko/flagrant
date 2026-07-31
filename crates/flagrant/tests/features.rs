@@ -1195,3 +1195,26 @@ async fn get_all_filters_by_included_and_excluded_tags(mut conn: PoolConnection<
     assert!(names.contains(&ui_only.name));
     assert!(!names.contains(&untagged.name));
 }
+
+#[test]
+fn tag_patch_validation_rejects_bad_names_and_accepts_good_ones() {
+    use serde_valid::Validate;
+
+    let comma = FeaturePatch {
+        tags: vec![TagPatchOp::Add("foo,bar".to_owned())],
+        ..Default::default()
+    };
+    assert!(comma.validate().is_err(), "comma should be rejected");
+
+    let uppercase = FeaturePatch {
+        tags: vec![TagPatchOp::Add("Foo".to_owned())],
+        ..Default::default()
+    };
+    assert!(uppercase.validate().is_err(), "uppercase should be rejected");
+
+    let good = FeaturePatch {
+        tags: vec![TagPatchOp::Add("foo_bar+1.0".to_owned())],
+        ..Default::default()
+    };
+    assert!(good.validate().is_ok(), "valid charset should pass");
+}

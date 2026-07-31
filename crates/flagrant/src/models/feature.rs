@@ -271,6 +271,8 @@ pub async fn patch(
     feature: &Feature,
     patch: FeaturePatch,
 ) -> anyhow::Result<Feature> {
+    patch.validate()?;
+
     let mut tx = conn.begin().await?;
 
     // Feature-level properties

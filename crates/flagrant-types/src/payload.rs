@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
@@ -29,10 +30,18 @@ pub enum TraitPatchOp {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub enum TagPatchOp {
-    Add(String),
-    Remove(String),
+    Add(
+        #[validate(pattern = r"^[a-z0-9+_.]+$")]
+        #[validate(max_length = 32)]
+        String,
+    ),
+    Remove(
+        #[validate(pattern = r"^[a-z0-9+_.]+$")]
+        #[validate(max_length = 32)]
+        String,
+    ),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -89,11 +98,12 @@ pub struct IdentityTraitPayload {
     pub value: Option<TraitValue>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct FeaturePatch {
     pub is_enabled: Option<bool>,
     pub is_archived: Option<bool>,
     pub description: Option<String>,
+    #[validate]
     pub tags: Vec<TagPatchOp>,
     pub variants: Vec<VariantPatchOp>,
 }
