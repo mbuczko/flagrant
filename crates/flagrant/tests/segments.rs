@@ -131,6 +131,84 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     assert_eq!(by_id, expected);
 }
 
+/// Deleting a variant that carries a segment-scoped weight override must remove that
+/// override and rebalance the segment's control-variant remainder - otherwise the segment
+/// is left overriding a now-nonexistent variant and its remainder is stale.
+#[sqlx::test]
+async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+    let beta = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("beta"),
+        20,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+
+    let patch = SegmentPatch {
+        ops: vec![SegmentPatchOp::SetFeatureOverride {
+            feature_id: feature.id,
+            environment_id: environment.id,
+            variant_weights: vec![
+                SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                },
+                SegmentVariantWeight {
+                    variant_id: beta.id,
+                    weight: 20,
+                },
+            ],
+        }],
+    };
+    segment::patch(&mut conn, &project, segment.clone(), patch)
+        .await
+        .unwrap();
+
+    // Sanity check before deletion: alt=30, beta=20, control remainder=50.
+    let scoped = variant::get_for_feature(&mut conn, &environment, feature.id, Some(segment.id))
+        .await
+        .unwrap();
+    assert_eq!(scoped.iter().find(|v| v.id == beta.id).unwrap().weight, 20);
+    assert_eq!(
+        scoped.iter().find(|v| v.is_control()).unwrap().weight,
+        50
+    );
+
+    variant::delete(&mut conn, &environment, &beta).await.unwrap();
+
+    let scoped = variant::get_for_feature(&mut conn, &environment, feature.id, Some(segment.id))
+        .await
+        .unwrap();
+
+    // beta's segment-scoped override row is gone along with the variant itself.
+    assert!(!scoped.iter().any(|v| v.id == beta.id));
+
+    // The segment's control-variant remainder is rebalanced to account for beta's weight
+    // no longer being part of the segment's total: 100 - alt(30) = 70, not the stale 50.
+    assert_eq!(
+        scoped.iter().find(|v| v.is_control()).unwrap().weight,
+        70
+    );
+}
+
 /// `list_overridden_features` (backs "SEGMENT describe") should return one entry per
 /// feature the segment overrides, each with its explicit weights plus the control
 /// variant's auto-balanced remainder - and nothing for features it doesn't touch.

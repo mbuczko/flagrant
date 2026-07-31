@@ -174,6 +174,14 @@ DELETE FROM variants WHERE variant_id = $1
 -- :doc Removes all variant weights
 DELETE FROM variant_weights WHERE variant_id = $1
 
+-- :name fetch_segment_scopes_for_variant :<> :*
+-- :doc Returns DISTINCT (segment_id, environment_id) pairs where this variant currently
+-- carries a segment-scoped weight override. Called before deleting a variant, so each
+-- affected segment's control-variant remainder can be rebalanced once the variant (and its
+-- weight row) is gone.
+SELECT DISTINCT segment_id, environment_id FROM variant_weights
+WHERE variant_id = $1 AND segment_id IS NOT NULL
+
 -- :name fetch_segment_override_scopes :<> :*
 -- :doc Returns DISTINCT (environment_id, feature_id) pairs this segment currently overrides,
 -- across all environments. Used to scope segment-rule-change reconciliation.

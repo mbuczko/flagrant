@@ -275,6 +275,12 @@ pub async fn delete(
     // there are no dangling references to the given variant_id.
     identity::detach_identities(&mut tx, variant.id).await?;
 
+    // Segments that override this variant's weight need their control-variant remainder
+    // rebalanced once the variant (and its weight row) is gone - capture the affected
+    // (segment_id, environment_id) pairs before removing the weight rows below.
+    let segment_scopes: Vec<(i32, i32)> =
+        SQLVariants::fetch_segment_scopes_for_variant(&mut *tx, params![variant.id]).await?;
+
     // Remove all weight entries attached to this variant.
     SQLVariants::delete_variant_weights(&mut *tx, params![variant.id])
         .await
@@ -286,6 +292,20 @@ pub async fn delete(
 
     if !is_default(environment, variant) {
         balance_control_weight(&mut tx, environment, feature_id, variant.id, -100).await?;
+    }
+
+    // Rebalance each affected segment's control-variant remainder now that this variant no
+    // longer counts toward the segment's total, and flag already-distributed identities in
+    // that environment for re-evaluation against the new weights.
+    let mut dirtied_environments: Vec<i32> = Vec::new();
+    for (segment_id, environment_id) in segment_scopes {
+        let scope_env = super::environment::get_by_id(&mut tx, environment_id).await?;
+        balance_segment_control_weight(&mut tx, &scope_env, segment_id, feature_id).await?;
+
+        if !dirtied_environments.contains(&environment_id) {
+            identity::mark_feature_dirty(&mut tx, environment_id, feature_id).await?;
+            dirtied_environments.push(environment_id);
+        }
     }
 
     tx.commit().await?;
