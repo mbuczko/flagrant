@@ -336,7 +336,13 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().description.as_deref());
 
             let edited = open_in_editor(current.unwrap_or(""))?;
-            (!edited.is_empty()).then_some(edited)
+            let new_desc = (!edited.is_empty()).then_some(edited);
+
+            if new_desc.as_deref() == current {
+                println!("No changes made.");
+                return Ok(());
+            }
+            new_desc
         }
     };
 

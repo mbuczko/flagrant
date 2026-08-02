@@ -120,7 +120,13 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 .and_then(|p| p.description.as_deref())
                 .unwrap_or_else(|| ctx.feature.as_ref().unwrap().description.as_str());
 
-            open_in_editor(current)?
+            let edited = open_in_editor(current)?;
+
+            if edited == current {
+                println!("No changes made.");
+                return Ok(());
+            }
+            edited
         }
     };
 

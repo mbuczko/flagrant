@@ -93,7 +93,13 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         None => {
             let current = ctx.environment.description.as_deref().unwrap_or_default();
             let edited = open_in_editor(current)?;
-            (!edited.is_empty()).then_some(edited)
+            let new_desc = (!edited.is_empty()).then_some(edited);
+
+            if new_desc.as_deref() == ctx.environment.description.as_deref() {
+                println!("No changes made.");
+                return Ok(());
+            }
+            new_desc
         }
     };
 
