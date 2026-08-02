@@ -187,7 +187,8 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Identity.op("list", "trait|[pattern]", handlers::identities::list),
         Command::Identity.op("show", "[identity]", handlers::identities::show),
-        Command::Identity.op("delete", "pattern", handlers::identities::delete),
+        Command::Identity.op("delete", "identity", handlers::identities::delete),
+        Command::Identity.op("drop!", "pattern", handlers::identities::drop_matching),
         Command::Identity.op("use", "identity", handlers::identities::r#use),
         Command::Identity.op_in_context(
             "trait",
@@ -198,10 +199,10 @@ fn main() -> anyhow::Result<()> {
         // Context-gated hint must come before the unconditional one below - see the
         // Feature block above for why.
         Command::Identity.args_in_context(
-            "add · delete · list · show · trait · use",
+            "add · delete · drop! · list · show · trait · use",
             in_context!(identity_ctx),
         ),
-        Command::Identity.args("add · delete · list · show · use"),
+        Command::Identity.args("add · delete · drop! · list · show · use"),
         // Variants
         Command::Variant.op_in_context(
             "add",

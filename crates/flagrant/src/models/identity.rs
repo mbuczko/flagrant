@@ -290,7 +290,12 @@ pub async fn patch(
     environment: &Environment,
     identity: Identity,
     patch: IdentityPatch,
-) -> anyhow::Result<IdentityWithTraits> {
+) -> anyhow::Result<Option<IdentityWithTraits>> {
+    if patch.delete {
+        delete(conn, identity).await?;
+        return Ok(None);
+    }
+
     let mut tx = conn.begin().await?;
 
     for op in patch.traits {
@@ -350,7 +355,9 @@ pub async fn patch(
     }
 
     tx.commit().await?;
-    get_by_value_with_traits(conn, environment, identity.value).await
+    get_by_value_with_traits(conn, environment, identity.value)
+        .await
+        .map(Some)
 }
 
 /// Deletes an identity and all associated data.

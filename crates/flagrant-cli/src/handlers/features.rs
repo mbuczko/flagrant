@@ -367,8 +367,17 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     let updated = ctx
         .client
-        .patch::<_, Feature>(path, patch)
+        .patch::<_, Option<Feature>>(path, patch)
         .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
+
+    let Some(updated) = updated else {
+        println!("Feature '{}' deleted.", ctx.feature.as_ref().unwrap().name);
+
+        ctx.feature = None;
+        ctx.feature_patch = None;
+        ctx.variant_index = vec![];
+        return Ok(());
+    };
 
     // If a segment override for this same feature is about to be committed too (as part of
     // the same top-level COMMIT), skip printing here - `show_by_id` will show the feature
@@ -472,37 +481,46 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Delete a feature by name.
+/// Stage deletion of a feature by name.
 ///
-/// Looks up the feature by name to obtain its id, then issues a DELETE request.
+/// Expected args: `<name>`
+///
+/// Switches into the named feature's context first if not already there (same as `FEATURE
+/// use`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
+/// any other pending change for this feature is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let ctx = session.context.read().unwrap();
-        let res = ctx.env_resource();
-        let response = ctx
-            .client
-            .get::<Feature>(res.subpath(format!("/features/{name}")));
+    let Some(name) = args.get(1) else {
+        bail!("No feature name or value provided.");
+    };
 
-        if let Ok(feature) = response {
-            ctx.client
-                .delete(res.subpath(format!("/features/{}", feature.id)))?;
+    let already_in_context = session
+        .context
+        .read()
+        .unwrap()
+        .feature
+        .as_ref()
+        .is_some_and(|f| f.name == name.as_ref());
 
-            let in_context = ctx.feature.as_ref().is_some_and(|f| f.id == feature.id);
-            drop(ctx);
+    if !already_in_context {
+        stage::ensure_no_pending(session)?;
 
-            if in_context {
-                let mut ctx = session.context.write().unwrap();
+        let feature = fetch_feature(name, session)
+            .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", name))?;
 
-                ctx.feature = None;
-                ctx.feature_patch = None;
-                ctx.variant_index = vec![];
-            }
-            println!("Feature removed.");
-            return Ok(());
-        }
-        bail!("No such a feature.")
+        let mut ctx = session.context.write().unwrap();
+        ctx.feature = Some(feature);
+
+        index::rebuild(&mut ctx);
     }
-    bail!("No feature name or value provided.")
+
+    let mut ctx = session.context.write().unwrap();
+    ctx.get_or_init_pending().delete = true;
+
+    println!(
+        "Staged: feature '{name}' marked for deletion. Run COMMIT to apply or DISCARD to cancel."
+    );
+    Ok(())
 }
 
 /// Clears the current feature's variant assignments for every identity matching `pattern`,

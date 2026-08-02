@@ -51,8 +51,15 @@ impl Tabular for Segment {
 
     fn display(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
-        let title = format!("Segment: {} (ID={})", self.name, self.id);
-
+        let title = format!(
+            "SEGMENT: {}{}",
+            self.name,
+            if patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete))) {
+                " ⚠ MARKED FOR DELETION"
+            } else {
+                ""
+            }
+        );
         let (name_str, name_stage) = if eff.name_modified {
             (
                 eff.name.yellow().to_string(),

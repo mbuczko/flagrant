@@ -106,6 +106,9 @@ pub struct FeaturePatch {
     #[validate]
     pub tags: Vec<TagPatchOp>,
     pub variants: Vec<VariantPatchOp>,
+    /// Stages deletion of the entire feature. When set, every other field/op in the same
+    /// patch is ignored - the feature is deleted and nothing else is applied.
+    pub delete: bool,
 }
 
 impl From<Feature> for NewFeaturePayload {
@@ -131,6 +134,7 @@ impl FeaturePatch {
             && self.description.is_none()
             && self.tags.is_empty()
             && self.variants.is_empty()
+            && !self.delete
     }
 }
 
@@ -148,11 +152,17 @@ pub struct IdentityPatch {
     pub overrides: Vec<IdentityOverridePatch>,
     /// Feature names whose variant assignment should be deleted (identity freed for distribution).
     pub unpins: Vec<String>,
+    /// Stages deletion of the entire identity. When set, every other field/op in the same
+    /// patch is ignored - the identity is deleted and nothing else is applied.
+    pub delete: bool,
 }
 
 impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
-        self.traits.is_empty() && self.overrides.is_empty() && self.unpins.is_empty()
+        self.traits.is_empty()
+            && self.overrides.is_empty()
+            && self.unpins.is_empty()
+            && !self.delete
     }
 }
 
@@ -221,6 +231,9 @@ pub enum SegmentPatchOp {
         feature_id: i32,
         environment_id: i32,
     },
+    /// Stages deletion of the entire segment. When present, every other op in the same
+    /// patch is ignored - the segment is deleted and nothing else is applied.
+    Delete,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]

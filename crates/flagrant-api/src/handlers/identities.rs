@@ -183,7 +183,7 @@ pub async fn create(
     ),
     request_body = IdentityPatch,
     responses(
-        (status = 200, description = "Updated identity with traits", body = IdentityWithTraits),
+        (status = 200, description = "Updated identity with traits, or null if the patch staged deletion", body = Option<IdentityWithTraits>),
         (status = 404, description = "Identity not found")
     ),
     tag = "identities"
@@ -192,7 +192,7 @@ pub async fn update(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
     Json(patch): Json<IdentityPatch>,
-) -> Result<Json<IdentityWithTraits>, ServiceError> {
+) -> Result<Json<Option<IdentityWithTraits>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identity = identity::get_by_value(&mut conn, &env, identity_value).await?;

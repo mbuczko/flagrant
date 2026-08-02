@@ -246,7 +246,7 @@ pub async fn delete(
     ),
     request_body = FeaturePatch,
     responses(
-        (status = 200, description = "Patched feature with updated state", body = Feature)
+        (status = 200, description = "Patched feature with updated state, or null if the patch staged deletion", body = Option<Feature>)
     ),
     tag = "features"
 )]
@@ -254,7 +254,7 @@ pub async fn patch(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
     Json(patch): Json<FeaturePatch>,
-) -> Result<Json<Feature>, ServiceError> {
+) -> Result<Json<Option<Feature>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;

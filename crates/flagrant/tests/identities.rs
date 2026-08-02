@@ -4,7 +4,8 @@ use flagrant::models::{
     project, traits, variant,
 };
 use flagrant_types::{
-    Environment, Feature, FeatureValue, TraitValue, Variant, payload::IdentityTraitPayload,
+    Environment, Feature, FeatureValue, TraitValue, Variant,
+    payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp},
 };
 use hugsqlx::params;
 use smallvec::smallvec;
@@ -530,6 +531,41 @@ async fn delete_identity(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
     identity::delete(&mut conn, stored).await.unwrap();
+
+    assert!(
+        identity::get_by_value(&mut conn, &environment, identity)
+            .await
+            .is_err()
+    );
+}
+
+/// Staging `delete: true` alongside another change (here, a new trait) must delete the
+/// identity and ignore the other change entirely - not apply it first and then delete.
+#[sqlx::test]
+async fn patch_delete_ignores_other_staged_changes(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+
+    let created = identity::create(&mut conn, &environment, "user_erin".to_owned(), vec![])
+        .await
+        .unwrap();
+    let identity = created.value;
+    let stored = identity::get_by_value(&mut conn, &environment, identity.clone())
+        .await
+        .unwrap();
+
+    let patch = IdentityPatch {
+        traits: vec![TraitPatchOp::Add {
+            name: "should_never_be_set".to_owned(),
+            value: Some(TraitValue::Bool(true)),
+        }],
+        delete: true,
+        ..Default::default()
+    };
+
+    let result = identity::patch(&mut conn, &environment, stored, patch)
+        .await
+        .unwrap();
+    assert!(result.is_none());
 
     assert!(
         identity::get_by_value(&mut conn, &environment, identity)

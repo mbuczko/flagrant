@@ -179,12 +179,13 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Applies a batch of staged operations to a segment.
+/// Applies a batch of staged operations to a segment. Returns `null` if the batch staged
+/// deletion (see [`SegmentPatchOp::Delete`](flagrant_types::payload::SegmentPatchOp::Delete)).
 pub async fn patch_segment(
     DbConnection(mut conn): DbConnection,
     Path((project_name, segment_id)): Path<(String, SegmentId)>,
     Json(payload): Json<SegmentPatch>,
-) -> Result<Json<Segment>, ServiceError> {
+) -> Result<Json<Option<Segment>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     let updated = segment::patch(&mut conn, &project, seg, payload).await?;

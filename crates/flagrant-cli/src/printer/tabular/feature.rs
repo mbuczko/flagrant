@@ -87,7 +87,15 @@ impl Tabular for Feature {
     }
 
     fn display(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
-        let title = format!("Feature: {} (ID={})", self.name, self.id);
+        let title = format!(
+            "FEATURE: {}{}",
+            self.name,
+            if patch.is_some_and(|p| p.delete) {
+                " ⚠ MARKED FOR DELETION"
+            } else {
+                ""
+            }
+        );
         let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if has_tag_ops {
             let names: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();

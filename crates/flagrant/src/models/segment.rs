@@ -296,7 +296,12 @@ pub async fn patch(
     project: &Project,
     mut segment: Segment,
     patch: SegmentPatch,
-) -> anyhow::Result<Segment> {
+) -> anyhow::Result<Option<Segment>> {
+    if patch.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)) {
+        delete(conn, &segment).await?;
+        return Ok(None);
+    }
+
     for op in patch.ops {
         match op {
             SegmentPatchOp::SetName(name) => {
@@ -422,10 +427,12 @@ pub async fn patch(
                 // a lower-priority segment or the organic pool) the next time they're read.
                 identity::mark_feature_dirty(&mut *conn, environment_id, feature_id).await?;
             }
+            // Handled by the early-return above - never reached here.
+            SegmentPatchOp::Delete => unreachable!(),
         }
     }
 
-    get_by_id(conn, project, segment.id).await
+    get_by_id(conn, project, segment.id).await.map(Some)
 }
 
 //

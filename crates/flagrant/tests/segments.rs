@@ -277,6 +277,228 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
     );
 }
 
+/// Deleting a segment must not leave identities dangling: any `identity_variants` row
+/// currently attributed to the deleted segment is dropped by the FK cascade entirely (not
+/// just flagged dirty), so the identity reads back as "unassigned" and gets freshly
+/// (re-)distributed - here, into the organic pool, since there's no other segment to fall
+/// through to - the next time it's read.
+#[sqlx::test]
+async fn deleting_a_segment_releases_governed_identities(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    resolve(&mut conn, &environment, &ident).await;
+
+    let before = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(before.segment_id, Some(segment.id));
+
+    segment::delete(&mut conn, &segment).await.unwrap();
+
+    // The identity_variants row was cascade-deleted along with the segment, not merely
+    // flagged dirty - it doesn't show up at all until the identity is read again.
+    let rows: Vec<IdentityAttribution> =
+        SQLIdentities::fetch_identities(&mut *conn, params![environment.id, feature.id])
+            .await
+            .unwrap();
+    assert!(!rows.iter().any(|r| r.identity_id == ident.id));
+
+    resolve(&mut conn, &environment, &ident).await;
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.segment_id, None);
+}
+
+/// A pinned assignment survives deletion of a segment whose rules would otherwise match the
+/// identity: pins are stored with `segment_id = NULL` (they were never attributed to any
+/// segment), so the FK cascade on `identity_variants.segment_id` has nothing to touch here.
+#[sqlx::test]
+async fn deleting_a_segment_leaves_pinned_identity_untouched(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let ident = identity::get_or_create_by_value(&mut conn, &environment, "user-vip".to_owned())
+        .await
+        .unwrap();
+    identity::override_variant(&mut conn, &environment, &ident, feature.id, alt.id)
+        .await
+        .unwrap();
+
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                SegmentDriver::Identity,
+                Comparator::ExactlyMatches,
+                "user-vip",
+            ),
+            SegmentPatchOp::SetFeatureOverride {
+                feature_id: feature.id,
+                environment_id: environment.id,
+                variant_weights: vec![SegmentVariantWeight {
+                    variant_id: alt.id,
+                    weight: 30,
+                }],
+            },
+        ],
+    )
+    .await;
+
+    segment::delete(&mut conn, &segment).await.unwrap();
+
+    let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
+    assert_eq!(after.variant_id, alt.id);
+    assert!(after.migrated_id.is_none());
+    assert_eq!(after.segment_id, None);
+}
+
+/// Deleting one segment must not disturb another segment's overrides for the same feature -
+/// each segment's `variant_weights` rows are scoped to it alone, so cascade deletion only
+/// touches the deleted segment's own rows.
+#[sqlx::test]
+async fn deleting_a_segment_does_not_affect_other_segments_overrides(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "control").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        FeatureValue::build("alt"),
+        40,
+    )
+    .await
+    .unwrap();
+
+    let vip = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        vip.clone(),
+        vec![SegmentPatchOp::SetFeatureOverride {
+            feature_id: feature.id,
+            environment_id: environment.id,
+            variant_weights: vec![SegmentVariantWeight {
+                variant_id: alt.id,
+                weight: 30,
+            }],
+        }],
+    )
+    .await;
+
+    let testers = segment::create(&mut conn, &project, "testers".to_owned(), None)
+        .await
+        .unwrap();
+    apply(
+        &mut conn,
+        &project,
+        testers.clone(),
+        vec![SegmentPatchOp::SetFeatureOverride {
+            feature_id: feature.id,
+            environment_id: environment.id,
+            variant_weights: vec![SegmentVariantWeight {
+                variant_id: alt.id,
+                weight: 55,
+            }],
+        }],
+    )
+    .await;
+
+    segment::delete(&mut conn, &vip).await.unwrap();
+
+    // testers' own override is untouched by vip's deletion.
+    let scoped =
+        variant::get_for_feature(&mut conn, &environment, feature.id, Some(testers.id))
+            .await
+            .unwrap();
+    assert_eq!(scoped.iter().find(|v| v.id == alt.id).unwrap().weight, 55);
+}
+
+/// Staging `SegmentPatchOp::Delete` alongside another op (here, a rename) in the same
+/// `SegmentPatch` must delete the segment and ignore the other op entirely - not rename it
+/// first and then delete, and not error out.
+#[sqlx::test]
+async fn patch_delete_ignores_other_staged_ops(mut conn: PoolConnection<Sqlite>) {
+    let (project, _environment) = create_context(&mut conn).await;
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+
+    let patch = SegmentPatch {
+        ops: vec![
+            SegmentPatchOp::SetName("should-never-be-applied".to_owned()),
+            SegmentPatchOp::Delete,
+        ],
+    };
+    let result = segment::patch(&mut conn, &project, segment.clone(), patch)
+        .await
+        .unwrap();
+    assert!(result.is_none());
+
+    assert!(
+        segment::get_by_id(&mut conn, &project, segment.id)
+            .await
+            .is_err()
+    );
+}
+
 /// `list_overridden_features` (backs "SEGMENT describe") should return one entry per
 /// feature the segment overrides, each with its explicit weights plus the control
 /// variant's auto-balanced remainder - and nothing for features it doesn't touch.

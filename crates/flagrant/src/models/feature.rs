@@ -270,7 +270,12 @@ pub async fn patch(
     environment: &Environment,
     feature: &Feature,
     patch: FeaturePatch,
-) -> anyhow::Result<Feature> {
+) -> anyhow::Result<Option<Feature>> {
+    if patch.delete {
+        delete(conn, environment, feature).await?;
+        return Ok(None);
+    }
+
     patch.validate()?;
 
     let mut tx = conn.begin().await?;
@@ -388,7 +393,7 @@ pub async fn patch(
     }
 
     tx.commit().await?;
-    get_by_id(conn, environment, feature.id).await
+    get_by_id(conn, environment, feature.id).await.map(Some)
 }
 
 /// Permanently deletes a feature and all of its variants within a single transaction.

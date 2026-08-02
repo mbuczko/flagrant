@@ -40,7 +40,15 @@ impl Tabular for IdentityWithTraits {
     }
 
     fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
-        let title = format!("Identity: {} (ID={})", self.value, self.id);
+        let title = format!(
+            "IDENTITY: {}{}",
+            self.value,
+            if patch.is_some_and(|p| p.delete) {
+                " ⚠ MARKED FOR DELETION"
+            } else {
+                ""
+            }
+        );
         let eff_traits = effective::effective_identity_traits(self, patch);
 
         let mut trait_lines: Vec<String> = Vec::new();
@@ -49,11 +57,7 @@ impl Tabular for IdentityWithTraits {
         for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
             if t.is_deleted {
-                trait_lines.push(
-                    format_trait_value(&name, &t.value, true)
-                        .red()
-                        .to_string(),
-                );
+                trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
                 trait_stage.push("✕ deleting".red().to_string());
             } else if t.value_modified {
                 trait_lines.push(

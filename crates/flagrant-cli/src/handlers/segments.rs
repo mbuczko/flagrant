@@ -209,27 +209,50 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Delete a segment by name.
+/// Stage deletion of a segment by name.
 ///
 /// Expected args: `<name>`
+///
+/// Switches into the named segment's context first if not already there (same as `SEGMENT
+/// use`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
+/// any other pending change for this segment is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
-    let segment = fetch_segment(name, session)?;
-    {
-        let ctx = session.context.read().unwrap();
-        let res = ctx.project_resource();
-        ctx.client
-            .delete(res.subpath(format!("/segments/{}", segment.id)))?;
+
+    let already_in_context = session
+        .context
+        .read()
+        .unwrap()
+        .segment
+        .as_ref()
+        .is_some_and(|s| s.name == name.as_ref());
+
+    if !already_in_context {
+        stage::ensure_no_pending(session)?;
+        let segment = fetch_segment(name, session)?;
+
+        let mut ctx = session.context.write().unwrap();
+        ctx.variant_index.clear();
+        ctx.identity = None;
+        ctx.identity_patch = None;
+        ctx.segment = Some(segment);
     }
 
     let mut ctx = session.context.write().unwrap();
-
-    if ctx.segment.as_ref().map(|s| s.id) == Some(segment.id) {
-        ctx.segment = None;
+    let pending = ctx.get_or_init_segment_patch();
+    if !pending
+        .ops
+        .iter()
+        .any(|op| matches!(op, SegmentPatchOp::Delete))
+    {
+        pending.ops.push(SegmentPatchOp::Delete);
     }
-    println!("Segment '{}' deleted.", name);
+    println!(
+        "Staged: segment '{name}' marked for deletion. Run COMMIT to apply or DISCARD to cancel."
+    );
     Ok(())
 }
 
@@ -680,8 +703,16 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         .subpath(format!("/segments/{segment_id}"));
     let updated = ctx
         .client
-        .patch::<_, Segment>(path, patch)
+        .patch::<_, Option<Segment>>(path, patch)
         .map_err(|err| anyhow::anyhow!("Segment commit failed: {err}"))?;
+
+    let Some(updated) = updated else {
+        println!("Segment '{}' deleted.", ctx.segment.as_ref().unwrap().name);
+        ctx.segment = None;
+        ctx.segment_patch = None;
+
+        return Ok(());
+    };
 
     ctx.segment_patch = None;
     ctx.segment = Some(updated);
@@ -689,10 +720,12 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     let overrides = fetch_overridden_features(segment_id, session);
     let ctx = session.context.read().unwrap();
+
     ctx.segment
         .as_ref()
         .unwrap()
         .display(None, &SegmentContext { overrides });
+
     drop(ctx);
 
     // If this commit touched a feature's overrides, that feature's OVERRIDES section
@@ -701,7 +734,6 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     for feature_id in overridden_feature_ids {
         features::show_by_id(feature_id, session)?;
     }
-
     Ok(())
 }
 

@@ -132,13 +132,15 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Delete identities matching a pattern, within the current project/environment.
+/// Immediately delete every identity matching a pattern, within the current
+/// project/environment. Not staged - bulk/wildcard deletion doesn't fit a single entity's
+/// patch, so this bypasses `COMMIT`/`DISCARD` entirely, same as before.
 ///
 /// Expected args: `<pattern>`
 ///
 /// `pattern` uses `*` as a wildcard (e.g. "user-*", or "*" to delete every identity in the
 /// environment). A pattern without `*` deletes only the identity with that exact value.
-pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+pub fn drop_matching(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(pattern) = args.get(1) {
         let ctx = session.context.read().unwrap();
         ctx.client.delete(
@@ -150,6 +152,48 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         return Ok(());
     }
     bail!("No pattern provided.")
+}
+
+/// Stage deletion of a single identity by its exact value.
+///
+/// Expected args: `<identity>`
+///
+/// Switches into the named identity's context first if not already there (same as `IDENTITY
+/// use`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
+/// any other pending change for this identity is ignored by the server on commit.
+pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(identity_str) = args.get(1) else {
+        bail!("No identity provided.");
+    };
+
+    let already_in_context = session
+        .context
+        .read()
+        .unwrap()
+        .identity
+        .as_ref()
+        .is_some_and(|i| i.value == identity_str.as_ref());
+
+    if !already_in_context {
+        stage::ensure_no_pending(session)?;
+
+        let ctx = session.context.read().unwrap();
+        let identity = resolve_identity(&ctx, identity_str)?;
+        drop(ctx);
+
+        let mut ctx = session.context.write().unwrap();
+        ctx.identity = Some(identity);
+        ctx.segment = None;
+    }
+
+    let mut ctx = session.context.write().unwrap();
+    ctx.get_or_init_identity_patch().delete = true;
+
+    println!(
+        "Staged: identity '{identity_str}' marked for deletion. Run COMMIT to apply or DISCARD to cancel."
+    );
+    Ok(())
 }
 
 /// Switch into an identity context.
@@ -386,10 +430,10 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         _ => return Ok(()),
     };
 
-    let identity = ctx.identity.as_ref().unwrap().value.clone();
-    let path = ctx
-        .env_resource()
-        .subpath(format!("/identities/{identity}"));
+    let path = ctx.env_resource().subpath(format!(
+        "/identities/{}",
+        ctx.identity.as_ref().unwrap().value
+    ));
 
     // Overrides/unpins always target the feature currently in context - `ensure_no_pending`
     // forbids switching away from it while either is staged.
@@ -399,8 +443,19 @@ pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 
     let updated = ctx
         .client
-        .patch::<_, IdentityWithTraits>(path, patch)
+        .patch::<_, Option<IdentityWithTraits>>(path, patch)
         .map_err(|err| anyhow::anyhow!("Identity commit failed: {err}"))?;
+
+    let Some(updated) = updated else {
+        println!(
+            "Identity '{}' deleted.",
+            ctx.identity.as_ref().unwrap().value
+        );
+        ctx.identity = None;
+        ctx.identity_patch = None;
+
+        return Ok(());
+    };
 
     updated.display(None, &fetch_variant_assignments(&ctx, &updated));
     ctx.identity_patch = None;

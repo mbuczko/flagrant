@@ -70,7 +70,8 @@ pub async fn create_feature(
     .unwrap()
 }
 
-/// Stages and commits `ops` against `segment` in one patch call.
+/// Stages and commits `ops` against `segment` in one patch call. Panics if the batch staged
+/// deletion - callers of this helper always expect the segment to still exist afterward.
 #[allow(dead_code)]
 pub async fn apply(
     conn: &mut PoolConnection<Sqlite>,
@@ -81,6 +82,7 @@ pub async fn apply(
     segment::patch(conn, project, segment, SegmentPatch { ops })
         .await
         .unwrap()
+        .expect("apply() ops should not stage deletion")
 }
 
 #[allow(dead_code)]

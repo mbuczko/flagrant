@@ -803,6 +803,32 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
     assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
 }
 
+/// Staging `delete: true` alongside another change (here, a description update) must
+/// delete the feature and ignore the other change entirely - not apply it first and then
+/// delete, and not error out.
+#[sqlx::test]
+async fn patch_delete_ignores_other_staged_changes(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let patch = FeaturePatch {
+        description: Some("should never be applied".to_owned()),
+        delete: true,
+        ..Default::default()
+    };
+
+    let result = feature::patch(&mut conn, &environment, &feature, patch)
+        .await
+        .unwrap();
+    assert!(result.is_none());
+
+    assert!(
+        feature::get_by_id(&mut conn, &environment, feature.id)
+            .await
+            .is_err()
+    );
+}
+
 #[sqlx::test]
 async fn control_variant_weight_is_zero_when_others_sum_to_hundred(
     mut conn: PoolConnection<Sqlite>,
