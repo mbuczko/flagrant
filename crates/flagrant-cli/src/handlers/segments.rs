@@ -284,7 +284,12 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
                 })
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().name.as_str());
 
-            open_in_editor(current)?
+            let edited = open_in_editor(current)?;
+            if edited == current {
+                println!("No changes made.");
+                return Ok(());
+            }
+            edited
         }
     };
 

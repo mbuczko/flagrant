@@ -152,6 +152,12 @@ fn main() -> anyhow::Result<()> {
         Command::Feature.op("add", "feature value", handlers::features::add),
         Command::Feature.op("show", "feature", handlers::features::show),
         Command::Feature.op_in_context(
+            "rename",
+            "[name]",
+            handlers::features::rename,
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.op_in_context(
             "describe",
             "[description]",
             handlers::features::describe,
@@ -175,7 +181,7 @@ fn main() -> anyhow::Result<()> {
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · show · status · tag · use",
+            "add · delete · describe · list · rename · show · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),

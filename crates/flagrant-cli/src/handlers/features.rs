@@ -10,6 +10,7 @@
 //! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                      |
 //! | `FEATURE show`       | [`show`]               | Print details of a feature.                         |
 //! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
+//! | `FEATURE rename`     | [`rename`]             | Stage a feature name change.                        |
 //! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                        |
 //! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived'). |
 //! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.            |
@@ -96,6 +97,46 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         return Ok(());
     }
     bail!("No feature name provided.")
+}
+
+/// Stage a feature name change.
+///
+/// Expected args: `[name]`
+///
+/// If omitted, opens `$EDITOR` pre-filled with the feature's current (or already-staged)
+/// name so it can be edited interactively.
+pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+
+    let name = match args.get(1) {
+        Some(n) => n.to_string(),
+        None => {
+            let current: &str = ctx
+                .feature_patch
+                .as_ref()
+                .and_then(|p| p.name.as_deref())
+                .unwrap_or_else(|| ctx.feature.as_ref().unwrap().name.as_str());
+
+            let edited = open_in_editor(current)?;
+            if edited == current {
+                println!("No changes made.");
+                return Ok(());
+            }
+            edited
+        }
+    };
+
+    if name.is_empty() {
+        bail!("No name provided.");
+    }
+    println!("Staged: name = {name}");
+
+    ctx.get_or_init_pending().name = Some(name);
+    Ok(())
 }
 
 /// Stage a feature description change.

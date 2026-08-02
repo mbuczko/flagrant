@@ -100,6 +100,9 @@ pub struct IdentityTraitPayload {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct FeaturePatch {
+    #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
+    #[validate(max_length = 255)]
+    pub name: Option<String>,
     pub is_enabled: Option<bool>,
     pub is_archived: Option<bool>,
     pub description: Option<String>,
@@ -129,7 +132,8 @@ impl From<Feature> for NewFeaturePayload {
 
 impl FeaturePatch {
     pub fn is_empty(&self) -> bool {
-        self.is_enabled.is_none()
+        self.name.is_none()
+            && self.is_enabled.is_none()
             && self.is_archived.is_none()
             && self.description.is_none()
             && self.tags.is_empty()

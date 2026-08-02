@@ -281,8 +281,11 @@ pub async fn patch(
     let mut tx = conn.begin().await?;
 
     // Feature-level properties
-    if let Some(enabled) = patch.is_enabled {
-        SQLFeatures::update_feature(&mut *tx, params![feature.id, &feature.name, enabled])
+    if patch.name.is_some() || patch.is_enabled.is_some() {
+        let name = patch.name.as_deref().unwrap_or(&feature.name);
+        let enabled = patch.is_enabled.unwrap_or(feature.is_enabled);
+
+        SQLFeatures::update_feature(&mut *tx, params![feature.id, name, enabled])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
     }
@@ -297,18 +300,19 @@ pub async fn patch(
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature active state", e))?;
     }
+
     // Keep only the last op per tag name, so a caller sending redundant or conflicting
     // ops for the same tag (e.g. two `Add`s, or an `Add` and a `Remove`) doesn't run
     // more queries than necessary or apply them in a surprising order.
     let mut deduped_tags: Vec<TagPatchOp> = Vec::with_capacity(patch.tags.len());
+
     for op in patch.tags {
         let name = match &op {
             TagPatchOp::Add(tag) | TagPatchOp::Remove(tag) => tag,
         };
-        match deduped_tags
-            .iter_mut()
-            .find(|existing| matches!(existing, TagPatchOp::Add(t) | TagPatchOp::Remove(t) if t == name))
-        {
+        match deduped_tags.iter_mut().find(
+            |existing| matches!(existing, TagPatchOp::Add(t) | TagPatchOp::Remove(t) if t == name),
+        ) {
             Some(existing) => *existing = op,
             None => deduped_tags.push(op),
         }
@@ -351,6 +355,7 @@ pub async fn patch(
 
     // Group SetValue/SetWeight ops by variant id, fetch current state once, then update
     let mut update_map: HashMap<i32, (Option<FeatureValue>, Option<u8>)> = HashMap::new();
+
     for op in updates {
         match op {
             VariantPatchOp::SetValue { id, value } => {

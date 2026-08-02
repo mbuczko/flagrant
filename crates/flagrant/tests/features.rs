@@ -803,6 +803,49 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
     assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
 }
 
+#[sqlx::test]
+async fn patch_name_is_accepted(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+
+    let patch = FeaturePatch {
+        name: Some("renamed_feature".to_owned()),
+        ..Default::default()
+    };
+    assert!(
+        feature::patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_ok()
+    );
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.name, "renamed_feature");
+}
+
+#[sqlx::test]
+async fn patch_name_with_invalid_value_is_rejected(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "foo").await;
+    let original_name = feature.name.clone();
+
+    let patch = FeaturePatch {
+        name: Some("invalid name with spaces".to_owned()),
+        ..Default::default()
+    };
+    assert!(
+        feature::patch(&mut conn, &environment, &feature, patch)
+            .await
+            .is_err()
+    );
+
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    assert_eq!(feature.name, original_name);
+}
+
 /// Staging `delete: true` alongside another change (here, a description update) must
 /// delete the feature and ignore the other change entirely - not apply it first and then
 /// delete, and not error out.

@@ -96,6 +96,17 @@ impl Tabular for Feature {
                 ""
             }
         );
+
+        let name_str = match patch.and_then(|p| p.name.as_deref()) {
+            Some(n) => n.yellow().to_string(),
+            None => self.name.clone(),
+        };
+        let name_stage = if patch.is_some_and(|p| p.name.is_some()) {
+            "‣ updating".yellow().to_string()
+        } else {
+            String::new()
+        };
+
         let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if has_tag_ops {
             let names: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
@@ -401,7 +412,8 @@ impl Tabular for Feature {
         let overrides_stage_str = overrides_stages.join("\n");
         let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
 
-        let has_staged = !status_stage.is_empty()
+        let has_staged = !name_stage.is_empty()
+            || !status_stage.is_empty()
             || !desc_stage.is_empty()
             || !tags_stage.is_empty()
             || variant_stage.iter().any(|s| !s.is_empty())
@@ -444,6 +456,7 @@ impl Tabular for Feature {
 
         let rows: Vec<Vec<String>> = if has_staged {
             let mut rows = vec![
+                vec!["NAME".to_string(), name_str, name_stage],
                 vec!["STATUS".to_string(), status, status_stage],
                 vec!["VARIANTS".to_string(), variants, variants_stage_str],
             ];
@@ -459,6 +472,7 @@ impl Tabular for Feature {
             rows
         } else {
             let mut rows = vec![
+                vec!["NAME".to_string(), name_str],
                 vec!["STATUS".to_string(), status],
                 vec!["VARIANTS".to_string(), variants],
             ];
