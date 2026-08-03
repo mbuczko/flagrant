@@ -50,7 +50,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                         };
 
                         ctx.client
-                            .get::<Vec<Trait>>(project_res.subpath(format!("/traits?prefix={val}")))?
+                            .get::<Vec<Trait>>(
+                                project_res.subpath(format!("/traits?prefix={val}")),
+                            )?
                             .into_iter()
                             .map(|t| {
                                 let mut name = String::new();
@@ -247,7 +249,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 Ok(match op {
                     "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
-                    "show" | "delete" if arg_n == 2 => filter_by_prefix(&["group-"], prefix),
+                    "show" | "delete" | "describe" if arg_n == 2 => {
+                        filter_by_prefix(&["group-"], prefix)
+                    }
                     _ => vec![],
                 })
             }

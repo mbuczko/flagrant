@@ -47,6 +47,10 @@ RETURNING group_id, segment_id, position, label, connector, description
 -- :doc Deletes a group by id (rules are cascade-deleted)
 DELETE FROM segment_groups WHERE group_id = $1
 
+-- :name update_group_description :<> :!
+-- :doc Updates a group's description
+UPDATE segment_groups SET description = $2 WHERE group_id = $1
+
 -- :name clear_initial_group_connector :<> :!
 -- :doc Sets connector to NULL for the group with the lowest position (new head after deletion)
 UPDATE segment_groups SET connector = NULL

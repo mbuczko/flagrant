@@ -274,12 +274,18 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Group.op_in_context(
+            "describe",
+            "label [description]",
+            handlers::groups::describe,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.op_in_context(
             "delete",
             "label",
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
-        Command::Group.args_in_context("add · delete · show", in_context!(segment_ctx)),
+        Command::Group.args_in_context("add · delete · describe · show", in_context!(segment_ctx)),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",

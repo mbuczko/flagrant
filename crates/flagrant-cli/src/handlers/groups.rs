@@ -5,13 +5,17 @@
 //! | `GROUP add [--and|--and-not]`    | [`add`]      | Stage a new group on the current segment.            |
 //! | `GROUP show <label>`             | [`show`]     | Print details of a group with its rules.             |
 //! | `GROUP delete <label>`           | [`delete`]   | Stage a group deletion by label.                     |
+//! | `GROUP describe <label> [desc]`  | [`describe`] | Stage a group description change.                    |
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
-use crate::{handlers::internal::effectives as effective, printer::tabular::Tabular};
+use crate::{
+    handlers::{internal::effectives as effective, open_in_editor},
+    printer::tabular::Tabular,
+};
 
 /// Stage a group addition for the current segment.
 ///
@@ -105,6 +109,86 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         });
 
     println!("Staged: delete [{}]", label);
+    Ok(())
+}
+
+/// Stage a group description change.
+///
+/// Expected args: `<label> [description]`
+///
+/// If the description is omitted, opens `$EDITOR` pre-filled with the group's current (or
+/// already-staged) description so it can be edited interactively; leaving it blank clears
+/// the description.
+pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(label) = args.get(1) else {
+        bail!("No group label provided. Use: `GROUP describe <label> [description]`.");
+    };
+    let label: &str = label;
+
+    let mut ctx = session.context.write().unwrap();
+
+    if !ctx
+        .segment
+        .as_ref()
+        .is_some_and(|s| s.groups.iter().any(|g| g.label == label))
+    {
+        bail!("Group '{label}' not found in current segment.");
+    }
+
+    let desc = match args.get(2) {
+        Some(d) => Some(d.to_string()),
+        None => {
+            let current: Option<&str> = ctx
+                .segment_patch
+                .as_ref()
+                .and_then(|p| {
+                    p.ops.iter().find_map(|op| match op {
+                        SegmentPatchOp::SetGroupDescription {
+                            label: l,
+                            description,
+                        } if l == label => Some(description.as_deref()),
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| {
+                    ctx.segment
+                        .as_ref()
+                        .unwrap()
+                        .groups
+                        .iter()
+                        .find(|g| g.label == label)
+                        .and_then(|g| g.description.as_deref())
+                });
+
+            let edited = open_in_editor(current.unwrap_or(""))?;
+            let new_desc = (!edited.is_empty()).then_some(edited);
+
+            if new_desc.as_deref() == current {
+                println!("No changes made.");
+                return Ok(());
+            }
+            new_desc
+        }
+    };
+
+    println!(
+        "Staged: [{label}] description = {}",
+        desc.as_deref().unwrap_or_default()
+    );
+
+    let op = SegmentPatchOp::SetGroupDescription {
+        label: label.to_string(),
+        description: desc,
+    };
+    let patch = ctx.get_or_init_segment_patch();
+
+    if let Some(existing) = patch.ops.iter_mut().find(|o| {
+        matches!(o, SegmentPatchOp::SetGroupDescription { label: l, .. } if l == label)
+    }) {
+        *existing = op;
+    } else {
+        patch.ops.push(op);
+    }
     Ok(())
 }
 

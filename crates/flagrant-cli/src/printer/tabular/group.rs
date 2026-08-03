@@ -106,7 +106,18 @@ pub(super) fn group_body_lines(
     let desc_part = group
         .description
         .as_deref()
-        .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
+        .map(|d| {
+            let d_colored = if is_deleted {
+                d.red()
+            } else if group.description_modified {
+                d.yellow()
+            } else if group.is_staged_add {
+                d.green()
+            } else {
+                d.dimmed()
+            };
+            format!(" {} {}", "─".dimmed(), d_colored)
+        })
         .unwrap_or_default();
 
     lines.push(format!(
@@ -117,6 +128,8 @@ pub(super) fn group_body_lines(
         "✕ deleting".red().to_string()
     } else if group.is_staged_add {
         "‣ adding".green().to_string()
+    } else if group.description_modified {
+        "‣ updating".yellow().to_string()
     } else {
         String::new()
     });

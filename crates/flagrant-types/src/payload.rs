@@ -207,6 +207,10 @@ pub enum SegmentPatchOp {
     DeleteGroup {
         label: String,
     },
+    SetGroupDescription {
+        label: String,
+        description: Option<String>,
+    },
     AddRule {
         group_label: String,
         subject: Subject,

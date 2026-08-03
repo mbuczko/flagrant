@@ -286,6 +286,19 @@ pub async fn delete_group(
     Ok(())
 }
 
+/// Updates a group's description by id.
+pub async fn set_group_description(
+    conn: &mut SqliteConnection,
+    group_id: i32,
+    description: Option<String>,
+) -> anyhow::Result<()> {
+    SQLSegments::update_group_description::<_>(&mut *conn, params![group_id, description])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update group description", e))?;
+
+    Ok(())
+}
+
 /// Applies a batch of staged operations to a segment and returns the updated segment.
 ///
 /// Each op is executed immediately against the DB; the in-memory `segment` is kept in
@@ -340,6 +353,16 @@ pub async fn patch(
                 if let Some(head) = segment.groups.first_mut() {
                     head.connector = None;
                 }
+            }
+            SegmentPatchOp::SetGroupDescription { label, description } => {
+                let group = segment
+                    .groups
+                    .iter_mut()
+                    .find(|g| g.label == label)
+                    .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
+
+                set_group_description(conn, group.id, description.clone()).await?;
+                group.description = description;
             }
             SegmentPatchOp::AddRule {
                 group_label,

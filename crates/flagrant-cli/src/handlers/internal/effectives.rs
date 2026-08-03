@@ -66,6 +66,8 @@ pub(crate) struct EffectiveGroup {
     pub rules: Vec<EffectiveRule>,
     pub is_staged_add: bool,
     pub is_deleted: bool,
+    /// True when a staged `SetGroupDescription` op changed the committed description.
+    pub description_modified: bool,
 }
 
 pub(crate) struct EffectiveSegment {
@@ -283,6 +285,16 @@ pub(crate) fn effective_segment(
         })
         .collect();
 
+    let group_desc_overrides: HashMap<&str, Option<&str>> = ops
+        .iter()
+        .filter_map(|op| match op {
+            SegmentPatchOp::SetGroupDescription { label, description } => {
+                Some((label.as_str(), description.as_deref()))
+            }
+            _ => None,
+        })
+        .collect();
+
     let mut staged_rules_by_label: HashMap<&str, Vec<&SegmentPatchOp>> = HashMap::new();
     for op in ops {
         if let SegmentPatchOp::AddRule { group_label, .. } = op {
@@ -346,13 +358,26 @@ pub(crate) fn effective_segment(
                 }
             }
 
+            let description_modified =
+                !is_deleted && group_desc_overrides.contains_key(g.label.as_str());
+            let description = if description_modified {
+                group_desc_overrides
+                    .get(g.label.as_str())
+                    .copied()
+                    .flatten()
+                    .map(|d| d.to_string())
+            } else {
+                g.description.clone()
+            };
+
             EffectiveGroup {
                 label: g.label.clone(),
-                description: g.description.clone(),
+                description,
                 connector: g.connector.clone(),
                 rules,
                 is_staged_add: false,
                 is_deleted,
+                description_modified,
             }
         })
         .collect();
@@ -425,6 +450,7 @@ pub(crate) fn effective_segment(
                 rules,
                 is_staged_add: true,
                 is_deleted: false,
+                description_modified: false,
             });
         }
     }
