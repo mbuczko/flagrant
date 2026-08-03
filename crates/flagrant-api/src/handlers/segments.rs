@@ -270,7 +270,7 @@ pub async fn add_rule(
         &mut conn,
         segment.id,
         group_id,
-        payload.driver,
+        payload.subject,
         payload.comparator,
         payload.value,
     )

@@ -75,7 +75,7 @@ use utoipa::OpenApi;
             flagrant_types::Segment,
             flagrant_types::SegmentGroup,
             flagrant_types::SegmentRule,
-            flagrant_types::SegmentDriver,
+            flagrant_types::Subject,
             flagrant_types::Comparator,
             flagrant_types::GroupConnector,
             flagrant_types::payload::NewSegmentPayload,

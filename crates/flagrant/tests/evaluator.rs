@@ -3,7 +3,7 @@ use flagrant::{
     models::{identity, segment, variant},
 };
 use flagrant_types::{
-    Comparator, FeatureValue, GroupConnector, SegmentDriver,
+    Comparator, FeatureValue, GroupConnector, Subject,
     payload::{SegmentPatchOp, SegmentVariantWeight},
 };
 use sqlx::{Sqlite, pool::PoolConnection};
@@ -62,7 +62,7 @@ async fn matching_segment_returns_its_id(mut conn: PoolConnection<Sqlite>) {
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -123,7 +123,7 @@ async fn segment_with_non_matching_rule_returns_none(mut conn: PoolConnection<Sq
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -193,7 +193,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "someone-else",
             ),
@@ -221,7 +221,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -272,7 +272,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
     .await
     .unwrap();
 
-    // Both segments match every identity in "prod" via the Environment driver.
+    // Both segments match every identity in "prod" via the Environment subject.
     let older = segment::create(&mut conn, &project, "older".to_owned(), None)
         .await
         .unwrap();
@@ -285,7 +285,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 &environment.name,
             ),
@@ -313,7 +313,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 &environment.name,
             ),
@@ -378,13 +378,13 @@ async fn rules_within_a_group_are_or_ed(mut conn: PoolConnection<Sqlite>) {
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "nobody",
             ),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -446,7 +446,7 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -462,7 +462,7 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
             add_group(Some(GroupConnector::AndNot)),
             add_rule(
                 "group-2",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "banned-user",
             ),
@@ -524,7 +524,7 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-vip",
             ),
@@ -624,10 +624,10 @@ async fn segment_with_zero_groups_never_matches(mut conn: PoolConnection<Sqlite>
     assert!(result.is_none());
 }
 
-/// A `Trait` driver rule matches against a trait loaded from the DB - exercising the real
+/// A `Trait` subject rule matches against a trait loaded from the DB - exercising the real
 /// `IdentityWithTraits` shape (not the synthetic one used by evaluator.rs's unit tests).
 #[sqlx::test]
-async fn trait_driver_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>) {
+async fn trait_subject_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>) {
     let (project, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "control").await;
     let alt = variant::create(
@@ -652,7 +652,7 @@ async fn trait_driver_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite>
             add_group(None),
             add_rule(
                 "group-1",
-                SegmentDriver::Trait("plan".to_owned()),
+                Subject::Trait("plan".to_owned()),
                 Comparator::ExactlyMatches,
                 "premium",
             ),

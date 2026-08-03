@@ -1,7 +1,6 @@
 use flagrant::models::{environment, feature, project, segment};
 use flagrant_types::{
-    Environment, Feature, FeatureValue, GroupConnector, Project, Segment, SegmentDriver,
-    Comparator,
+    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, Segment, Subject,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use rand::Rng;
@@ -88,13 +87,13 @@ pub async fn apply(
 #[allow(dead_code)]
 pub fn add_rule(
     group_label: &str,
-    driver: SegmentDriver,
+    subject: Subject,
     comparator: Comparator,
     value: &str,
 ) -> SegmentPatchOp {
     SegmentPatchOp::AddRule {
         group_label: group_label.to_owned(),
-        driver,
+        subject,
         comparator,
         value: value.to_owned(),
     }

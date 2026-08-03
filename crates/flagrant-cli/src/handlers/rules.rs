@@ -1,18 +1,18 @@
 //! REPL command handlers for segment rule management.
 //!
-//! | Command                              | Handler        | Description                                        |
-//! |--------------------------------------|----------------|----------------------------------------------------|
-//! | `RULE add <label> <driver> <cmp> <v>`| [`add`]        | Stage a new rule on a group in the current segment.|
-//! | `RULE delete <label> <index>`        | [`delete`]     | Stage a rule deletion by 1-based index.            |
-//! | `RULE show <label> <index>`          | [`show`]       | Print details of a single rule within a group.     |
-//! | `RULE value <label> <index> [v]`     | [`value`]      | Stage a value change for an existing rule.         |
-//! | `RULE comparator <label> <index> [c]`| [`comparator`] | Stage a comparator change for an existing rule.    |
+//! | Command                               | Handler        | Description                                        |
+//! |---------------------------------------|----------------|----------------------------------------------------|
+//! | `RULE add <label> <subject> <cmp> <v>`| [`add`]        | Stage a new rule on a group in the current segment.|
+//! | `RULE delete <label> <index>`         | [`delete`]     | Stage a rule deletion by 1-based index.            |
+//! | `RULE show <label> <index>`           | [`show`]       | Print details of a single rule within a group.     |
+//! | `RULE value <label> <index> [v]`      | [`value`]      | Stage a value change for an existing rule.         |
+//! | `RULE comparator <label> <index> [c]` | [`comparator`] | Stage a comparator change for an existing rule.    |
 
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Comparator, SegmentDriver, SegmentRule,
+    Comparator, SegmentRule, Subject,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use strum::IntoEnumIterator;
@@ -24,15 +24,15 @@ use crate::{
 
 /// Stage a rule addition on a group in the current segment.
 ///
-/// Expected args: `<group-label> <driver> <comparator> <value>`
+/// Expected args: `<group-label> <subject> <comparator> <value>`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let label = args.get(1).ok_or_else(|| {
         anyhow::anyhow!(
-            "Missing group label. Expected: RULE add <group-label> <driver> <comparator> <value>"
+            "Missing group label. Expected: RULE add <group-label> <subject> <comparator> <value>"
         )
     })?;
-    let driver_str = args.get(2).ok_or_else(|| {
-        anyhow::anyhow!("Missing driver. Expected: identity, environment, trait:<name>")
+    let subject_str = args.get(2).ok_or_else(|| {
+        anyhow::anyhow!("Missing subject. Expected: identity, environment, trait:<name>")
     })?;
     let comparator_str = args
         .get(3)
@@ -41,7 +41,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .get(4)
         .ok_or_else(|| anyhow::anyhow!("Missing value."))?;
 
-    let driver = parse_driver(driver_str)?;
+    let subject = parse_subject(subject_str)?;
     let comparator = parse_comparator(comparator_str)?;
     let mut ctx = session.context.write().unwrap();
 
@@ -52,7 +52,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .ops
         .push(SegmentPatchOp::AddRule {
             group_label: label.to_string(),
-            driver,
+            subject,
             comparator,
             value: value.to_string(),
         });
@@ -331,19 +331,19 @@ fn build_comparator_editor_content(current: &Comparator) -> String {
     content
 }
 
-fn parse_driver(s: &str) -> anyhow::Result<SegmentDriver> {
+fn parse_subject(s: &str) -> anyhow::Result<Subject> {
     match s {
-        "identity" => Ok(SegmentDriver::Identity),
-        "environment" => Ok(SegmentDriver::Environment),
+        "identity" => Ok(Subject::Identity),
+        "environment" => Ok(Subject::Environment),
         _ if s.starts_with("trait:") => {
             let name = s.trim_start_matches("trait:");
             if name.is_empty() {
                 bail!("Trait name cannot be empty. Use: trait:<name>");
             }
-            Ok(SegmentDriver::Trait(name.to_string()))
+            Ok(Subject::Trait(name.to_string()))
         }
         _ => bail!(
-            "Unknown driver '{}'. Expected: identity, environment, trait:<name>",
+            "Unknown subject '{}'. Expected: identity, environment, trait:<name>",
             s
         ),
     }

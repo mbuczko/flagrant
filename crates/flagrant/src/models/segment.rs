@@ -343,7 +343,7 @@ pub async fn patch(
             }
             SegmentPatchOp::AddRule {
                 group_label,
-                driver,
+                subject,
                 comparator,
                 value,
             } => {
@@ -353,7 +353,7 @@ pub async fn patch(
                     .find(|g| g.label == group_label)
                     .map(|g| g.id)
                     .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
-                let sr = rule::add(conn, segment.id, group_id, driver, comparator, value).await?;
+                let sr = rule::add(conn, segment.id, group_id, subject, comparator, value).await?;
 
                 if let Some(g) = segment.groups.iter_mut().find(|g| g.label == group_label) {
                     g.rules.push(sr);

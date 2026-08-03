@@ -8,8 +8,8 @@
 use std::{borrow::Cow, cmp::Ordering};
 
 use flagrant_types::{
-    Comparator, Environment, GroupConnector, IdentityTrait, Project, Segment, SegmentDriver,
-    SegmentGroup, SegmentRule, TraitValue,
+    Comparator, Environment, GroupConnector, IdentityTrait, Project, Segment, SegmentGroup,
+    SegmentRule, Subject, TraitValue,
 };
 use sqlx::SqliteConnection;
 
@@ -26,16 +26,16 @@ pub struct IdentityContext<'a> {
     pub traits: &'a [IdentityTrait],
 }
 
-/// The value a rule's driver resolves to, for comparison against `SegmentRule.value`.
+/// The value a rule's subject resolves to, for comparison against `SegmentRule.value`.
 ///
 /// Distinct from `flagrant_types::TraitValue` on purpose: `TraitValue` is the domain type
-/// for an identity trait's stored value. `Identity`/`Environment` drivers don't resolve to
+/// for an identity trait's stored value. `Identity`/`Environment` subjects don't resolve to
 /// a trait at all - they read the identity's own value / the environment's name - so
 /// wrapping them in `TraitValue` would misrepresent them as trait data. `ActualValue` is the
-/// evaluator's own "comparable value" shape; a `Trait(name)` driver converts the identity's
+/// evaluator's own "comparable value" shape; a `Trait(name)` subject converts the identity's
 /// `TraitValue` into one.
 ///
-/// Borrows rather than owns (so `Str(&'a str)`, not `Str(String)`) so resolving a driver
+/// Borrows rather than owns (so `Str(&'a str)`, not `Str(String)`) so resolving a subject
 /// never needs to clone the identity's value, the environment's name, or a trait's string -
 /// everything it points at already lives in `Environment`/`IdentityContext`/`SegmentRule`
 /// for at least as long as one rule evaluation.
@@ -117,32 +117,32 @@ fn group_matches(
         .any(|rule| rule_matches(rule, environment, identity))
 }
 
-/// Resolves `rule.driver` to an actual value, then dispatches to `comparator_matches`.
-/// Fail-closed: a `Trait(name)` driver whose trait is absent from `identity` (or present
+/// Resolves `rule.subject` to an actual value, then dispatches to `comparator_matches`.
+/// Fail-closed: a `Trait(name)` subject whose trait is absent from `identity` (or present
 /// with `value: None`) never matches, regardless of comparator polarity.
 fn rule_matches(
     rule: &SegmentRule,
     environment: &Environment,
     identity: &IdentityContext<'_>,
 ) -> bool {
-    let Some(actual) = resolve_actual(&rule.driver, environment, identity) else {
+    let Some(actual) = resolve_actual(&rule.subject, environment, identity) else {
         return false;
     };
     comparator_matches(&rule.comparator, &actual, &rule.value)
 }
 
-/// Resolves the driver to the concrete value from the request context. `Identity` and
+/// Resolves the subject to the concrete value from the request context. `Identity` and
 /// `Environment` are plain contextual strings, not trait data - only `Trait(name)` involves
 /// an actual `TraitValue`, converted here into the evaluator's own `ActualValue`.
 fn resolve_actual<'a>(
-    driver: &SegmentDriver,
+    subject: &Subject,
     environment: &'a Environment,
     identity: &IdentityContext<'a>,
 ) -> Option<ActualValue<'a>> {
-    match driver {
-        SegmentDriver::Identity => Some(ActualValue::Str(identity.value)),
-        SegmentDriver::Environment => Some(ActualValue::Str(&environment.name)),
-        SegmentDriver::Trait(name) => identity
+    match subject {
+        Subject::Identity => Some(ActualValue::Str(identity.value)),
+        Subject::Environment => Some(ActualValue::Str(&environment.name)),
+        Subject::Trait(name) => identity
             .traits
             .iter()
             .find(|t| &t.name == name)
@@ -231,7 +231,7 @@ fn json_equals(actual: &ActualValue, item: &serde_json::Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use flagrant_types::{IdentityTrait, SegmentDriver};
+    use flagrant_types::{IdentityTrait, Subject};
 
     use super::*;
 
@@ -275,10 +275,10 @@ mod tests {
         }
     }
 
-    fn rule(driver: SegmentDriver, comparator: Comparator, value: &str) -> SegmentRule {
+    fn rule(subject: Subject, comparator: Comparator, value: &str) -> SegmentRule {
         SegmentRule {
             id: 1,
-            driver,
+            subject,
             comparator,
             value: value.to_string(),
         }
@@ -419,10 +419,10 @@ mod tests {
     // -- rule_matches / resolve_actual ----------------------------------------------------
 
     #[test]
-    fn identity_driver_matches_against_identity_value() {
+    fn identity_subject_matches_against_identity_value() {
         let id = identity("user-42", vec![]);
         let r = rule(
-            SegmentDriver::Identity,
+            Subject::Identity,
             Comparator::ExactlyMatches,
             "user-42",
         );
@@ -430,10 +430,10 @@ mod tests {
     }
 
     #[test]
-    fn environment_driver_matches_against_environment_name() {
+    fn environment_subject_matches_against_environment_name() {
         let id = identity("user-42", vec![]);
         let r = rule(
-            SegmentDriver::Environment,
+            Subject::Environment,
             Comparator::ExactlyMatches,
             "prod",
         );
@@ -442,13 +442,13 @@ mod tests {
     }
 
     #[test]
-    fn trait_driver_matches_named_trait_value() {
+    fn trait_subject_matches_named_trait_value() {
         let id = identity(
             "user-42",
             vec![("plan", Some(TraitValue::Str("premium".into())))],
         );
         let r = rule(
-            SegmentDriver::Trait("plan".into()),
+            Subject::Trait("plan".into()),
             Comparator::ExactlyMatches,
             "premium",
         );
@@ -456,15 +456,15 @@ mod tests {
     }
 
     #[test]
-    fn trait_driver_never_matches_when_trait_absent_regardless_of_polarity() {
+    fn trait_subject_never_matches_when_trait_absent_regardless_of_polarity() {
         let id = identity("user-42", vec![]);
         let matches_rule = rule(
-            SegmentDriver::Trait("plan".into()),
+            Subject::Trait("plan".into()),
             Comparator::ExactlyMatches,
             "premium",
         );
         let does_not_match_rule = rule(
-            SegmentDriver::Trait("plan".into()),
+            Subject::Trait("plan".into()),
             Comparator::DoesNotMatch,
             "premium",
         );
@@ -473,10 +473,10 @@ mod tests {
     }
 
     #[test]
-    fn trait_driver_never_matches_when_trait_present_with_no_value() {
+    fn trait_subject_never_matches_when_trait_present_with_no_value() {
         let id = identity("user-42", vec![("plan", None)]);
         let does_not_match_rule = rule(
-            SegmentDriver::Trait("plan".into()),
+            Subject::Trait("plan".into()),
             Comparator::DoesNotMatch,
             "premium",
         );
@@ -491,9 +491,9 @@ mod tests {
         let g = group(
             None,
             vec![
-                rule(SegmentDriver::Identity, Comparator::ExactlyMatches, "nope"),
+                rule(Subject::Identity, Comparator::ExactlyMatches, "nope"),
                 rule(
-                    SegmentDriver::Identity,
+                    Subject::Identity,
                     Comparator::ExactlyMatches,
                     "user-42",
                 ),
@@ -523,7 +523,7 @@ mod tests {
         let head = group(
             None,
             vec![rule(
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-42",
             )],
@@ -531,7 +531,7 @@ mod tests {
         let matching_tail = group(
             Some(GroupConnector::And),
             vec![rule(
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 "prod",
             )],
@@ -539,7 +539,7 @@ mod tests {
         let non_matching_tail = group(
             Some(GroupConnector::And),
             vec![rule(
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 "staging",
             )],
@@ -563,7 +563,7 @@ mod tests {
         let head = group(
             None,
             vec![rule(
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-42",
             )],
@@ -571,7 +571,7 @@ mod tests {
         let non_matching_tail = group(
             Some(GroupConnector::AndNot),
             vec![rule(
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 "staging",
             )],
@@ -579,7 +579,7 @@ mod tests {
         let matching_tail = group(
             Some(GroupConnector::AndNot),
             vec![rule(
-                SegmentDriver::Environment,
+                Subject::Environment,
                 Comparator::ExactlyMatches,
                 "prod",
             )],
@@ -603,7 +603,7 @@ mod tests {
         let head = group(
             None,
             vec![rule(
-                SegmentDriver::Identity,
+                Subject::Identity,
                 Comparator::ExactlyMatches,
                 "user-42",
             )],

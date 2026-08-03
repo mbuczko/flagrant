@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use flagrant_types::{
-    Comparator, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Segment, SegmentDriver,
+    Comparator, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Segment, Subject,
     TraitValue,
     payload::{
         FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TraitPatchOp, VariantPatchOp,
@@ -48,7 +48,7 @@ pub(crate) struct EffectiveTrait {
 }
 
 pub(crate) struct EffectiveRule {
-    pub driver: SegmentDriver,
+    pub subject: Subject,
     pub comparator: Comparator,
     pub value: String,
     pub is_staged_add: bool,
@@ -307,7 +307,7 @@ pub(crate) fn effective_segment(
                     let comparator_modified =
                         !rule_is_deleted && rule_comparator_overrides.contains_key(&r.id);
                     EffectiveRule {
-                        driver: r.driver.clone(),
+                        subject: r.subject.clone(),
                         comparator: rule_comparator_overrides
                             .get(&r.id)
                             .map(|c| (*c).clone())
@@ -327,14 +327,14 @@ pub(crate) fn effective_segment(
             if !is_deleted && let Some(staged) = staged_rules_by_label.get(g.label.as_str()) {
                 for op in staged {
                     if let SegmentPatchOp::AddRule {
-                        driver,
+                        subject,
                         comparator,
                         value,
                         ..
                     } = op
                     {
                         rules.push(EffectiveRule {
-                            driver: driver.clone(),
+                            subject: subject.clone(),
                             comparator: comparator.clone(),
                             value: value.clone(),
                             is_staged_add: true,
@@ -388,14 +388,14 @@ pub(crate) fn effective_segment(
                         .iter()
                         .filter_map(|op| {
                             if let SegmentPatchOp::AddRule {
-                                driver,
+                                subject,
                                 comparator,
                                 value,
                                 ..
                             } = op
                             {
                                 Some(EffectiveRule {
-                                    driver: driver.clone(),
+                                    subject: subject.clone(),
                                     comparator: comparator.clone(),
                                     value: value.clone(),
                                     is_staged_add: true,

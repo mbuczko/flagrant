@@ -2,8 +2,13 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 
 use super::Tabular;
-use super::segment::{UTF_BTM_CORNER, UTF_TOP_CORNER, UTF_VERT_BAR, format_comparator, format_connector, format_driver};
+use super::rule::subject_label;
+use super::segment::format_connector;
 use crate::handlers::internal::effectives::{EffectiveGroup, EffectiveRule};
+
+const UTF_VERT_BAR: &str = "│";
+const UTF_TOP_CORNER: &str = "╭─";
+const UTF_BTM_CORNER: &str = "╰───";
 
 /// Renders one rule as a single compact colored line (with its stage annotation), used both
 /// when a group is shown standalone and when a segment inlines every one of its groups' rules.
@@ -15,17 +20,17 @@ pub(super) fn rule_line(
     rule: &EffectiveRule,
     display_idx: usize,
     group_deleted: bool,
-    max_driver: usize,
+    max_subject: usize,
 ) -> (String, String) {
-    let driver = format_driver(&rule.driver);
-    let cmp = format_comparator(&rule.comparator);
+    let subject = subject_label(&rule.subject);
+    let cmp = rule.comparator.to_string();
 
-    let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
+    let (pipe, idx_str, subject_s, cmp_s, val_s, rule_stage) =
         if group_deleted || rule.is_deleted {
             (
                 UTF_VERT_BAR.dimmed(),
                 display_idx.to_string().red(),
-                driver.red(),
+                subject.red(),
                 cmp.red(),
                 rule.value.as_str().red(),
                 if rule.is_deleted {
@@ -38,7 +43,7 @@ pub(super) fn rule_line(
             (
                 UTF_VERT_BAR.dimmed(),
                 "+".green(),
-                driver.bright_blue(),
+                subject.bright_blue(),
                 cmp.dimmed(),
                 rule.value.as_str().green(),
                 "‣ adding".green().to_string(),
@@ -47,7 +52,7 @@ pub(super) fn rule_line(
             (
                 UTF_VERT_BAR.dimmed(),
                 display_idx.to_string().dimmed(),
-                driver.bright_blue(),
+                subject.bright_blue(),
                 if rule.comparator_modified {
                     cmp.yellow()
                 } else {
@@ -64,14 +69,14 @@ pub(super) fn rule_line(
             (
                 UTF_VERT_BAR.dimmed(),
                 display_idx.to_string().dimmed(),
-                driver.bright_blue(),
+                subject.bright_blue(),
                 cmp.dimmed(),
                 rule.value.as_str().green(),
                 String::new(),
             )
         };
 
-    let line = format!("{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}", dw = max_driver);
+    let line = format!("{pipe}  {idx_str}  {subject_s:<dw$}  {cmp_s}  {val_s}", dw = max_subject);
     (line, rule_stage)
 }
 
@@ -124,16 +129,16 @@ pub(super) fn group_body_lines(
         ));
         stages.push(String::new());
     } else {
-        let max_driver = group
+        let max_subject = group
             .rules
             .iter()
-            .map(|r| format_driver(&r.driver).len())
+            .map(|r| subject_label(&r.subject).len())
             .max()
             .unwrap_or(0);
 
         let mut display_idx = 1usize;
         for r in &group.rules {
-            let (line, stage) = rule_line(r, display_idx, is_deleted, max_driver);
+            let (line, stage) = rule_line(r, display_idx, is_deleted, max_subject);
             lines.push(line);
             stages.push(stage);
 

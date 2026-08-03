@@ -1,9 +1,17 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
+use flagrant_types::Subject;
 
 use super::Tabular;
-use super::segment::{format_comparator, format_driver};
 use crate::handlers::internal::effectives::EffectiveRule;
+
+pub(super) fn subject_label(subject: &Subject) -> String {
+    match subject {
+        Subject::Identity => "identity".to_string(),
+        Subject::Trait(name) => format!("trait:{name}"),
+        Subject::Environment => "environment".to_string(),
+    }
+}
 
 impl Tabular for EffectiveRule {
     type Patch = ();
@@ -16,11 +24,11 @@ impl Tabular for EffectiveRule {
         let (group_label, index) = ctx;
         let title = format!("RULE #{index}").bold().to_string();
 
-        let (driver_s, comparator_s, value_s, driver_stage, comparator_stage, value_stage) =
+        let (subject_s, comparator_s, value_s, subject_stage, comparator_stage, value_stage) =
             if rule.is_deleted {
                 (
-                    format_driver(&rule.driver).red(),
-                    format_comparator(&rule.comparator).red(),
+                    subject_label(&rule.subject).red(),
+                    rule.comparator.to_string().red(),
                     rule.value.red(),
                     "✕ deleting".red().to_string(),
                     "✕ deleting".red().to_string(),
@@ -28,11 +36,11 @@ impl Tabular for EffectiveRule {
                 )
             } else {
                 (
-                    format_driver(&rule.driver).bright_blue(),
+                    subject_label(&rule.subject).bright_blue(),
                     if rule.comparator_modified {
-                        format_comparator(&rule.comparator).yellow()
+                        rule.comparator.to_string().yellow()
                     } else {
-                        format_comparator(&rule.comparator).dimmed()
+                        rule.comparator.to_string().dimmed()
                     },
                     if rule.value_modified {
                         rule.value.as_str().yellow()
@@ -54,7 +62,7 @@ impl Tabular for EffectiveRule {
             };
 
         let has_staged =
-            !driver_stage.is_empty() || !comparator_stage.is_empty() || !value_stage.is_empty();
+            !subject_stage.is_empty() || !comparator_stage.is_empty() || !value_stage.is_empty();
 
         if !has_staged {
             let table = FancyTable::create(FancyTableOpts::default())
@@ -72,7 +80,7 @@ impl Tabular for EffectiveRule {
                 .build();
             table.render(vec![
                 vec!["group".to_string(), group_label.clone()],
-                vec!["driver".to_string(), driver_s.to_string()],
+                vec!["subject".to_string(), subject_s.to_string()],
                 vec!["comparator".to_string(), comparator_s.to_string()],
                 vec!["value".to_string(), value_s.to_string()],
             ]);
@@ -94,7 +102,11 @@ impl Tabular for EffectiveRule {
 
             table.render(vec![
                 vec!["group".to_string(), group_label.clone(), String::new()],
-                vec!["driver".to_string(), driver_s.to_string(), driver_stage],
+                vec![
+                    "subject".to_string(),
+                    subject_s.to_string(),
+                    subject_stage,
+                ],
                 vec![
                     "comparator".to_string(),
                     comparator_s.to_string(),

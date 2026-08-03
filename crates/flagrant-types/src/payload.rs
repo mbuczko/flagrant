@@ -3,7 +3,7 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, SegmentDriver,
+    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, Subject,
     TraitValue,
 };
 
@@ -185,7 +185,7 @@ pub struct NewGroupPayload {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewRulePayload {
-    pub driver: SegmentDriver,
+    pub subject: Subject,
     pub comparator: Comparator,
     pub value: String,
 }
@@ -209,7 +209,7 @@ pub enum SegmentPatchOp {
     },
     AddRule {
         group_label: String,
-        driver: SegmentDriver,
+        subject: Subject,
         comparator: Comparator,
         value: String,
     },

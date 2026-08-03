@@ -1,17 +1,13 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Comparator, GroupConnector, OverriddenVariant, Segment, SegmentDriver, SegmentFeatureOverride,
+    GroupConnector, OverriddenVariant, Segment, SegmentFeatureOverride,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 
 use crate::handlers::internal::effectives as effective;
 
 use super::Tabular;
-
-pub(super) const UTF_VERT_BAR: &str = "│";
-pub(super) const UTF_TOP_CORNER: &str = "╭─";
-pub(super) const UTF_BTM_CORNER: &str = "╰───";
 
 /// Context passed to `Segment::display` to show the features this segment overrides.
 #[derive(Default)]
@@ -243,18 +239,6 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
             format!("{marker}{first_line} → {}", format!("{}%", w.weight).bold())
         })
         .collect()
-}
-
-pub(super) fn format_driver(driver: &SegmentDriver) -> String {
-    match driver {
-        SegmentDriver::Identity => "identity".to_string(),
-        SegmentDriver::Trait(name) => format!("trait:{name}"),
-        SegmentDriver::Environment => "environment".to_string(),
-    }
-}
-
-pub(super) fn format_comparator(comparator: &Comparator) -> String {
-    comparator.to_string()
 }
 
 pub(super) fn format_connector(connector: &GroupConnector) -> &'static str {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use flagrant_types::{Comparator, SegmentDriver, SegmentGroup, SegmentRule};
+use flagrant_types::{Comparator, SegmentGroup, SegmentRule, Subject};
 use hugsqlx::{HugSqlx, params};
 use sqlx::SqliteConnection;
 
@@ -15,7 +15,8 @@ struct SQLSegments {}
 struct RuleRow {
     rule_id: i32,
     group_id: i32,
-    driver: SegmentDriver,
+    #[sqlx(rename = "driver")]
+    subject: Subject,
     comparator: Comparator,
     value: String,
 }
@@ -28,13 +29,13 @@ pub async fn add(
     conn: &mut SqliteConnection,
     segment_id: i32,
     group_id: i32,
-    driver: SegmentDriver,
+    subject: Subject,
     comparator: Comparator,
     value: String,
 ) -> anyhow::Result<SegmentRule> {
     let rule = SQLSegments::add_rule::<_, SegmentRule>(
         &mut *conn,
-        params![group_id, driver, comparator, value],
+        params![group_id, subject, comparator, value],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not add rule", e))?;
@@ -129,7 +130,7 @@ fn collect_rules(rows: Vec<RuleRow>) -> HashMap<i32, Vec<SegmentRule>> {
     for row in rows {
         map.entry(row.group_id).or_default().push(SegmentRule {
             id: row.rule_id,
-            driver: row.driver,
+            subject: row.subject,
             comparator: row.comparator,
             value: row.value,
         });

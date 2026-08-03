@@ -135,7 +135,7 @@ pub struct IdentityVariant {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum SegmentDriver {
+pub enum Subject {
     /// Match against the identity value string (e.g. email, user ID).
     Identity,
     /// Match against a named identity trait. The `String` is the trait name.
@@ -181,7 +181,8 @@ pub enum Comparator {
 pub struct SegmentRule {
     #[sqlx(rename = "rule_id")]
     pub id: i32,
-    pub driver: SegmentDriver,
+    #[sqlx(rename = "driver")]
+    pub subject: Subject,
     pub comparator: Comparator,
     /// For `In`/`NotIn` comparators this is a JSON array string; otherwise a plain value.
     pub value: String,
@@ -194,12 +195,12 @@ pub enum GroupConnector {
     AndNot,
 }
 
-impl sqlx::Type<Sqlite> for SegmentDriver {
+impl sqlx::Type<Sqlite> for Subject {
     fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
         <String as Type<Sqlite>>::type_info()
     }
 }
-impl Encode<'_, Sqlite> for SegmentDriver {
+impl Encode<'_, Sqlite> for Subject {
     fn encode_by_ref(
         &self,
         buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
@@ -212,14 +213,14 @@ impl Encode<'_, Sqlite> for SegmentDriver {
         Encode::<Sqlite>::encode(s, buf)
     }
 }
-impl<'r> Decode<'r, Sqlite> for SegmentDriver {
+impl<'r> Decode<'r, Sqlite> for Subject {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
         match s {
             "identity" => Ok(Self::Identity),
             "environment" => Ok(Self::Environment),
             _ if s.starts_with("trait:") => Ok(Self::Trait(s[6..].to_string())),
-            _ => Err(format!("Unknown segment driver: {s}").into()),
+            _ => Err(format!("Unknown segment subject: {s}").into()),
         }
     }
 }
