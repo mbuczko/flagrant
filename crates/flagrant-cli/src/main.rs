@@ -67,8 +67,8 @@ fn prompter(session: &Session<Connection>) -> String {
     };
     let dirty_segment = ctx.has_segment_pending();
     let seg = match &ctx.segment {
-        Some(s) if dirty_segment => format!(" [{}*]", s.name),
-        Some(s) => format!(" [{}]", s.name),
+        Some(s) if dirty_segment => format!(" + {}*", s.name),
+        Some(s) => format!(" + {}", s.name),
         None => String::default(),
     };
     format!(

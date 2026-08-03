@@ -32,7 +32,7 @@ use crate::{
     handlers::{
         identities,
         internal::{concat_values_for_arg, index, stage},
-        open_in_editor,
+        open_in_editor, segments,
     },
     printer::tabular::{
         Tabular,
@@ -54,6 +54,19 @@ fn fetch_overrides(feature_id: i32, session: &Session<Connection>) -> Vec<Featur
     ctx.client
         .get::<Vec<FeatureOverride>>(res.subpath(format!("/features/{feature_id}/overrides")))
         .unwrap_or_default()
+}
+
+/// Splits a `FEATURE use` target into the feature name and an optional identity or segment
+/// shortcut: `feature@identity` or `feature+segment`. At most one of the two can be given at
+/// a time.
+fn split_use_target(name: &str) -> (&str, Option<&str>, Option<&str>) {
+    if let Some((feature, identity)) = name.split_once('@') {
+        (feature, Some(identity), None)
+    } else if let Some((feature, segment)) = name.split_once('+') {
+        (feature, None, Some(segment))
+    } else {
+        (name, None, None)
+    }
 }
 
 /// Create a new feature in the current environment.
@@ -187,12 +200,12 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Fetches the feature and stores it in the session so that subsequent session-aware
 /// commands, like `VARIANT` or `SET` operate on it. Fails if there are uncommitted
 /// staged changes.
+///
+/// The name may carry a shortcut to also switch into an identity or segment context in the
+/// same step: `feature@identity` or `feature+segment`.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
-        let (feature_name, identity_str) = match name.split_once('@') {
-            Some((f, i)) => (f, Some(i)),
-            None => (name.deref(), None),
-        };
+        let (feature_name, identity_str, segment_str) = split_use_target(name);
         if feature_name.is_empty() {
             bail!("No feature name provided.");
         }
@@ -211,6 +224,8 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
         if let Some(identity_str) = identity_str {
             identities::switch_to(identity_str, session)?;
+        } else if let Some(segment_str) = segment_str {
+            segments::switch_to(segment_str, session)?;
         }
         return Ok(());
     }

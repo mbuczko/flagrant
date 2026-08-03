@@ -763,17 +763,22 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 ///
 /// Expected args: `<name>`
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    stage::ensure_no_pending(session)?;
-
     let Some(name) = args.get(1) else {
         bail!("No segment name provided.");
     };
+    switch_to(name, session)
+}
 
-    let segment = fetch_segment(name, session)?;
+/// Shared entry point used by both `SEGMENT use` and the `FEATURE use feature[segment]`
+/// shortcut. Clears any active identity context (mutually exclusive with segment context).
+pub(crate) fn switch_to(segment_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
+    stage::ensure_no_pending(session)?;
+
+    let segment = fetch_segment(segment_str, session)?;
     let overrides = fetch_overridden_features(segment.id, session);
     segment.display(None, &SegmentContext { overrides });
 
-    let mut ctx: std::sync::RwLockWriteGuard<'_, Connection> = session.context.write().unwrap();
+    let mut ctx = session.context.write().unwrap();
     ctx.variant_index.clear();
     ctx.identity = None;
     ctx.identity_patch = None;

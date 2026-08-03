@@ -110,7 +110,8 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    // Auto-complete feature name, or `feature@identity` when prefix contains `@`
+                    // Auto-complete feature name, or `feature@identity` / `feature+segment`
+                    // when prefix contains `@` / `+`
                     "use" if arg_n == 2 => {
                         if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
                             ctx.client
@@ -120,6 +121,17 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 )?
                                 .into_iter()
                                 .map(|i| format!("{feature_part}@{}", i.value))
+                                .collect::<Vec<_>>()
+                        } else if let Some((feature_part, segment_prefix)) =
+                            prefix.split_once('+')
+                        {
+                            ctx.client
+                                .get::<Vec<Segment>>(
+                                    ctx.project_resource()
+                                        .subpath(format!("/segments?prefix={segment_prefix}")),
+                                )?
+                                .into_iter()
+                                .map(|s| format!("{feature_part}+{}", s.name))
                                 .collect::<Vec<_>>()
                         } else {
                             ctx.client
