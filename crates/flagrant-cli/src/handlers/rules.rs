@@ -93,13 +93,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let rule_id = group
         .rules
         .get(index - 1)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No rule at index {index} in [{}] (has {} rule(s)).",
-                label,
-                group.rules.len()
-            )
-        })?
+        .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{}].", label))?
         .id;
 
     drop(ctx);
@@ -143,12 +137,10 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-    let rule = group.rules.get(index - 1).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No rule at index {index} in [{label}] (has {} rule(s)).",
-            group.rules.len()
-        )
-    })?;
+    let rule = group
+        .rules
+        .get(index - 1)
+        .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{label}]."))?;
 
     rule.display(None, &(label.to_string(), index));
     Ok(())
@@ -267,12 +259,10 @@ fn resolve_rule(
         .iter()
         .find(|g| g.label == label.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-    let rule = group.rules.get(index - 1).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No rule at index {index} in [{label}] (has {} rule(s)).",
-            group.rules.len()
-        )
-    })?;
+    let rule = group
+        .rules
+        .get(index - 1)
+        .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{label}]."))?;
 
     let (comparator, value) = effective_rule_state(rule, ctx.segment_patch.as_ref());
     Ok((label.to_string(), index, rule.id, comparator, value))

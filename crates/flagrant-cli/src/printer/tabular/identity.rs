@@ -218,6 +218,7 @@ impl Tabular for IdentityWithTraits {
 
         let has_any_override =
             ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
+
         if has_any_override {
             println!("  {} variant explicitly overridden\n", "★".dimmed());
         }
