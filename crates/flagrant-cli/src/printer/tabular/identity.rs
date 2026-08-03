@@ -40,16 +40,14 @@ impl Tabular for IdentityWithTraits {
     }
 
     fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
-        let title = format!(
-            "IDENTITY{}",
-            if patch.is_some_and(|p| p.delete) {
-                " ⚠ MARKED FOR DELETION".red().to_string()
-            } else {
-                String::new()
-            }
-        )
-        .bold()
-        .to_string();
+        let title = "IDENTITY".bold().to_string();
+        let is_deleted = patch.is_some_and(|p| p.delete);
+
+        let (id_str, id_stage) = if is_deleted {
+            (self.value.red().to_string(), "✕ deleting".red().to_string())
+        } else {
+            (self.value.clone(), String::new())
+        };
 
         let eff_traits = effective::effective_identity_traits(self, patch);
 
@@ -58,7 +56,10 @@ impl Tabular for IdentityWithTraits {
 
         for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
-            if t.is_deleted {
+            if is_deleted {
+                trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
+                trait_stage.push("✕ deleting".red().to_string());
+            } else if t.is_deleted {
                 trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
                 trait_stage.push("✕ deleting".red().to_string());
             } else if t.value_modified {
@@ -97,7 +98,15 @@ impl Tabular for IdentityWithTraits {
 
         for iv in ctx {
             let feature = iv.feature_name.bright_blue().to_string();
-            if let Some(pin) = staged_pins
+            if is_deleted {
+                let value = iv
+                    .feature_value
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "(no variant assigned)".to_string());
+                variant_lines.push(format!("{feature} → {}", value.red()));
+                variant_stage.push("✕ deleting".red().to_string());
+            } else if let Some(pin) = staged_pins
                 .iter()
                 .find(|o| o.feature_name == iv.feature_name)
             {
@@ -132,12 +141,21 @@ impl Tabular for IdentityWithTraits {
         // Staged pins for features not yet in committed state
         for o in staged_pins {
             if !ctx.iter().any(|iv| iv.feature_name == o.feature_name) {
-                variant_lines.push(format!(
-                    "{} → {}",
-                    o.feature_name.bright_blue(),
-                    o.variant_value.green()
-                ));
-                variant_stage.push("+ override".green().to_string());
+                if is_deleted {
+                    variant_lines.push(format!(
+                        "{} → {}",
+                        o.feature_name.bright_blue(),
+                        o.variant_value.red()
+                    ));
+                    variant_stage.push("✕ deleting".red().to_string());
+                } else {
+                    variant_lines.push(format!(
+                        "{} → {}",
+                        o.feature_name.bright_blue(),
+                        o.variant_value.green()
+                    ));
+                    variant_stage.push("+ override".green().to_string());
+                }
             }
         }
 
@@ -145,8 +163,8 @@ impl Tabular for IdentityWithTraits {
         let variants_stage_str = variant_stage.join("\n");
         let has_variants = !variant_lines.is_empty();
 
-        let has_staged_traits = !trait_stage.iter().all(|s| s.is_empty());
-        let has_staged_variants = !variant_stage.iter().all(|s| s.is_empty());
+        let has_staged_traits = is_deleted || !trait_stage.iter().all(|s| s.is_empty());
+        let has_staged_variants = is_deleted || !variant_stage.iter().all(|s| s.is_empty());
 
         if has_staged_traits || has_staged_variants {
             let table = FancyTable::create(FancyTableOpts::default())
@@ -164,7 +182,7 @@ impl Tabular for IdentityWithTraits {
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![
-                vec!["id".to_string(), self.value.clone(), String::new()],
+                vec!["id".to_string(), id_str, id_stage],
                 vec!["traits".to_string(), traits_str, trait_stage.join("\n")],
             ];
             if has_variants {
@@ -190,7 +208,7 @@ impl Tabular for IdentityWithTraits {
                 .build();
 
             let mut rows: Vec<Vec<String>> = vec![
-                vec!["id".to_string(), self.value.clone()],
+                vec!["id".to_string(), id_str],
                 vec!["traits".to_string(), traits_str],
             ];
             if has_variants {
