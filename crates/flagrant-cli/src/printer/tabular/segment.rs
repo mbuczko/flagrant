@@ -2,7 +2,6 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     Comparator, GroupConnector, OverriddenVariant, Segment, SegmentDriver, SegmentFeatureOverride,
-    SegmentGroup, SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 
@@ -10,9 +9,9 @@ use crate::handlers::internal::effectives as effective;
 
 use super::Tabular;
 
-const UTF_VERT_BAR: &str = "│";
-const UTF_TOP_CORNER: &str = "╭─";
-const UTF_BTM_CORNER: &str = "╰───";
+pub(super) const UTF_VERT_BAR: &str = "│";
+pub(super) const UTF_TOP_CORNER: &str = "╭─";
+pub(super) const UTF_BTM_CORNER: &str = "╰───";
 
 /// Context passed to `Segment::display` to show the features this segment overrides.
 #[derive(Default)]
@@ -52,14 +51,16 @@ impl Tabular for Segment {
     fn display(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
         let title = format!(
-            "SEGMENT: {}{}",
-            self.name,
+            "SEGMENT{}",
             if patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete))) {
-                " ⚠ MARKED FOR DELETION"
+                " ⚠ MARKED FOR DELETION".red().to_string()
             } else {
-                ""
+                String::new()
             }
-        );
+        )
+        .bold()
+        .to_string();
+
         let (name_str, name_stage) = if eff.name_modified {
             (
                 eff.name.yellow().to_string(),
@@ -277,7 +278,7 @@ impl Tabular for Segment {
                     group_stage.len().max(1),
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
                 .width(Width::Percentage(100))
                 .build()
         } else {
@@ -291,15 +292,15 @@ impl Tabular for Segment {
                     20,
                 )
                 .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
                 .width(Width::Percentage(100))
                 .build()
         };
 
         let mut rows = vec![
-            vec!["NAME".to_string(), name_str, name_stage],
+            vec!["name".to_string(), name_str, name_stage],
             vec![
-                "RULES".to_string(),
+                "rules".to_string(),
                 group_lines.join("\n"),
                 group_stage.join("\n"),
             ],
@@ -308,12 +309,12 @@ impl Tabular for Segment {
             && !overrides_str.is_empty()
         {
             rows.push(vec![
-                "OVERRIDES".to_string(),
+                "overrides".to_string(),
                 overrides_str,
                 overrides_stages.join("\n"),
             ]);
         }
-        rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
+        rows.push(vec!["description".to_string(), desc_str, desc_stage]);
 
         // The table itself only has a stage column when has_staged, so drop it from each
         // row to match - it would be all empty strings anyway in that case.
@@ -324,408 +325,14 @@ impl Tabular for Segment {
         }
         table.render(rows);
 
+        if overrides_lines.len() > 0 {
+            println!("  {} control variant\n", "★".dimmed());
+        }
         if !(eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add)) {
             println!(
                 "{}",
                 "(no group added yet - use `GROUP add ...` to create one)".dimmed()
             );
-        }
-    }
-}
-
-impl Tabular for SegmentGroup {
-    type Patch = SegmentPatch;
-    type Context = ();
-
-    fn list(_: &[Self]) {}
-
-    fn display(&self, patch: Option<&SegmentPatch>, _ctx: &()) {
-        let group = self;
-        let title = format!("Group: {}", group.label);
-
-        let is_deleted = patch.is_some_and(|p| {
-            p.ops.iter().any(
-                |op| matches!(op, SegmentPatchOp::DeleteGroup { label } if label == &group.label),
-            )
-        });
-
-        let deleted_rule_ids: std::collections::HashSet<i32> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::DeleteRule { rule_id } => Some(*rule_id),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let staged_add_rules: Vec<(&SegmentDriver, &Comparator, &String)> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::AddRule {
-                            group_label,
-                            driver,
-                            comparator,
-                            value,
-                        } if group_label == &group.label => Some((driver, comparator, value)),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let rule_value_overrides: std::collections::HashMap<i32, &str> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::SetRuleValue { rule_id, value } => {
-                            Some((*rule_id, value.as_str()))
-                        }
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let rule_comparator_overrides: std::collections::HashMap<i32, &Comparator> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::SetRuleComparator {
-                            rule_id,
-                            comparator,
-                        } => Some((*rule_id, comparator)),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let sym = group
-            .connector
-            .as_ref()
-            .map(format_connector)
-            .unwrap_or("(first group)");
-
-        let sym_colored = if is_deleted {
-            sym.red().to_string()
-        } else if sym.len() >= 10 {
-            sym.dimmed().to_string()
-        } else {
-            sym.bright_cyan().to_string()
-        };
-
-        let joiner_stage = if is_deleted {
-            "✕ deleting".red().to_string()
-        } else {
-            String::new()
-        };
-
-        let mut group_lines: Vec<String> = Vec::new();
-        let mut group_stage: Vec<String> = Vec::new();
-
-        let (frame, label_colored) = if is_deleted {
-            (UTF_TOP_CORNER.dimmed(), group.label.red())
-        } else {
-            (UTF_TOP_CORNER.dimmed(), group.label.yellow())
-        };
-
-        let desc_part = group
-            .description
-            .as_deref()
-            .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
-            .unwrap_or_default();
-
-        group_lines.push(format!("{frame} {label_colored}{desc_part}"));
-        group_stage.push(if is_deleted {
-            "✕ deleting".red().to_string()
-        } else {
-            String::new()
-        });
-
-        let all_empty = group.rules.is_empty() && staged_add_rules.is_empty();
-
-        if all_empty {
-            group_lines.push(format!(
-                "{}  {}",
-                UTF_VERT_BAR.dimmed(),
-                "(no rules)".dimmed()
-            ));
-            group_stage.push(String::new());
-        } else {
-            let max_driver = group
-                .rules
-                .iter()
-                .map(|r| format_driver(&r.driver).len())
-                .chain(
-                    staged_add_rules
-                        .iter()
-                        .map(|(d, _, _)| format_driver(d).len()),
-                )
-                .max()
-                .unwrap_or(0);
-
-            for (display_idx, r) in (1usize..).zip(group.rules.iter()) {
-                let driver = format_driver(&r.driver);
-                let rule_deleted = deleted_rule_ids.contains(&r.id);
-                let value_modified = rule_value_overrides.contains_key(&r.id);
-                let comparator_modified = rule_comparator_overrides.contains_key(&r.id);
-                let effective_comparator = rule_comparator_overrides
-                    .get(&r.id)
-                    .copied()
-                    .unwrap_or(&r.comparator);
-                let effective_value = rule_value_overrides
-                    .get(&r.id)
-                    .copied()
-                    .unwrap_or(r.value.as_str());
-                let cmp = format_comparator(effective_comparator);
-
-                let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
-                    if is_deleted || rule_deleted {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().red(),
-                            driver.red(),
-                            cmp.red(),
-                            r.value.red(),
-                            if rule_deleted {
-                                "✕ deleting".red().to_string()
-                            } else {
-                                String::new()
-                            },
-                        )
-                    } else if value_modified || comparator_modified {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().dimmed(),
-                            driver.bright_blue(),
-                            if comparator_modified {
-                                cmp.yellow()
-                            } else {
-                                cmp.dimmed()
-                            },
-                            if value_modified {
-                                effective_value.yellow()
-                            } else {
-                                effective_value.green()
-                            },
-                            "‣ updating".yellow().to_string(),
-                        )
-                    } else {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().dimmed(),
-                            driver.bright_blue(),
-                            cmp.dimmed(),
-                            r.value.green(),
-                            String::new(),
-                        )
-                    };
-                group_lines.push(format!(
-                    "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}",
-                    dw = max_driver,
-                ));
-                group_stage.push(rule_stage);
-            }
-            for (driver, comparator, value) in &staged_add_rules {
-                group_lines.push(format!(
-                    "{}  {}  {:<dw$}  {}  {}",
-                    UTF_VERT_BAR.green(),
-                    "+".green(),
-                    format_driver(driver).bright_blue(),
-                    format_comparator(comparator).dimmed(),
-                    value.green(),
-                    dw = max_driver,
-                ));
-                group_stage.push("‣ adding".green().to_string());
-            }
-        }
-
-        group_lines.push(UTF_BTM_CORNER.dimmed().to_string());
-        group_stage.push(String::new());
-
-        let group_str = group_lines.join("\n");
-        let group_stage_str = group_stage.join("\n");
-        let has_staged = !joiner_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
-        let nlines = group_lines.len();
-
-        if has_staged {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .add_column(
-                    None,
-                    Layout::Fixed(12),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(Width::Percentage(100))
-                .build();
-            table.render(vec![
-                vec!["JOINER".to_string(), sym_colored, joiner_stage],
-                vec!["GROUP".to_string(), group_str, group_stage_str],
-            ]);
-        } else {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(10), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(Width::Percentage(100))
-                .build();
-            table.render(vec![
-                vec!["JOINER".to_string(), sym_colored],
-                vec!["GROUP".to_string(), group_str],
-            ]);
-        }
-    }
-}
-
-impl Tabular for SegmentRule {
-    type Patch = SegmentPatch;
-    type Context = (String, usize);
-
-    fn list(_: &[Self]) {}
-
-    fn display(&self, patch: Option<&SegmentPatch>, ctx: &(String, usize)) {
-        let rule = self;
-        let (group_label, index) = ctx;
-        let title = format!("[{group_label}] rule #{index}");
-
-        let is_deleted = patch.is_some_and(|p| {
-            p.ops.iter().any(
-                |op| matches!(op, SegmentPatchOp::DeleteRule { rule_id } if *rule_id == rule.id),
-            )
-        });
-
-        let comparator_override = patch
-            .into_iter()
-            .flat_map(|p| &p.ops)
-            .find_map(|op| match op {
-                SegmentPatchOp::SetRuleComparator {
-                    rule_id,
-                    comparator,
-                } if *rule_id == rule.id => Some(comparator),
-                _ => None,
-            });
-        let value_override = patch
-            .into_iter()
-            .flat_map(|p| &p.ops)
-            .find_map(|op| match op {
-                SegmentPatchOp::SetRuleValue { rule_id, value } if *rule_id == rule.id => {
-                    Some(value)
-                }
-                _ => None,
-            });
-
-        let effective_comparator = comparator_override.unwrap_or(&rule.comparator);
-        let effective_value = value_override.map(String::as_str).unwrap_or(&rule.value);
-
-        let (driver_s, comparator_s, value_s, driver_stage, comparator_stage, value_stage) =
-            if is_deleted {
-                (
-                    format_driver(&rule.driver).red(),
-                    format_comparator(&rule.comparator).red(),
-                    rule.value.red(),
-                    "✕ deleting".red().to_string(),
-                    "✕ deleting".red().to_string(),
-                    "✕ deleting".red().to_string(),
-                )
-            } else {
-                (
-                    format_driver(&rule.driver).bright_blue(),
-                    if comparator_override.is_some() {
-                        format_comparator(effective_comparator).yellow()
-                    } else {
-                        format_comparator(effective_comparator).dimmed()
-                    },
-                    if value_override.is_some() {
-                        effective_value.yellow()
-                    } else {
-                        effective_value.green()
-                    },
-                    String::new(),
-                    if comparator_override.is_some() {
-                        "‣ updating".yellow().to_string()
-                    } else {
-                        String::new()
-                    },
-                    if value_override.is_some() {
-                        "‣ updating".yellow().to_string()
-                    } else {
-                        String::new()
-                    },
-                )
-            };
-
-        let has_staged =
-            !driver_stage.is_empty() || !comparator_stage.is_empty() || !value_stage.is_empty();
-
-        if !has_staged {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(12), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Wrap,
-                    10,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(Width::Percentage(100))
-                .build();
-            table.render(vec![
-                vec!["DRIVER".to_string(), driver_s.to_string()],
-                vec!["COMPARATOR".to_string(), comparator_s.to_string()],
-                vec!["VALUE".to_string(), value_s.to_string()],
-            ]);
-        } else {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Wrap,
-                    12,
-                )
-                .add_column(None, Layout::Fixed(14), Align::Left, Overflow::Truncate, 1)
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
-                .width(Width::Percentage(100))
-                .build();
-
-            table.render(vec![
-                vec!["DRIVER".to_string(), driver_s.to_string(), driver_stage],
-                vec![
-                    "COMPARATOR".to_string(),
-                    comparator_s.to_string(),
-                    comparator_stage,
-                ],
-                vec!["VALUE".to_string(), value_s.to_string(), value_stage],
-            ]);
         }
     }
 }
@@ -742,7 +349,7 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
         .collect()
 }
 
-fn format_driver(driver: &SegmentDriver) -> String {
+pub(super) fn format_driver(driver: &SegmentDriver) -> String {
     match driver {
         SegmentDriver::Identity => "identity".to_string(),
         SegmentDriver::Trait(name) => format!("trait:{name}"),
@@ -750,11 +357,11 @@ fn format_driver(driver: &SegmentDriver) -> String {
     }
 }
 
-fn format_comparator(comparator: &Comparator) -> String {
+pub(super) fn format_comparator(comparator: &Comparator) -> String {
     comparator.to_string()
 }
 
-fn format_connector(connector: &GroupConnector) -> &'static str {
+pub(super) fn format_connector(connector: &GroupConnector) -> &'static str {
     match connector {
         GroupConnector::And => "⊕ AND",
         GroupConnector::AndNot => "⊖ AND NOT",

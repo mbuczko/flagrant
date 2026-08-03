@@ -88,14 +88,15 @@ impl Tabular for Feature {
 
     fn display(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
         let title = format!(
-            "FEATURE: {}{}",
-            self.name,
+            "FEATURE{}",
             if patch.is_some_and(|p| p.delete) {
-                " ⚠ MARKED FOR DELETION"
+                " ⚠ MARKED FOR DELETION".red().to_string()
             } else {
-                ""
+                String::new()
             }
-        );
+        )
+        .bold()
+        .to_string();
 
         let name_str = match patch.and_then(|p| p.name.as_deref()) {
             Some(n) => n.yellow().to_string(),
@@ -437,7 +438,7 @@ impl Tabular for Feature {
                     variant_stage.len().max(1),
                 )
                 .width(Width::Percentage(100))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(&title, TitleAlign::LeftOffset(1))
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
@@ -450,37 +451,37 @@ impl Tabular for Feature {
                     10,
                 )
                 .width(Width::Percentage(100))
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(&title, TitleAlign::LeftOffset(6))
                 .build()
         };
 
         let rows: Vec<Vec<String>> = if has_staged {
             let mut rows = vec![
-                vec!["NAME".to_string(), name_str, name_stage],
-                vec!["STATUS".to_string(), status, status_stage],
-                vec!["VARIANTS".to_string(), variants, variants_stage_str],
+                vec!["name".to_string(), name_str, name_stage],
+                vec!["status".to_string(), status, status_stage],
+                vec!["variants".to_string(), variants, variants_stage_str],
             ];
             if !overrides_str.is_empty() {
                 rows.push(vec![
-                    "OVERRIDES".to_string(),
+                    "overrides".to_string(),
                     overrides_str,
                     overrides_stage_str,
                 ]);
             }
-            rows.push(vec!["TAGS".to_string(), tags_str, tags_stage]);
-            rows.push(vec!["DESCRIPTION".to_string(), desc_str, desc_stage]);
+            rows.push(vec!["tags".to_string(), tags_str, tags_stage]);
+            rows.push(vec!["description".to_string(), desc_str, desc_stage]);
             rows
         } else {
             let mut rows = vec![
-                vec!["NAME".to_string(), name_str],
-                vec!["STATUS".to_string(), status],
-                vec!["VARIANTS".to_string(), variants],
+                vec!["name".to_string(), name_str],
+                vec!["status".to_string(), status],
+                vec!["variants".to_string(), variants],
             ];
             if !overrides_str.is_empty() {
-                rows.push(vec!["OVERRIDDEN-BY".to_string(), overrides_str]);
+                rows.push(vec!["overridden-by".to_string(), overrides_str]);
             }
-            rows.push(vec!["TAGS".to_string(), tags_str]);
-            rows.push(vec!["DESCRIPTION".to_string(), desc_str]);
+            rows.push(vec!["tags".to_string(), tags_str]);
+            rows.push(vec!["description".to_string(), desc_str]);
             rows
         };
         table.render(rows);

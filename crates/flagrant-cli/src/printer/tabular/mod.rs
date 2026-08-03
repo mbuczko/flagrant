@@ -1,6 +1,8 @@
 mod environment;
 pub mod feature;
+mod group;
 mod identity;
+mod rule;
 pub mod segment;
 
 pub trait Tabular {

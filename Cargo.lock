@@ -624,9 +624,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-table"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "073b4db07266a611f0d65fc094dfe2dd35ef1baaf21fdada694a94391a2dde09"
+checksum = "d75fa9c3e5238f5ba3d27adfa5c280b0962c979517e07709e0ee519bf61c6109"
 dependencies = [
  "smallvec",
  "terminal_size",

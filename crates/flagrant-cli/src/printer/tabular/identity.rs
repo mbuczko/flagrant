@@ -41,14 +41,16 @@ impl Tabular for IdentityWithTraits {
 
     fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
         let title = format!(
-            "IDENTITY: {}{}",
-            self.value,
+            "IDENTITY{}",
             if patch.is_some_and(|p| p.delete) {
-                " ⚠ MARKED FOR DELETION"
+                " ⚠ MARKED FOR DELETION".red().to_string()
             } else {
-                ""
+                String::new()
             }
-        );
+        )
+        .bold()
+        .to_string();
+
         let eff_traits = effective::effective_identity_traits(self, patch);
 
         let mut trait_lines: Vec<String> = Vec::new();
@@ -157,18 +159,17 @@ impl Tabular for IdentityWithTraits {
                     11,
                 )
                 .add_column(None, Layout::Fixed(14), Align::Left, Overflow::Truncate, 10)
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
                 .width(Width::Percentage(100))
                 .build();
 
-            let mut rows: Vec<Vec<String>> = vec![vec![
-                "TRAITS".to_string(),
-                traits_str,
-                trait_stage.join("\n"),
-            ]];
+            let mut rows: Vec<Vec<String>> = vec![
+                vec!["id".to_string(), self.value.clone(), String::new()],
+                vec!["traits".to_string(), traits_str, trait_stage.join("\n")],
+            ];
             if has_variants {
                 rows.push(vec![
-                    "VARIANTS".to_string(),
+                    "variants".to_string(),
                     variants_str,
                     variants_stage_str,
                 ]);
@@ -184,13 +185,16 @@ impl Tabular for IdentityWithTraits {
                     Overflow::Truncate,
                     10,
                 )
-                .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
                 .width(Width::Percentage(100))
                 .build();
 
-            let mut rows: Vec<Vec<String>> = vec![vec!["TRAITS".to_string(), traits_str]];
+            let mut rows: Vec<Vec<String>> = vec![
+                vec!["id".to_string(), self.value.clone()],
+                vec!["traits".to_string(), traits_str],
+            ];
             if has_variants {
-                rows.push(vec!["VARIANTS".to_string(), variants_str]);
+                rows.push(vec!["variants".to_string(), variants_str]);
             }
             table.render(rows);
         }

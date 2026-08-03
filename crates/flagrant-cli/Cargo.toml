@@ -15,7 +15,7 @@ serde_json = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = { workspace = true }
-fancy-table = "0.4.2"
+fancy-table = "0.4.3"
 argh = "0.1"
 strum = {workspace = true}
 strum_macros = {workspace = true}
