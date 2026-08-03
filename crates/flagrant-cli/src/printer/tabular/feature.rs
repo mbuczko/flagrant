@@ -2,7 +2,7 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     Feature, FeatureOverride, Variant,
-    payload::{FeaturePatch, SegmentVariantWeight, TagPatchOp},
+    payload::{FeaturePatch, SegmentVariantWeight},
 };
 
 use crate::handlers::internal::effectives as effective;
@@ -103,44 +103,21 @@ impl Tabular for Feature {
         let tags_str = if is_deleted {
             self.tags.to_string().red().to_string()
         } else if has_tag_ops {
-            let names: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
-            let mut added: Vec<&str> = Vec::new();
-            let mut removed: Vec<&str> = Vec::new();
-
-            for op in patch.into_iter().flat_map(|p| &p.tags) {
-                match op {
-                    TagPatchOp::Add(t) => {
-                        if !names.contains(&t.as_str()) {
-                            added.push(t.as_str());
-                        }
-                    }
-                    // Kept visible (not dropped) so a tag staged for removal still shows
-                    // up in the list, colored red below, instead of silently vanishing.
-                    TagPatchOp::Remove(t) => {
-                        if names.contains(&t.as_str()) {
-                            removed.push(t.as_str());
-                        }
-                    }
-                }
-            }
-
-            let mut effective: Vec<&str> = names.iter().chain(added.iter()).copied().collect();
-
-            effective.sort();
-            effective.dedup();
-
-            if effective.is_empty() {
+            let eff_tags = effective::effective_tags(self, patch);
+            if eff_tags.is_empty() {
                 "(none)".yellow().to_string()
             } else {
-                effective
+                eff_tags
                     .iter()
+                    // Staged-removed tags are kept visible (not dropped) so they still show
+                    // up in the list, colored red, instead of silently vanishing.
                     .map(|t| {
-                        if removed.contains(t) {
-                            t.red().to_string()
-                        } else if added.contains(t) {
-                            t.green().to_string()
+                        if t.is_deleted {
+                            t.name.red().to_string()
+                        } else if t.is_staged_add {
+                            t.name.green().to_string()
                         } else {
-                            t.to_string()
+                            t.name.clone()
                         }
                     })
                     .collect::<Vec<_>>()

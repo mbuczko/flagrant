@@ -6,7 +6,8 @@ use flagrant_types::{
     Comparator, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Segment, Subject,
     TraitValue,
     payload::{
-        FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TraitPatchOp, VariantPatchOp,
+        FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TagPatchOp, TraitPatchOp,
+        VariantPatchOp,
     },
 };
 
@@ -28,6 +29,21 @@ pub(crate) struct EffectiveVariant {
     /// True for variants that come from a staged `Add` op.
     pub is_staged_add: bool,
     /// True when a staged `Delete` op targets this variant.
+    pub is_deleted: bool,
+}
+
+/// A tag as it appears after applying any staged patch ops.
+///
+/// Combines committed tags with staged `Add`s (skipped if already committed). Tags with a
+/// pending `Remove` op are included but flagged via `is_deleted`, so callers can decide
+/// whether to show or skip them (kept visible by default, so a removal shows red instead
+/// of silently vanishing). Sorted by name - unlike variants/traits, tags have no intrinsic
+/// order to preserve.
+pub(crate) struct EffectiveTag {
+    pub name: String,
+    /// True for tags that come from a staged `Add` op.
+    pub is_staged_add: bool,
+    /// True when a staged `Remove` op targets this tag.
     pub is_deleted: bool,
 }
 
@@ -156,6 +172,48 @@ pub(crate) fn effective_variants(
         }
     }
 
+    result
+}
+
+/// Returns the effective tag list for `feature` after applying `patch`.
+///
+/// Committed tags targeted by a `Remove` op are included but flagged via `is_deleted`.
+/// Staged `Add` tags not already committed are appended, flagged via `is_staged_add`. The
+/// combined list is sorted by name.
+pub(crate) fn effective_tags(feature: &Feature, patch: Option<&FeaturePatch>) -> Vec<EffectiveTag> {
+    let ops: &[TagPatchOp] = patch.map(|p| p.tags.as_slice()).unwrap_or_default();
+    let names: HashSet<&str> = feature.tags.0.iter().map(|t| t.name.as_str()).collect();
+
+    let mut added: HashSet<&str> = HashSet::new();
+    let mut removed: HashSet<&str> = HashSet::new();
+
+    for op in ops {
+        match op {
+            TagPatchOp::Add(t) if !names.contains(t.as_str()) => {
+                added.insert(t.as_str());
+            }
+            TagPatchOp::Remove(t) if names.contains(t.as_str()) => {
+                removed.insert(t.as_str());
+            }
+            _ => {}
+        }
+    }
+
+    let mut result: Vec<EffectiveTag> = names
+        .iter()
+        .map(|&name| EffectiveTag {
+            name: name.to_string(),
+            is_staged_add: false,
+            is_deleted: removed.contains(name),
+        })
+        .chain(added.iter().map(|&name| EffectiveTag {
+            name: name.to_string(),
+            is_staged_add: true,
+            is_deleted: false,
+        }))
+        .collect();
+
+    result.sort_by(|a, b| a.name.cmp(&b.name));
     result
 }
 
