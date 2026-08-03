@@ -6,7 +6,7 @@ The feature-flagging space is already well served by excellent solutions like [U
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
 
-Flagrant also doubles as a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
+Flagrant also tries its best to be a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
 
 ## Demo
 
@@ -33,6 +33,26 @@ As it's written in Rust, Flagrant comes with low-level resource utilisation and 
 ## Concepts
 
 Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based `USE` commands: enter a context, stage changes with `SET`/`UNSET`, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
+
+### Context composition
+
+Contexts compose: a **feature** context can be combined with either an **identity** or a **segment** context - but not both at once, since identity and segment are mutually exclusive with each other (entering one clears the other). The prompt reflects whatever's active, e.g. `myproject/prod → ui_theme @ alice` or `myproject/prod → ui_theme [beta_testers]`.
+
+Combine them in two steps:
+
+```
+FEATURE use <feature>
+IDENTITY use <identity>   # or: SEGMENT use <name>
+```
+
+or in one, via a shortcut on `FEATURE use`:
+
+```
+FEATURE use <feature>@<identity>
+FEATURE use <feature>+<segment>
+```
+
+A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is *also* active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which pin or override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Features & variants
 
@@ -86,7 +106,7 @@ SEGMENT use <name>
 
 ### Overrides
 
-Overrides bypass a feature's normal weighted distribution for a specific identity or a whole segment. Both require the feature to be in context too - `FEATURE use <feature>` plus either `IDENTITY use <identity>` or `SEGMENT use <name>`:
+Overrides bypass a feature's normal weighted distribution for a specific identity or a whole segment. Both require a feature + identity/segment context (see [Context composition](#context-composition)):
 
 - **Identity override**: `SET override [value]` pins that one identity to a specific variant of the feature, regardless of its weight-based assignment. Omit the value to open an editor listing every variant (marking the identity's current one), and pick from there. `UNSET override` releases the pin, freeing the identity to be redistributed on its next request.
 - **Segment override**: `SET override [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit the arguments to open an editor for setting weights across all variants at once. `UNSET override` removes it, falling back to the feature's normal weights for that segment's identities.
