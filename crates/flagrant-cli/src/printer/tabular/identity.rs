@@ -42,7 +42,6 @@ impl Tabular for IdentityWithTraits {
     fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
         let title = "IDENTITY".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
-
         let (id_str, id_stage) = if is_deleted {
             (self.value.red().to_string(), "✕ deleting".red().to_string())
         } else {
@@ -56,10 +55,8 @@ impl Tabular for IdentityWithTraits {
 
         for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
-            if is_deleted {
-                trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
-                trait_stage.push("✕ deleting".red().to_string());
-            } else if t.is_deleted {
+
+            if is_deleted || t.is_deleted {
                 trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
                 trait_stage.push("✕ deleting".red().to_string());
             } else if t.value_modified {
@@ -98,12 +95,14 @@ impl Tabular for IdentityWithTraits {
 
         for iv in ctx {
             let feature = iv.feature_name.bright_blue().to_string();
+
             if is_deleted {
                 let value = iv
                     .feature_value
                     .as_ref()
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| "(no variant assigned)".to_string());
+
                 variant_lines.push(format!("{feature} → {}", value.red()));
                 variant_stage.push("✕ deleting".red().to_string());
             } else if let Some(pin) = staged_pins

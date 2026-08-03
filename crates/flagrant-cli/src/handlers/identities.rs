@@ -41,18 +41,35 @@ use crate::{
 ///
 /// Expected args: `[identity]`
 ///
-/// If an identity argument is provided, fetches and describes that identity.
-/// Otherwise describes the identity in the current context.
+/// If an identity argument is provided that names a *different* identity than the one in
+/// context, fetches and describes that identity with no staged changes overlaid. Otherwise
+/// (no argument, or naming the identity already in context) describes the identity in the
+/// current context, overlaying any pending staged changes - since pending state only exists
+/// for the in-context identity.
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    if let Some(identity_str) = args.get(1) {
-        let identity = resolve_identity(&ctx, identity_str)?;
-        identity.display(None, &fetch_variant_assignments(&ctx, &identity));
-    } else if let Some(identity) = &ctx.identity {
+    let in_context = match args.get(1) {
+        Some(identity_str) => ctx
+            .identity
+            .as_ref()
+            .is_some_and(|i| i.value == identity_str.as_ref()),
+        None => true,
+    };
+
+    if in_context {
+        let identity = ctx.identity.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Not in an identity context. Set the context with: \"IDENTITY use\" command."
+            )
+        })?;
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
+
         identity.display(patch, &fetch_variant_assignments(&ctx, identity));
     } else {
-        bail!("Not in an identity context. Set the context with: \"IDENTITY use\" command.")
+        let identity_str = args.get(1).unwrap();
+        let identity = resolve_identity(&ctx, identity_str)?;
+
+        identity.display(None, &fetch_variant_assignments(&ctx, &identity));
     }
     Ok(())
 }
