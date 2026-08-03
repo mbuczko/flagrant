@@ -104,6 +104,7 @@ impl Tabular for Feature {
             self.tags.to_string().red().to_string()
         } else if has_tag_ops {
             let eff_tags = effective::effective_tags(self, patch);
+
             if eff_tags.is_empty() {
                 "(none)".yellow().to_string()
             } else {
@@ -154,14 +155,18 @@ impl Tabular for Feature {
             .then(|| patch.and_then(|p| p.is_archived))
             .flatten();
         let status = if is_deleted {
-            let label = if self.is_archived {
-                "archived"
-            } else if self.is_enabled {
-                "ON"
-            } else {
-                "OFF"
-            };
-            format!("● {label}").red().to_string()
+            format!(
+                "● {}",
+                if self.is_archived {
+                    "archived"
+                } else if self.is_enabled {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+            )
+            .red()
+            .to_string()
         } else if pending_archived.unwrap_or(self.is_archived) {
             resolve(
                 pending_archived,
@@ -265,173 +270,7 @@ impl Tabular for Feature {
         let variants = variant_lines.join("\n");
         let variants_stage_str = variant_stage.join("\n");
 
-        // Build overrides lines and stage annotations in parallel.
-        let mut overrides_lines: Vec<String> = Vec::new();
-        let mut overrides_stages: Vec<String> = Vec::new();
-
-        // Identity overrides: one grouped line with optional staging annotation.
-        let committed_identities: Vec<&str> = ctx
-            .committed
-            .iter()
-            .filter_map(|o| {
-                if let FeatureOverride::Identity(v) = o {
-                    Some(v.as_str())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        if !committed_identities.is_empty() || (!is_deleted && ctx.identity_pending.is_some()) {
-            let mut identities = committed_identities
-                .iter()
-                .take(SHOW_OVERRIDES)
-                .cloned()
-                .collect::<Vec<_>>();
-
-            if !is_deleted
-                && let Some(pending) = ctx.identity_pending.as_ref()
-                && !committed_identities.contains(&pending.identity_value())
-            {
-                identities.push(pending.identity_value())
-            }
-
-            let rest = identities.len().saturating_sub(SHOW_OVERRIDES);
-            // Only the identity with a pending change is colored - dimmed if it's being
-            // unpinned, green if it's a new/updated override - the rest keep their
-            // default style so the pending one stands out.
-            let pending_value = ctx.identity_pending.as_ref().map(|p| p.identity_value());
-            let line = identities
-                .iter()
-                .map(|id| match &ctx.identity_pending {
-                    Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
-                        id.red().dimmed().to_string()
-                    }
-                    Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
-                        id.green().to_string()
-                    }
-                    _ => id.dimmed().to_string(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            let mut content = if rest > 0 {
-                format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
-            } else {
-                format!("{} › {}", "identity".bright_blue(), line)
-            };
-
-            if is_deleted {
-                content = content.red().to_string()
-            }
-
-            // overrides_lines and overrides_stages must stay in lockstep (one stage entry
-            // per content line) since they're joined by "\n" and rendered as aligned rows
-            // in adjacent table columns - always push both, even if the stage is empty.
-            let stage = if is_deleted {
-                "✕ deleting".red().to_string()
-            } else if let Some(pending) = &ctx.identity_pending {
-                match pending {
-                    IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
-                    IdentityPending::Unpin(_) => "✕ deleting".red().to_string(),
-                }
-            } else {
-                String::new()
-            };
-            overrides_lines.push(content);
-            overrides_stages.push(stage);
-        }
-
-        // Segment overrides: one line per segment with optional staging annotation.
-        let mut pending_seg_shown = false;
-
-        for ovr in &ctx.committed {
-            if let FeatureOverride::Segment { name, weights } = ovr {
-                let is_current_pending = !is_deleted
-                    && ctx
-                        .segment_pending
-                        .as_ref()
-                        .map(|(n, _)| n == name)
-                        .unwrap_or(false);
-
-                if is_deleted {
-                    let parts = segment_weights(weights, &self.variants);
-                    let line = format!(
-                        "{}  › {} {}",
-                        "segment".bright_blue(),
-                        name.dimmed(),
-                        parts.join(", ")
-                    )
-                    .red()
-                    .to_string();
-
-                    overrides_lines.push(line);
-                    overrides_stages.push("✕ deleting".red().to_string());
-                } else if is_current_pending {
-                    pending_seg_shown = true;
-                    let (line, stage) = match &ctx.segment_pending {
-                        Some((_, Some(pending_weights))) => {
-                            let parts = segment_weights_with_control_remainder(
-                                pending_weights,
-                                &self.variants,
-                            );
-                            let line = format!(
-                                "{}  › {} {}",
-                                "segment".bright_blue(),
-                                name.dimmed(),
-                                parts.join(", ")
-                            )
-                            .yellow()
-                            .to_string();
-                            (line, "‣ updating".yellow().to_string())
-                        }
-                        Some((_, None)) => {
-                            let parts = segment_weights(weights, &self.variants);
-                            let line = format!(
-                                "{}  › {} {}",
-                                "segment".bright_blue(),
-                                name.dimmed(),
-                                parts.join(", ")
-                            )
-                            .red()
-                            .to_string();
-                            (line, "✕ deleting".red().to_string())
-                        }
-                        None => unreachable!(),
-                    };
-                    overrides_lines.push(line);
-                    overrides_stages.push(stage);
-                } else {
-                    let parts = segment_weights(weights, &self.variants);
-                    overrides_lines.push(format!(
-                        "{}  › {} {}",
-                        "segment".bright_blue(),
-                        name.dimmed(),
-                        parts.join(", ")
-                    ));
-                    overrides_stages.push(String::new())
-                }
-            }
-        }
-
-        // Pending segment set for a segment not yet in committed - show as new added line.
-        if !is_deleted
-            && !pending_seg_shown
-            && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
-        {
-            let parts = segment_weights_with_control_remainder(pending_weights, &self.variants);
-            let line = format!(
-                "{}  › {} {}",
-                "segment".bright_blue(),
-                seg_name.dimmed(),
-                parts.join(", ")
-            )
-            .green()
-            .to_string();
-            overrides_lines.push(line);
-            overrides_stages.push("‣ adding".green().to_string());
-        }
-
+        let (overrides_lines, overrides_stages) = override_lines(&self.variants, ctx, is_deleted);
         let overrides_str = overrides_lines.join("\n");
         let overrides_stage_str = overrides_stages.join("\n");
         let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
@@ -510,6 +349,208 @@ impl Tabular for Feature {
         table.render(rows);
         println!("  {} control variant\n", "★".dimmed());
     }
+}
+
+/// Builds the "overrides" row content: one line per identity-overrides group (if any) and
+/// one line per segment override, each paired with its staging annotation (empty string if
+/// unstaged). Returned vectors stay in lockstep - one stage entry per content line - since
+/// callers join them by "\n" and render as aligned rows in adjacent table columns.
+fn override_lines(
+    variants: &[Variant],
+    ctx: &OverridesContext,
+    is_deleted: bool,
+) -> (Vec<String>, Vec<String>) {
+    let mut overrides_lines: Vec<String> = Vec::new();
+    let mut overrides_stages: Vec<String> = Vec::new();
+
+    if let Some((content, stage)) = identity_override_line(ctx, is_deleted) {
+        overrides_lines.push(content);
+        overrides_stages.push(stage);
+    }
+
+    let (segment_lines, segment_stages) = segment_override_lines(variants, ctx, is_deleted);
+    overrides_lines.extend(segment_lines);
+    overrides_stages.extend(segment_stages);
+
+    (overrides_lines, overrides_stages)
+}
+
+/// Builds the single grouped "identity" overrides line - up to [`SHOW_OVERRIDES`] committed
+/// identities plus a "(+N more)" suffix, with the identity carrying a pending change (if any)
+/// colored to stand out from the rest - paired with its staging annotation. Returns `None`
+/// when there's nothing to show (no committed identities and no pending change).
+fn identity_override_line(ctx: &OverridesContext, is_deleted: bool) -> Option<(String, String)> {
+    let committed_identities: Vec<&str> = ctx
+        .committed
+        .iter()
+        .filter_map(|o| {
+            if let FeatureOverride::Identity(v) = o {
+                Some(v.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if committed_identities.is_empty() && (is_deleted || ctx.identity_pending.is_none()) {
+        return None;
+    }
+
+    let mut identities = committed_identities
+        .iter()
+        .take(SHOW_OVERRIDES)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if !is_deleted
+        && let Some(pending) = ctx.identity_pending.as_ref()
+        && !committed_identities.contains(&pending.identity_value())
+    {
+        identities.push(pending.identity_value())
+    }
+
+    let rest = identities.len().saturating_sub(SHOW_OVERRIDES);
+    // Only the identity with a pending change is colored - dimmed if it's being
+    // unpinned, green if it's a new/updated override - the rest keep their
+    // default style so the pending one stands out.
+    let pending_value = ctx.identity_pending.as_ref().map(|p| p.identity_value());
+    let line = identities
+        .iter()
+        .map(|id| match &ctx.identity_pending {
+            Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
+                id.red().dimmed().to_string()
+            }
+            Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
+                id.green().to_string()
+            }
+            _ => id.dimmed().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let mut content = if rest > 0 {
+        format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
+    } else {
+        format!("{} › {}", "identity".bright_blue(), line)
+    };
+
+    if is_deleted {
+        content = content.red().to_string()
+    }
+
+    let stage = if is_deleted {
+        "✕ deleting".red().to_string()
+    } else if let Some(pending) = &ctx.identity_pending {
+        match pending {
+            IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
+            IdentityPending::Unpin(_) => "✕ deleting".red().to_string(),
+        }
+    } else {
+        String::new()
+    };
+
+    Some((content, stage))
+}
+
+/// Builds one line per segment override - every committed segment, plus (if not already
+/// among them) a newly staged segment override not yet committed - each paired with its
+/// staging annotation.
+fn segment_override_lines(
+    variants: &[Variant],
+    ctx: &OverridesContext,
+    is_deleted: bool,
+) -> (Vec<String>, Vec<String>) {
+    let mut lines: Vec<String> = Vec::new();
+    let mut stages: Vec<String> = Vec::new();
+    let mut pending_seg_shown = false;
+
+    for ovr in &ctx.committed {
+        if let FeatureOverride::Segment { name, weights } = ovr {
+            let is_current_pending = !is_deleted
+                && ctx
+                    .segment_pending
+                    .as_ref()
+                    .map(|(n, _)| n == name)
+                    .unwrap_or(false);
+
+            if is_deleted {
+                let parts = segment_weights(weights, variants);
+                let line = format!(
+                    "{}  › {} {}",
+                    "segment".bright_blue(),
+                    name.dimmed(),
+                    parts.join(", ")
+                )
+                .red()
+                .to_string();
+
+                lines.push(line);
+                stages.push("✕ deleting".red().to_string());
+            } else if is_current_pending {
+                pending_seg_shown = true;
+                let (line, stage) = match &ctx.segment_pending {
+                    Some((_, Some(pending_weights))) => {
+                        let parts =
+                            segment_weights_with_control_remainder(pending_weights, variants);
+                        let line = format!(
+                            "{}  › {} {}",
+                            "segment".bright_blue(),
+                            name.dimmed(),
+                            parts.join(", ")
+                        )
+                        .yellow()
+                        .to_string();
+                        (line, "‣ updating".yellow().to_string())
+                    }
+                    Some((_, None)) => {
+                        let parts = segment_weights(weights, variants);
+                        let line = format!(
+                            "{}  › {} {}",
+                            "segment".bright_blue(),
+                            name.dimmed(),
+                            parts.join(", ")
+                        )
+                        .red()
+                        .to_string();
+                        (line, "✕ deleting".red().to_string())
+                    }
+                    None => unreachable!(),
+                };
+                lines.push(line);
+                stages.push(stage);
+            } else {
+                let parts = segment_weights(weights, variants);
+                lines.push(format!(
+                    "{}  › {} {}",
+                    "segment".bright_blue(),
+                    name.dimmed(),
+                    parts.join(", ")
+                ));
+                stages.push(String::new())
+            }
+        }
+    }
+
+    // Pending segment set for a segment not yet in committed - show as new added line.
+    if !is_deleted
+        && !pending_seg_shown
+        && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
+    {
+        let parts = segment_weights_with_control_remainder(pending_weights, variants);
+        let line = format!(
+            "{}  › {} {}",
+            "segment".bright_blue(),
+            seg_name.dimmed(),
+            parts.join(", ")
+        )
+        .green()
+        .to_string();
+
+        lines.push(line);
+        stages.push("‣ adding".green().to_string());
+    }
+
+    (lines, stages)
 }
 
 /// Formats each weight as `"<value> → <weight>%"`, skipping any whose `variant_id` no
