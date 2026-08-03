@@ -1,90 +1,156 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
-use flagrant_types::{
-    Comparator, SegmentDriver, SegmentGroup,
-    payload::{SegmentPatch, SegmentPatchOp},
-};
 
 use super::Tabular;
-use super::segment::{
-    UTF_BTM_CORNER, UTF_TOP_CORNER, UTF_VERT_BAR, format_comparator, format_connector,
-    format_driver,
-};
+use super::segment::{UTF_BTM_CORNER, UTF_TOP_CORNER, UTF_VERT_BAR, format_comparator, format_connector, format_driver};
+use crate::handlers::internal::effectives::{EffectiveGroup, EffectiveRule};
 
-impl Tabular for SegmentGroup {
-    type Patch = SegmentPatch;
+/// Renders one rule as a single compact colored line (with its stage annotation), used both
+/// when a group is shown standalone and when a segment inlines every one of its groups' rules.
+///
+/// `display_idx` is the 1-based position to show (tracked by the caller since it depends on
+/// position within the group's rule list, not on the rule alone - staged-add rules show "+"
+/// instead of an index).
+pub(super) fn rule_line(
+    rule: &EffectiveRule,
+    display_idx: usize,
+    group_deleted: bool,
+    max_driver: usize,
+) -> (String, String) {
+    let driver = format_driver(&rule.driver);
+    let cmp = format_comparator(&rule.comparator);
+
+    let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
+        if group_deleted || rule.is_deleted {
+            (
+                UTF_VERT_BAR.dimmed(),
+                display_idx.to_string().red(),
+                driver.red(),
+                cmp.red(),
+                rule.value.as_str().red(),
+                if rule.is_deleted {
+                    "✕ deleting".red().to_string()
+                } else {
+                    String::new()
+                },
+            )
+        } else if rule.is_staged_add {
+            (
+                UTF_VERT_BAR.dimmed(),
+                "+".green(),
+                driver.bright_blue(),
+                cmp.dimmed(),
+                rule.value.as_str().green(),
+                "‣ adding".green().to_string(),
+            )
+        } else if rule.value_modified || rule.comparator_modified {
+            (
+                UTF_VERT_BAR.dimmed(),
+                display_idx.to_string().dimmed(),
+                driver.bright_blue(),
+                if rule.comparator_modified {
+                    cmp.yellow()
+                } else {
+                    cmp.dimmed()
+                },
+                if rule.value_modified {
+                    rule.value.as_str().yellow()
+                } else {
+                    rule.value.as_str().green()
+                },
+                "‣ updating".yellow().to_string(),
+            )
+        } else {
+            (
+                UTF_VERT_BAR.dimmed(),
+                display_idx.to_string().dimmed(),
+                driver.bright_blue(),
+                cmp.dimmed(),
+                rule.value.as_str().green(),
+                String::new(),
+            )
+        };
+
+    let line = format!("{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}", dw = max_driver);
+    (line, rule_stage)
+}
+
+/// Renders a group's own body: its label/description header, its rules (or a placeholder if
+/// it has none), and the closing corner - everything except the leading connector/joiner
+/// symbol, which is shown differently by each caller (inlined by `Segment::display`, shown as
+/// its own row by `EffectiveGroup::display`).
+pub(super) fn group_body_lines(group: &EffectiveGroup) -> (Vec<String>, Vec<String>) {
+    let mut lines: Vec<String> = Vec::new();
+    let mut stages: Vec<String> = Vec::new();
+
+    let label_colored = if group.is_deleted {
+        group.label.red()
+    } else if group.is_staged_add {
+        group.label.green()
+    } else {
+        group.label.yellow()
+    };
+    let desc_part = group
+        .description
+        .as_deref()
+        .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
+        .unwrap_or_default();
+
+    lines.push(format!(
+        "{} {label_colored}{desc_part}",
+        UTF_TOP_CORNER.dimmed()
+    ));
+    stages.push(if group.is_deleted {
+        "✕ deleting".red().to_string()
+    } else if group.is_staged_add {
+        "‣ adding".green().to_string()
+    } else {
+        String::new()
+    });
+
+    if group.rules.is_empty() {
+        lines.push(format!(
+            "{}  {}",
+            UTF_VERT_BAR.dimmed(),
+            "(no rules)".dimmed()
+        ));
+        stages.push(String::new());
+    } else {
+        let max_driver = group
+            .rules
+            .iter()
+            .map(|r| format_driver(&r.driver).len())
+            .max()
+            .unwrap_or(0);
+
+        let mut display_idx = 1usize;
+        for r in &group.rules {
+            let (line, stage) = rule_line(r, display_idx, group.is_deleted, max_driver);
+            lines.push(line);
+            stages.push(stage);
+
+            if !r.is_staged_add {
+                display_idx += 1;
+            }
+        }
+    }
+
+    lines.push(UTF_BTM_CORNER.dimmed().to_string());
+    stages.push(String::new());
+
+    (lines, stages)
+}
+
+impl Tabular for EffectiveGroup {
+    type Patch = ();
     type Context = ();
 
     fn list(_: &[Self]) {}
 
-    fn display(&self, patch: Option<&SegmentPatch>, _ctx: &()) {
+    fn display(&self, _patch: Option<&()>, _ctx: &()) {
         let group = self;
         let group_num = group.label.strip_prefix("group-").unwrap_or(&group.label);
         let title = format!("GROUP #{group_num}").bold().to_string();
-
-        let is_deleted = patch.is_some_and(|p| {
-            p.ops.iter().any(
-                |op| matches!(op, SegmentPatchOp::DeleteGroup { label } if label == &group.label),
-            )
-        });
-
-        let deleted_rule_ids: std::collections::HashSet<i32> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::DeleteRule { rule_id } => Some(*rule_id),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let staged_add_rules: Vec<(&SegmentDriver, &Comparator, &String)> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::AddRule {
-                            group_label,
-                            driver,
-                            comparator,
-                            value,
-                        } if group_label == &group.label => Some((driver, comparator, value)),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let rule_value_overrides: std::collections::HashMap<i32, &str> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::SetRuleValue { rule_id, value } => {
-                            Some((*rule_id, value.as_str()))
-                        }
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let rule_comparator_overrides: std::collections::HashMap<i32, &Comparator> = patch
-            .map(|p| {
-                p.ops
-                    .iter()
-                    .filter_map(|op| match op {
-                        SegmentPatchOp::SetRuleComparator {
-                            rule_id,
-                            comparator,
-                        } => Some((*rule_id, comparator)),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
 
         let sym = group
             .connector
@@ -92,7 +158,7 @@ impl Tabular for SegmentGroup {
             .map(format_connector)
             .unwrap_or("(first group)");
 
-        let sym_colored = if is_deleted {
+        let sym_colored = if group.is_deleted {
             sym.red().to_string()
         } else if sym.len() >= 10 {
             sym.dimmed().to_string()
@@ -100,135 +166,13 @@ impl Tabular for SegmentGroup {
             sym.bright_cyan().to_string()
         };
 
-        let joiner_stage = if is_deleted {
+        let joiner_stage = if group.is_deleted {
             "✕ deleting".red().to_string()
         } else {
             String::new()
         };
 
-        let mut group_lines: Vec<String> = Vec::new();
-        let mut group_stage: Vec<String> = Vec::new();
-
-        let (frame, label_colored) = if is_deleted {
-            (UTF_TOP_CORNER.dimmed(), group.label.red())
-        } else {
-            (UTF_TOP_CORNER.dimmed(), group.label.yellow())
-        };
-
-        let desc_part = group
-            .description
-            .as_deref()
-            .map(|d| format!(" {} {}", "─".dimmed(), d.dimmed()))
-            .unwrap_or_default();
-
-        group_lines.push(format!("{frame} {label_colored}{desc_part}"));
-        group_stage.push(if is_deleted {
-            "✕ deleting".red().to_string()
-        } else {
-            String::new()
-        });
-
-        let all_empty = group.rules.is_empty() && staged_add_rules.is_empty();
-
-        if all_empty {
-            group_lines.push(format!(
-                "{}  {}",
-                UTF_VERT_BAR.dimmed(),
-                "(no rules)".dimmed()
-            ));
-            group_stage.push(String::new());
-        } else {
-            let max_driver = group
-                .rules
-                .iter()
-                .map(|r| format_driver(&r.driver).len())
-                .chain(
-                    staged_add_rules
-                        .iter()
-                        .map(|(d, _, _)| format_driver(d).len()),
-                )
-                .max()
-                .unwrap_or(0);
-
-            for (display_idx, r) in (1usize..).zip(group.rules.iter()) {
-                let driver = format_driver(&r.driver);
-                let rule_deleted = deleted_rule_ids.contains(&r.id);
-                let value_modified = rule_value_overrides.contains_key(&r.id);
-                let comparator_modified = rule_comparator_overrides.contains_key(&r.id);
-                let effective_comparator = rule_comparator_overrides
-                    .get(&r.id)
-                    .copied()
-                    .unwrap_or(&r.comparator);
-                let effective_value = rule_value_overrides
-                    .get(&r.id)
-                    .copied()
-                    .unwrap_or(r.value.as_str());
-                let cmp = format_comparator(effective_comparator);
-
-                let (pipe, idx_str, driver_s, cmp_s, val_s, rule_stage) =
-                    if is_deleted || rule_deleted {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().red(),
-                            driver.red(),
-                            cmp.red(),
-                            r.value.red(),
-                            if rule_deleted {
-                                "✕ deleting".red().to_string()
-                            } else {
-                                String::new()
-                            },
-                        )
-                    } else if value_modified || comparator_modified {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().dimmed(),
-                            driver.bright_blue(),
-                            if comparator_modified {
-                                cmp.yellow()
-                            } else {
-                                cmp.dimmed()
-                            },
-                            if value_modified {
-                                effective_value.yellow()
-                            } else {
-                                effective_value.green()
-                            },
-                            "‣ updating".yellow().to_string(),
-                        )
-                    } else {
-                        (
-                            UTF_VERT_BAR.dimmed(),
-                            display_idx.to_string().dimmed(),
-                            driver.bright_blue(),
-                            cmp.dimmed(),
-                            r.value.green(),
-                            String::new(),
-                        )
-                    };
-                group_lines.push(format!(
-                    "{pipe}  {idx_str}  {driver_s:<dw$}  {cmp_s}  {val_s}",
-                    dw = max_driver,
-                ));
-                group_stage.push(rule_stage);
-            }
-            for (driver, comparator, value) in &staged_add_rules {
-                group_lines.push(format!(
-                    "{}  {}  {:<dw$}  {}  {}",
-                    UTF_VERT_BAR.green(),
-                    "+".green(),
-                    format_driver(driver).bright_blue(),
-                    format_comparator(comparator).dimmed(),
-                    value.green(),
-                    dw = max_driver,
-                ));
-                group_stage.push("‣ adding".green().to_string());
-            }
-        }
-
-        group_lines.push(UTF_BTM_CORNER.dimmed().to_string());
-        group_stage.push(String::new());
-
+        let (group_lines, group_stage) = group_body_lines(group);
         let group_str = group_lines.join("\n");
         let group_stage_str = group_stage.join("\n");
         let has_staged = !joiner_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());

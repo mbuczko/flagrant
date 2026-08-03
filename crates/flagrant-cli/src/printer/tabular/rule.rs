@@ -1,55 +1,23 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
-use flagrant_types::{
-    SegmentRule,
-    payload::{SegmentPatch, SegmentPatchOp},
-};
 
 use super::Tabular;
 use super::segment::{format_comparator, format_driver};
+use crate::handlers::internal::effectives::EffectiveRule;
 
-impl Tabular for SegmentRule {
-    type Patch = SegmentPatch;
+impl Tabular for EffectiveRule {
+    type Patch = ();
     type Context = (String, usize);
 
     fn list(_: &[Self]) {}
 
-    fn display(&self, patch: Option<&SegmentPatch>, ctx: &(String, usize)) {
+    fn display(&self, _patch: Option<&()>, ctx: &(String, usize)) {
         let rule = self;
         let (group_label, index) = ctx;
         let title = format!("RULE #{index}").bold().to_string();
 
-        let is_deleted = patch.is_some_and(|p| {
-            p.ops.iter().any(
-                |op| matches!(op, SegmentPatchOp::DeleteRule { rule_id } if *rule_id == rule.id),
-            )
-        });
-
-        let comparator_override = patch
-            .into_iter()
-            .flat_map(|p| &p.ops)
-            .find_map(|op| match op {
-                SegmentPatchOp::SetRuleComparator {
-                    rule_id,
-                    comparator,
-                } if *rule_id == rule.id => Some(comparator),
-                _ => None,
-            });
-        let value_override = patch
-            .into_iter()
-            .flat_map(|p| &p.ops)
-            .find_map(|op| match op {
-                SegmentPatchOp::SetRuleValue { rule_id, value } if *rule_id == rule.id => {
-                    Some(value)
-                }
-                _ => None,
-            });
-
-        let effective_comparator = comparator_override.unwrap_or(&rule.comparator);
-        let effective_value = value_override.map(String::as_str).unwrap_or(&rule.value);
-
         let (driver_s, comparator_s, value_s, driver_stage, comparator_stage, value_stage) =
-            if is_deleted {
+            if rule.is_deleted {
                 (
                     format_driver(&rule.driver).red(),
                     format_comparator(&rule.comparator).red(),
@@ -61,23 +29,23 @@ impl Tabular for SegmentRule {
             } else {
                 (
                     format_driver(&rule.driver).bright_blue(),
-                    if comparator_override.is_some() {
-                        format_comparator(effective_comparator).yellow()
+                    if rule.comparator_modified {
+                        format_comparator(&rule.comparator).yellow()
                     } else {
-                        format_comparator(effective_comparator).dimmed()
+                        format_comparator(&rule.comparator).dimmed()
                     },
-                    if value_override.is_some() {
-                        effective_value.yellow()
+                    if rule.value_modified {
+                        rule.value.as_str().yellow()
                     } else {
-                        effective_value.green()
+                        rule.value.as_str().green()
                     },
                     String::new(),
-                    if comparator_override.is_some() {
+                    if rule.comparator_modified {
                         "‣ updating".yellow().to_string()
                     } else {
                         String::new()
                     },
-                    if value_override.is_some() {
+                    if rule.value_modified {
                         "‣ updating".yellow().to_string()
                     } else {
                         String::new()

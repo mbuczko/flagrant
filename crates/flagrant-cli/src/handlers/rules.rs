@@ -18,7 +18,7 @@ use flagrant_types::{
 use strum::IntoEnumIterator;
 
 use crate::{
-    handlers::internal::{extract_single_value, open_in_editor},
+    handlers::internal::{effectives as effective, extract_single_value, open_in_editor},
     printer::tabular::Tabular,
 };
 
@@ -136,7 +136,9 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-    let group = segment
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(segment, patch);
+    let group = eff
         .groups
         .iter()
         .find(|g| g.label == label.as_ref())
@@ -148,10 +150,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         )
     })?;
 
-    rule.display(
-        ctx.segment_patch.as_ref().filter(|p| !p.is_empty()),
-        &(label.to_string(), index),
-    );
+    rule.display(None, &(label.to_string(), index));
     Ok(())
 }
 
