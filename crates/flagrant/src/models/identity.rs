@@ -166,6 +166,7 @@ pub async fn list(
             }
         }
     }
+
     Ok(result)
 }
 
@@ -180,6 +181,7 @@ pub async fn get_or_create_by_value(
         params![environment.id, value],
     )
     .await?;
+
     Ok(Identity {
         id,
         value,
@@ -251,6 +253,7 @@ pub async fn create(
     tx.commit().await?;
 
     let traits = load_traits(conn, identity.id).await?;
+
     Ok(IdentityWithTraits {
         id: identity.id,
         value: identity.value,
@@ -540,8 +543,9 @@ pub async fn get_identity_variants(
             )
             .await?;
             if segment_id != var.segment_id {
-                let variant = distributor::distribute(&mut tx, environment, var.feature_id, segment_id)
-                    .await?;
+                let variant =
+                    distributor::distribute(&mut tx, environment, var.feature_id, segment_id)
+                        .await?;
                 Some((variant, segment_id))
             } else {
                 SQLIdentities::clear_identity_dirty(

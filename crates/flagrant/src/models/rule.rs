@@ -21,9 +21,9 @@ struct RuleRow {
     value: String,
 }
 
-/// Adds a rule to the given group, then reconciles already-distributed identities against
-/// the segment's updated rules - this is the shared mutation point for both the CLI's
-/// batched `segment::patch` and the direct `POST .../rules` REST endpoint, so both trigger
+/// Adds a rule to the given group, then reconciles already distributed identities against
+/// the segment's updated rules. This is the shared mutation point for both the CLI's
+/// `segment::patch` and the direct `POST .../rules` REST endpoint, so both trigger segment
 /// reconciliation the same way.
 pub async fn add(
     conn: &mut SqliteConnection,
@@ -44,7 +44,7 @@ pub async fn add(
     Ok(rule)
 }
 
-/// Deletes a single rule by ID, then reconciles already-distributed identities against the
+/// Deletes a single rule by ID, then reconciles already distributed identities against the
 /// segment's updated rules (see [`add`] for why this lives at the mutation point).
 pub async fn delete(
     conn: &mut SqliteConnection,
@@ -59,7 +59,7 @@ pub async fn delete(
     Ok(())
 }
 
-/// Updates a rule's value, then reconciles already-distributed identities against the
+/// Updates a rule's value, then reconciles already distributed identities against the
 /// segment's updated rules (see [`add`] for why this lives at the mutation point).
 pub async fn set_value(
     conn: &mut SqliteConnection,
@@ -75,7 +75,7 @@ pub async fn set_value(
     Ok(())
 }
 
-/// Updates a rule's comparator, then reconciles already-distributed identities against the
+/// Updates a rule's comparator, then reconciles already distributed identities against the
 /// segment's updated rules (see [`add`] for why this lives at the mutation point).
 pub async fn set_comparator(
     conn: &mut SqliteConnection,

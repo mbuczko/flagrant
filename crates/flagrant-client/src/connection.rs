@@ -138,8 +138,17 @@ impl Connection {
         }
     }
 
-    pub fn get_or_init_pending(&mut self) -> &mut FeaturePatch {
+    pub fn get_or_init_feature_patch(&mut self) -> &mut FeaturePatch {
         self.feature_patch.get_or_insert_with(FeaturePatch::default)
+    }
+
+    pub fn get_or_init_identity_patch(&mut self) -> &mut IdentityPatch {
+        self.identity_patch
+            .get_or_insert_with(IdentityPatch::default)
+    }
+
+    pub fn get_or_init_segment_patch(&mut self) -> &mut SegmentPatch {
+        self.segment_patch.get_or_insert_with(SegmentPatch::default)
     }
 
     pub fn has_feature_pending(&self) -> bool {
@@ -149,17 +158,11 @@ impl Connection {
             .unwrap_or(false)
     }
 
-    pub fn discard_pending(&mut self) {
-        self.feature_patch = None;
-    }
-
-    pub fn get_or_init_identity_patch(&mut self) -> &mut IdentityPatch {
-        self.identity_patch
-            .get_or_insert_with(IdentityPatch::default)
-    }
-
-    pub fn discard_identity_pending(&mut self) {
-        self.identity_patch = None;
+    pub fn has_segment_pending(&self) -> bool {
+        self.segment_patch
+            .as_ref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
     }
 
     pub fn has_identity_pending(&self) -> bool {
@@ -169,23 +172,20 @@ impl Connection {
             .unwrap_or(false)
     }
 
-    pub fn get_or_init_segment_patch(&mut self) -> &mut SegmentPatch {
-        self.segment_patch.get_or_insert_with(SegmentPatch::default)
+    pub fn has_any_pending(&self) -> bool {
+        self.has_feature_pending() || self.has_identity_pending() || self.has_segment_pending()
+    }
+
+    pub fn discard_feature_pending(&mut self) {
+        self.feature_patch = None;
+    }
+
+    pub fn discard_identity_pending(&mut self) {
+        self.identity_patch = None;
     }
 
     pub fn discard_segment_patch(&mut self) {
         self.segment_patch = None;
-    }
-
-    pub fn has_segment_pending(&self) -> bool {
-        self.segment_patch
-            .as_ref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false)
-    }
-
-    pub fn has_any_pending(&self) -> bool {
-        self.has_feature_pending() || self.has_identity_pending() || self.has_segment_pending()
     }
 
     pub fn env_resource(&self) -> BaseResource<'_> {

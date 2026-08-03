@@ -39,7 +39,7 @@ pub async fn create_with_environment(
 
             Ok((project, env))
         }
-        Err(err) => Err(err),
+        Err(err) => anyhow::bail!(err),
     }
 }
 

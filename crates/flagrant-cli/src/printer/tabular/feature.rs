@@ -326,7 +326,7 @@ impl Tabular for Feature {
             let stage = if let Some(pending) = &ctx.identity_pending {
                 match pending {
                     IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
-                    IdentityPending::Unpin(_) => "‣ removing".red().to_string(),
+                    IdentityPending::Unpin(_) => "✕ deleting".red().to_string(),
                 }
             } else {
                 String::new()
@@ -374,7 +374,7 @@ impl Tabular for Feature {
                             )
                             .red()
                             .to_string();
-                            (line, "‣ removing".red().to_string())
+                            (line, "✕ deleting".red().to_string())
                         }
                         None => unreachable!(),
                     };

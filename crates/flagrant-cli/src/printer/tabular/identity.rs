@@ -118,7 +118,7 @@ impl Tabular for IdentityWithTraits {
                 variant_stage.push("- override".red().to_string());
             } else if iv.identity_id.is_some() {
                 let pin_marker = if iv.pinned_at.is_some() {
-                    format!(" {}", "★".yellow())
+                    String::from(" ★")
                 } else {
                     String::new()
                 };

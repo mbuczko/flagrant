@@ -375,7 +375,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
             let value_str = parsed.to_string();
             let mut ctx = session.context.write().unwrap();
 
-            ctx.get_or_init_pending()
+            ctx.get_or_init_feature_patch()
                 .variants
                 .push(VariantPatchOp::Add {
                     value: parsed,

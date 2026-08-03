@@ -135,7 +135,7 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     }
     println!("Staged: name = {name}");
 
-    ctx.get_or_init_pending().name = Some(name);
+    ctx.get_or_init_feature_patch().name = Some(name);
     Ok(())
 }
 
@@ -176,7 +176,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         if desc.is_empty() { "(cleared)" } else { &desc }
     );
 
-    ctx.get_or_init_pending().description = Some(desc);
+    ctx.get_or_init_feature_patch().description = Some(desc);
     Ok(())
 }
 
@@ -324,7 +324,7 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
 
-    let pending = ctx.get_or_init_pending();
+    let pending = ctx.get_or_init_feature_patch();
     pending.is_enabled = Some(enabled);
     pending.is_archived = Some(archived);
 
@@ -363,7 +363,7 @@ pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .collect::<Vec<_>>()
         .join(", ");
 
-    let pending = ctx.get_or_init_pending();
+    let pending = ctx.get_or_init_feature_patch();
     for (tag, add) in ops {
         stage::stage_tag(pending, tag, add);
     }
@@ -562,7 +562,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     }
 
     let mut ctx = session.context.write().unwrap();
-    ctx.get_or_init_pending().delete = true;
+    ctx.get_or_init_feature_patch().delete = true;
 
     println!(
         "Staged: feature '{name}' marked for deletion. Run COMMIT to apply or DISCARD to cancel."

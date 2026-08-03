@@ -249,7 +249,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 Ok(match op {
                     "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
-                    "show" | "delete" | "describe" if arg_n == 2 => {
+                    "delete" | "describe" | "show" if arg_n == 2 => {
                         filter_by_prefix(&["group-"], prefix)
                     }
                     _ => vec![],
@@ -261,7 +261,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    "use" | "show" | "delete" if arg_n == 2 => ctx
+                    "delete" | "use" | "show" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Segment>>(res.subpath(format!("/segments?prefix={prefix}")))?
                         .into_iter()

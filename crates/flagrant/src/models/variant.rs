@@ -174,8 +174,8 @@ pub async fn update_one(
         new_weight as i8 - variant.weight as i8,
     )
     .await?;
-    tx.commit().await?;
 
+    tx.commit().await?;
     Ok(())
 }
 
@@ -264,6 +264,7 @@ pub async fn get_for_feature(
             "No feature value set. Use \"FEATURE val ...\" to set default feature value."
         ));
     }
+
     Ok(variants)
 }
 
@@ -481,6 +482,7 @@ pub(crate) async fn delete_segment_weights_for_feature(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not clear segment overrides", e))?;
+
     Ok(())
 }
 
@@ -530,6 +532,7 @@ async fn balance_control_weight(
     } else {
         (variant_id, control_variant_id)
     };
+
     if variant_id != control_variant_id {
         identity::migrate_identities(
             &mut *tx,
@@ -540,6 +543,7 @@ async fn balance_control_weight(
         )
         .await?;
     }
+
     Ok((control_variant_id, control_weight))
 }
 

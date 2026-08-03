@@ -79,7 +79,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     println!("Staged: variant add weight={weight} value={value}");
 
-    ctx.get_or_init_pending()
+    ctx.get_or_init_feature_patch()
         .variants
         .push(VariantPatchOp::Add { value: fv, weight });
 
@@ -138,7 +138,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let old_value = current.to_string();
     let new_value = fv.to_string();
 
-    stage::stage_value(ctx.get_or_init_pending(), &variant_ref, fv)?;
+    stage::stage_value(ctx.get_or_init_feature_patch(), &variant_ref, fv)?;
 
     // Keep any staged identity override in sync: if it was pointing at the old value,
     // update it to the new value so it doesn't become stale after commit.
@@ -217,7 +217,7 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
-    stage::stage_weight(ctx.get_or_init_pending(), &variant_ref, new_weight)?;
+    stage::stage_weight(ctx.get_or_init_feature_patch(), &variant_ref, new_weight)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -275,7 +275,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .and_then(|f| f.variants.iter().find(|v| v.id == variant_id))
         .map(|v| v.value.to_string());
 
-    let ops = &mut ctx.get_or_init_pending().variants;
+    let ops = &mut ctx.get_or_init_feature_patch().variants;
     ops.retain(|op| {
         !matches!(op,
             VariantPatchOp::SetValue { id, .. } | VariantPatchOp::SetWeight { id, .. }
