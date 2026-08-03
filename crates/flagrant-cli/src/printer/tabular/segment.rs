@@ -50,18 +50,17 @@ impl Tabular for Segment {
 
     fn display(&self, patch: Option<&SegmentPatch>, ctx: &SegmentContext) {
         let eff = effective::effective_segment(self, patch);
-        let title = format!(
-            "SEGMENT{}",
-            if patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete))) {
-                " ⚠ MARKED FOR DELETION".red().to_string()
-            } else {
-                String::new()
-            }
-        )
-        .bold()
-        .to_string();
+        let title = "SEGMENT".bold().to_string();
 
-        let (name_str, name_stage) = if eff.name_modified {
+        let is_deleted =
+            patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
+
+        let (name_str, name_stage) = if is_deleted {
+            (
+                eff.name.red().to_string(),
+                "✕ deleting".red().to_string(),
+            )
+        } else if eff.name_modified {
             (
                 eff.name.yellow().to_string(),
                 "‣ updating".yellow().to_string(),
@@ -88,10 +87,10 @@ impl Tabular for Segment {
         for group in &eff.groups {
             if let Some(connector) = &group.connector {
                 let sym = format_connector(connector);
-                let sym_colored = if group.is_staged_add {
-                    sym.green()
-                } else if group.is_deleted {
+                let sym_colored = if is_deleted || group.is_deleted {
                     sym.red()
+                } else if group.is_staged_add {
+                    sym.green()
                 } else {
                     sym.bright_cyan()
                 };
@@ -107,7 +106,7 @@ impl Tabular for Segment {
                 group_stage.push(String::new());
             }
 
-            let (body_lines, body_stage) = super::group::group_body_lines(group);
+            let (body_lines, body_stage) = super::group::group_body_lines(group, is_deleted);
             group_lines.extend(body_lines);
             group_stage.extend(body_stage);
         }

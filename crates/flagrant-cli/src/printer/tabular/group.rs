@@ -79,11 +79,19 @@ pub(super) fn rule_line(
 /// it has none), and the closing corner - everything except the leading connector/joiner
 /// symbol, which is shown differently by each caller (inlined by `Segment::display`, shown as
 /// its own row by `EffectiveGroup::display`).
-pub(super) fn group_body_lines(group: &EffectiveGroup) -> (Vec<String>, Vec<String>) {
+///
+/// `force_deleted` lets a caller (namely `Segment::display`, when the whole segment is staged
+/// for deletion) render every group as deleting too, regardless of the group's own state -
+/// since a segment deletion takes every one of its groups down with it.
+pub(super) fn group_body_lines(
+    group: &EffectiveGroup,
+    force_deleted: bool,
+) -> (Vec<String>, Vec<String>) {
+    let is_deleted = group.is_deleted || force_deleted;
     let mut lines: Vec<String> = Vec::new();
     let mut stages: Vec<String> = Vec::new();
 
-    let label_colored = if group.is_deleted {
+    let label_colored = if is_deleted {
         group.label.red()
     } else if group.is_staged_add {
         group.label.green()
@@ -100,7 +108,7 @@ pub(super) fn group_body_lines(group: &EffectiveGroup) -> (Vec<String>, Vec<Stri
         "{} {label_colored}{desc_part}",
         UTF_TOP_CORNER.dimmed()
     ));
-    stages.push(if group.is_deleted {
+    stages.push(if is_deleted {
         "✕ deleting".red().to_string()
     } else if group.is_staged_add {
         "‣ adding".green().to_string()
@@ -125,7 +133,7 @@ pub(super) fn group_body_lines(group: &EffectiveGroup) -> (Vec<String>, Vec<Stri
 
         let mut display_idx = 1usize;
         for r in &group.rules {
-            let (line, stage) = rule_line(r, display_idx, group.is_deleted, max_driver);
+            let (line, stage) = rule_line(r, display_idx, is_deleted, max_driver);
             lines.push(line);
             stages.push(stage);
 
@@ -172,7 +180,7 @@ impl Tabular for EffectiveGroup {
             String::new()
         };
 
-        let (group_lines, group_stage) = group_body_lines(group);
+        let (group_lines, group_stage) = group_body_lines(group, false);
         let group_str = group_lines.join("\n");
         let group_stage_str = group_stage.join("\n");
         let has_staged = !joiner_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
