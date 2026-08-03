@@ -87,29 +87,22 @@ impl Tabular for Feature {
     }
 
     fn display(&self, patch: Option<&FeaturePatch>, ctx: &OverridesContext) {
-        let title = format!(
-            "FEATURE{}",
-            if patch.is_some_and(|p| p.delete) {
-                " ⚠ MARKED FOR DELETION".red().to_string()
-            } else {
-                String::new()
-            }
-        )
-        .bold()
-        .to_string();
+        let title = "FEATURE".bold().to_string();
+        let is_deleted = patch.is_some_and(|p| p.delete);
 
-        let name_str = match patch.and_then(|p| p.name.as_deref()) {
-            Some(n) => n.yellow().to_string(),
-            None => self.name.clone(),
-        };
-        let name_stage = if patch.is_some_and(|p| p.name.is_some()) {
-            "‣ updating".yellow().to_string()
+        let (name_str, name_stage) = if is_deleted {
+            (self.name.red().to_string(), "✕ deleting".red().to_string())
         } else {
-            String::new()
+            match patch.and_then(|p| p.name.as_deref()) {
+                Some(n) => (n.yellow().to_string(), "‣ updating".yellow().to_string()),
+                None => (self.name.clone(), String::new()),
+            }
         };
 
-        let has_tag_ops = patch.is_some_and(|p| !p.tags.is_empty());
-        let tags_str = if has_tag_ops {
+        let has_tag_ops = !is_deleted && patch.is_some_and(|p| !p.tags.is_empty());
+        let tags_str = if is_deleted {
+            self.tags.to_string().red().to_string()
+        } else if has_tag_ops {
             let names: Vec<&str> = self.tags.0.iter().map(|t| t.name.as_str()).collect();
             let mut added: Vec<&str> = Vec::new();
             let mut removed: Vec<&str> = Vec::new();
@@ -132,6 +125,7 @@ impl Tabular for Feature {
             }
 
             let mut effective: Vec<&str> = names.iter().chain(added.iter()).copied().collect();
+
             effective.sort();
             effective.dedup();
 
@@ -155,7 +149,9 @@ impl Tabular for Feature {
         } else {
             self.tags.to_string().blue().to_string()
         };
-        let tags_stage = if has_tag_ops {
+        let tags_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if has_tag_ops {
             "‣ updating".yellow().to_string()
         } else {
             String::new()
@@ -174,9 +170,22 @@ impl Tabular for Feature {
             }
         };
 
-        let pending_enabled = patch.and_then(|p| p.is_enabled);
-        let pending_archived = patch.and_then(|p| p.is_archived);
-        let status = if pending_archived.unwrap_or(self.is_archived) {
+        let pending_enabled = (!is_deleted)
+            .then(|| patch.and_then(|p| p.is_enabled))
+            .flatten();
+        let pending_archived = (!is_deleted)
+            .then(|| patch.and_then(|p| p.is_archived))
+            .flatten();
+        let status = if is_deleted {
+            let label = if self.is_archived {
+                "archived"
+            } else if self.is_enabled {
+                "ON"
+            } else {
+                "OFF"
+            };
+            format!("● {label}").red().to_string()
+        } else if pending_archived.unwrap_or(self.is_archived) {
             resolve(
                 pending_archived,
                 self.is_archived,
@@ -191,25 +200,37 @@ impl Tabular for Feature {
                 &format!("{} OFF", "●".red()),
             )
         };
-        let status_stage = if pending_enabled.is_some() || pending_archived.is_some() {
+        let status_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if pending_enabled.is_some() || pending_archived.is_some() {
             "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
 
-        let desc_str = match patch.and_then(|p| p.description.as_deref()) {
-            Some("") => "(cleared)".yellow().to_string(),
-            Some(d) => d.yellow().to_string(),
-            None => self.description.clone(),
+        let desc_str = if is_deleted {
+            self.description.red().to_string()
+        } else {
+            match patch.and_then(|p| p.description.as_deref()) {
+                Some("") => "(cleared)".yellow().to_string(),
+                Some(d) => d.yellow().to_string(),
+                None => self.description.clone(),
+            }
         };
-        let desc_stage = if patch.and_then(|p| p.description.as_ref()).is_some() {
+        let desc_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if patch.and_then(|p| p.description.as_ref()).is_some() {
             "‣ updating".yellow().to_string()
         } else {
             String::new()
         };
 
-        let eff = effective::effective_variants(self, patch);
-        let has_ops = patch.is_some_and(|p| !p.variants.is_empty());
+        let eff = if is_deleted {
+            effective::effective_variants(self, None)
+        } else {
+            effective::effective_variants(self, patch)
+        };
+        let has_ops = !is_deleted && patch.is_some_and(|p| !p.variants.is_empty());
         let non_control_total: u32 = eff
             .iter()
             .filter(|e| !e.is_control && !e.is_deleted)
@@ -241,7 +262,7 @@ impl Tabular for Feature {
                 e.value
             );
 
-            if e.is_deleted {
+            if is_deleted || e.is_deleted {
                 variant_lines.push(line.red().to_string());
                 variant_stage.push("✕ deleting".red().to_string());
             } else if e.is_staged_add {
@@ -284,14 +305,15 @@ impl Tabular for Feature {
             })
             .collect();
 
-        if !committed_identities.is_empty() || ctx.identity_pending.is_some() {
+        if !committed_identities.is_empty() || (!is_deleted && ctx.identity_pending.is_some()) {
             let mut identities = committed_identities
                 .iter()
                 .take(SHOW_OVERRIDES)
                 .cloned()
                 .collect::<Vec<_>>();
 
-            if let Some(pending) = ctx.identity_pending.as_ref()
+            if !is_deleted
+                && let Some(pending) = ctx.identity_pending.as_ref()
                 && !committed_identities.contains(&pending.identity_value())
             {
                 identities.push(pending.identity_value())
@@ -306,7 +328,7 @@ impl Tabular for Feature {
                 .iter()
                 .map(|id| match &ctx.identity_pending {
                     Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
-                        id.red().to_string()
+                        id.red().dimmed().to_string()
                     }
                     Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
                         id.green().to_string()
@@ -315,15 +337,23 @@ impl Tabular for Feature {
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            let content = if rest > 0 {
+
+            let mut content = if rest > 0 {
                 format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
             } else {
                 format!("{} › {}", "identity".bright_blue(), line)
             };
+
+            if is_deleted {
+                content = content.red().to_string()
+            }
+
             // overrides_lines and overrides_stages must stay in lockstep (one stage entry
             // per content line) since they're joined by "\n" and rendered as aligned rows
             // in adjacent table columns - always push both, even if the stage is empty.
-            let stage = if let Some(pending) = &ctx.identity_pending {
+            let stage = if is_deleted {
+                "✕ deleting".red().to_string()
+            } else if let Some(pending) = &ctx.identity_pending {
                 match pending {
                     IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
                     IdentityPending::Unpin(_) => "✕ deleting".red().to_string(),
@@ -340,13 +370,27 @@ impl Tabular for Feature {
 
         for ovr in &ctx.committed {
             if let FeatureOverride::Segment { name, weights } = ovr {
-                let is_current_pending = ctx
-                    .segment_pending
-                    .as_ref()
-                    .map(|(n, _)| n == name)
-                    .unwrap_or(false);
+                let is_current_pending = !is_deleted
+                    && ctx
+                        .segment_pending
+                        .as_ref()
+                        .map(|(n, _)| n == name)
+                        .unwrap_or(false);
 
-                if is_current_pending {
+                if is_deleted {
+                    let parts = segment_weights(weights, &self.variants);
+                    let line = format!(
+                        "{}  › {} {}",
+                        "segment".bright_blue(),
+                        name.dimmed(),
+                        parts.join(", ")
+                    )
+                    .red()
+                    .to_string();
+
+                    overrides_lines.push(line);
+                    overrides_stages.push("✕ deleting".red().to_string());
+                } else if is_current_pending {
                     pending_seg_shown = true;
                     let (line, stage) = match &ctx.segment_pending {
                         Some((_, Some(pending_weights))) => {
@@ -394,7 +438,9 @@ impl Tabular for Feature {
         }
 
         // Pending segment set for a segment not yet in committed - show as new added line.
-        if !pending_seg_shown && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
+        if !is_deleted
+            && !pending_seg_shown
+            && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
         {
             let parts = segment_weights_with_control_remainder(pending_weights, &self.variants);
             let line = format!(
