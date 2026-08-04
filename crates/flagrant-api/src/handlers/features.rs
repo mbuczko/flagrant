@@ -87,6 +87,7 @@ pub async fn create(
         payload.description,
         payload.value,
         payload.is_enabled,
+        payload.is_srv,
     )
     .await?;
 

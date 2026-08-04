@@ -3,20 +3,21 @@
 //! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
 //! plus the top-level `COMMIT` and `DISCARD` commands:
 //!
-//! | Command              | Handler                | Description                                         |
-//! |----------------------|------------------------|-----------------------------------------------------|
-//! | `FEATURE list`       | [`list`]               | List features in the current environment.           |
-//! | `FEATURE add`        | [`add`]                | Create a new feature with a default value.          |
-//! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                      |
-//! | `FEATURE show`       | [`show`]               | Print details of a feature.                         |
-//! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                   |
-//! | `FEATURE rename`     | [`rename`]             | Stage a feature name change.                        |
-//! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                        |
-//! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived'). |
-//! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.            |
-//! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.       |
-//! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                 |
-//! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.    |
+//! | Command              | Handler                | Description                                           |
+//! |----------------------|------------------------|-------------------------------------------------------|
+//! | `FEATURE list`       | [`list`]               | List features in the current environment.             |
+//! | `FEATURE add`        | [`add`]                | Create a new feature with a default value.            |
+//! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                        |
+//! | `FEATURE show`       | [`show`]               | Print details of a feature.                           |
+//! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                     |
+//! | `FEATURE rename`     | [`rename`]             | Stage a feature name change.                          |
+//! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                          |
+//! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived').   |
+//! | `FEATURE server-side`| [`server-side`]        | Stage a feature server-side only state (`on` / `off`).|
+//! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.              |
+//! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.         |
+//! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                   |
+//! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.      |
 
 use std::ops::Deref;
 
@@ -95,6 +96,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                     name: name.to_string(),
                     description: args.get(3).map(|d| d.to_string()),
                     is_enabled: false,
+                    is_srv: false,
                     value: parsed,
                 },
             )?
@@ -344,6 +346,28 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     pending.is_archived = Some(archived);
 
     println!("Staged: status = {label}");
+    Ok(())
+}
+
+/// Stage a feature's server-side-only ("srv") flag.
+///
+/// Expected args: `on`, `off`
+pub fn server_side(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let (is_srv, label) = match args.get(1).map(|arg| arg.to_lowercase()).as_deref() {
+        Some("on") => (true, "ON"),
+        Some("off") => (false, "OFF"),
+        _ => bail!("Expected one of: on, off"),
+    };
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+
+    let pending = ctx.get_or_init_feature_patch();
+    pending.is_srv = Some(is_srv);
+
+    println!("Staged: server-side only = {label}");
     Ok(())
 }
 

@@ -43,6 +43,7 @@ use utoipa::OpenApi;
         crate::handlers::segments::add_rule,
         crate::handlers::segments::delete_rule,
         crate::api::get_features,
+        crate::handlers::admin::reload_config,
     ),
     components(
         schemas(
@@ -93,6 +94,7 @@ use utoipa::OpenApi;
         (name = "traits", description = "Trait management"),
         (name = "segments", description = "Segment management"),
         (name = "api", description = "Public client API"),
+        (name = "admin", description = "Server administration"),
     ),
     info(
         title = "Flagrant API",

@@ -73,6 +73,7 @@ pub struct NewFeaturePayload {
     pub value: FeatureValue,
     pub description: Option<String>,
     pub is_enabled: bool,
+    pub is_srv: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -105,6 +106,7 @@ pub struct FeaturePatch {
     pub name: Option<String>,
     pub is_enabled: Option<bool>,
     pub is_archived: Option<bool>,
+    pub is_srv: Option<bool>,
     pub description: Option<String>,
     #[validate]
     pub tags: Vec<TagPatchOp>,
@@ -126,6 +128,7 @@ impl From<Feature> for NewFeaturePayload {
                 .value,
             description: None,
             is_enabled: feature.is_enabled,
+            is_srv: feature.is_srv,
         }
     }
 }
@@ -135,6 +138,7 @@ impl FeaturePatch {
         self.name.is_none()
             && self.is_enabled.is_none()
             && self.is_archived.is_none()
+            && self.is_srv.is_none()
             && self.description.is_none()
             && self.tags.is_empty()
             && self.variants.is_empty()

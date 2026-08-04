@@ -180,6 +180,24 @@ impl Tabular for Feature {
             String::new()
         };
 
+        let pending_srv = (!is_deleted)
+            .then(|| patch.and_then(|p| p.is_srv))
+            .flatten();
+        let srv_str = if is_deleted {
+            format!("● {}", if self.is_srv { "ON" } else { "OFF" })
+                .red()
+                .to_string()
+        } else {
+            resolve(pending_srv, self.is_srv, "ON", "OFF")
+        };
+        let srv_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if pending_srv.is_some() {
+            "‣ updating".yellow().to_string()
+        } else {
+            String::new()
+        };
+
         let desc_str = if is_deleted {
             self.description.red().to_string()
         } else {
@@ -268,6 +286,7 @@ impl Tabular for Feature {
 
         let has_staged = !name_stage.is_empty()
             || !status_stage.is_empty()
+            || !srv_stage.is_empty()
             || !desc_stage.is_empty()
             || !tags_stage.is_empty()
             || variant_stage.iter().any(|s| !s.is_empty())
@@ -291,7 +310,7 @@ impl Tabular for Feature {
                     variant_stage.len().max(1),
                 )
                 .width(Width::Percentage(100))
-                .add_title_with_align(&title, TitleAlign::LeftOffset(1))
+                .add_title_with_align(&title, TitleAlign::LeftOffset(6))
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
@@ -323,6 +342,7 @@ impl Tabular for Feature {
             }
             rows.push(vec!["tags".to_string(), tags_str, tags_stage]);
             rows.push(vec!["description".to_string(), desc_str, desc_stage]);
+            rows.push(vec!["server-side".to_string(), srv_str, srv_stage]);
             rows
         } else {
             let mut rows = vec![
@@ -335,6 +355,7 @@ impl Tabular for Feature {
             }
             rows.push(vec!["tags".to_string(), tags_str]);
             rows.push(vec!["description".to_string(), desc_str]);
+            rows.push(vec!["server-side".to_string(), srv_str]);
             rows
         };
         table.render(rows);

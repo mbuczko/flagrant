@@ -170,6 +170,12 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Feature.op_in_context(
+            "server-side",
+            "on|off",
+            handlers::features::server_side,
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.op_in_context(
             "tag",
             "tag1[, tag2, ...]",
             handlers::features::tag,
@@ -181,7 +187,7 @@ fn main() -> anyhow::Result<()> {
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · rename · show · status · tag · use",
+            "add · delete · describe · list · rename · show · server-side · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),
@@ -337,6 +343,7 @@ fn main() -> anyhow::Result<()> {
             handlers::reset,
             in_context!(any_ctx),
         ),
+        Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "override",
