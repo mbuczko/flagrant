@@ -60,6 +60,7 @@ pub struct Feature {
     pub tags: TagList,
     pub is_enabled: bool,
     pub is_archived: bool,
+    pub is_srv: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -131,6 +132,7 @@ pub struct IdentityVariant {
     pub feature_name: String,
     pub feature_value: Option<FeatureValue>,
     pub pinned_at: Option<NaiveDateTime>,
+    pub is_srv: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

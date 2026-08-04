@@ -170,6 +170,12 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Feature.op_in_context(
+            "srv",
+            "on|off",
+            handlers::features::srv,
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.op_in_context(
             "tag",
             "tag1[, tag2, ...]",
             handlers::features::tag,
@@ -181,7 +187,7 @@ fn main() -> anyhow::Result<()> {
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · rename · show · status · tag · use",
+            "add · delete · describe · list · rename · show · srv · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),

@@ -95,6 +95,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                     name: name.to_string(),
                     description: args.get(3).map(|d| d.to_string()),
                     is_enabled: false,
+                    is_srv: false,
                     value: parsed,
                 },
             )?
@@ -344,6 +345,28 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     pending.is_archived = Some(archived);
 
     println!("Staged: status = {label}");
+    Ok(())
+}
+
+/// Stage a feature's server-side-only ("srv") flag.
+///
+/// Expected args: `on`, `off`
+pub fn srv(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let (is_srv, label) = match args.get(1).map(|arg| arg.to_lowercase()).as_deref() {
+        Some("on") => (true, "ON"),
+        Some("off") => (false, "OFF"),
+        _ => bail!("Expected one of: on, off"),
+    };
+
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+
+    let pending = ctx.get_or_init_feature_patch();
+    pending.is_srv = Some(is_srv);
+
+    println!("Staged: srv = {label}");
     Ok(())
 }
 

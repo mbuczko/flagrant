@@ -152,6 +152,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .collect::<Vec<_>>(),
 
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
+                    "srv" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
                     // Auto-complete tag names for `FEATURE tag`. A `-` prefix means removal.
                     "tag" if arg_n >= 2 => {
                         let (modifier, val) = match prefix.strip_prefix('-') {

@@ -24,6 +24,7 @@ pub struct FeatureUpdate<'a> {
     new_name: Option<String>,
     new_value: Option<FeatureValue>,
     is_enabled: Option<bool>,
+    is_srv: Option<bool>,
 }
 
 impl<'a> FeatureUpdate<'a> {
@@ -39,6 +40,7 @@ impl<'a> FeatureUpdate<'a> {
             new_name: None,
             new_value: None,
             is_enabled: None,
+            is_srv: None,
         }
     }
     pub fn name(mut self, name: String) -> Self {
@@ -53,16 +55,21 @@ impl<'a> FeatureUpdate<'a> {
         self.is_enabled = Some(is_enabled);
         self
     }
+    pub fn srv(mut self, is_srv: bool) -> Self {
+        self.is_srv = Some(is_srv);
+        self
+    }
     pub async fn update(self) -> anyhow::Result<()> {
         let name = self.new_name.as_ref().unwrap_or(&self.feature.name);
         let value = self
             .new_value
             .unwrap_or_else(|| self.feature.get_default_value().clone());
         let is_enabled = self.is_enabled.unwrap_or(self.feature.is_enabled);
+        let is_srv = self.is_srv.unwrap_or(self.feature.is_srv);
         let mut tx = self.conn.begin().await?;
 
         // In transaction, update feature properties first
-        SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled])
+        SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled, is_srv])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
 
@@ -92,11 +99,12 @@ pub async fn create(
     description: Option<String>,
     value: FeatureValue,
     is_enabled: bool,
+    is_srv: bool,
 ) -> anyhow::Result<Feature> {
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![environment.project_id, name, description, is_enabled],
+        params![environment.project_id, name, description, is_enabled, is_srv],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -281,11 +289,12 @@ pub async fn patch(
     let mut tx = conn.begin().await?;
 
     // Feature-level properties
-    if patch.name.is_some() || patch.is_enabled.is_some() {
+    if patch.name.is_some() || patch.is_enabled.is_some() || patch.is_srv.is_some() {
         let name = patch.name.as_deref().unwrap_or(&feature.name);
         let enabled = patch.is_enabled.unwrap_or(feature.is_enabled);
+        let srv = patch.is_srv.unwrap_or(feature.is_srv);
 
-        SQLFeatures::update_feature(&mut *tx, params![feature.id, name, enabled])
+        SQLFeatures::update_feature(&mut *tx, params![feature.id, name, enabled, srv])
             .await
             .map_err(|e| FlagrantError::QueryFailed("Could not update feature", e))?;
     }
@@ -450,6 +459,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
         name: row.get("name"),
         description: row.get("description"),
         is_enabled: row.get("is_enabled"),
+        is_srv: row.get("is_srv"),
         is_archived: row
             .try_get::<Option<String>, _>("archived_at")
             .is_ok_and(|v| v.is_some()),

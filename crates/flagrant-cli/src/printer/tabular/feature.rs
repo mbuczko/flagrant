@@ -180,6 +180,27 @@ impl Tabular for Feature {
             String::new()
         };
 
+        let pending_srv = (!is_deleted).then(|| patch.and_then(|p| p.is_srv)).flatten();
+        let srv_str = if is_deleted {
+            format!("● {}", if self.is_srv { "ON" } else { "OFF" })
+                .red()
+                .to_string()
+        } else {
+            resolve(
+                pending_srv,
+                self.is_srv,
+                &format!("{} ON", "●".green()),
+                &format!("{} OFF", "●".dimmed()),
+            )
+        };
+        let srv_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if pending_srv.is_some() {
+            "‣ updating".yellow().to_string()
+        } else {
+            String::new()
+        };
+
         let desc_str = if is_deleted {
             self.description.red().to_string()
         } else {
@@ -312,6 +333,7 @@ impl Tabular for Feature {
             let mut rows = vec![
                 vec!["name".to_string(), name_str, name_stage],
                 vec!["status".to_string(), status, status_stage],
+                vec!["srv".to_string(), srv_str, srv_stage],
                 vec!["variants".to_string(), variants, variants_stage_str],
             ];
             if !overrides_str.is_empty() {
@@ -328,6 +350,7 @@ impl Tabular for Feature {
             let mut rows = vec![
                 vec!["name".to_string(), name_str],
                 vec!["status".to_string(), status],
+                vec!["srv".to_string(), srv_str],
                 vec!["variants".to_string(), variants],
             ];
             if !overrides_str.is_empty() {
