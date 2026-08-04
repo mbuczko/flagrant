@@ -49,9 +49,12 @@ pub async fn get_features(
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let identity = identity::get_or_create_by_value(&mut conn, &env, identity).await?;
 
-    let include_srv = match (state.config.srv_token(&project.name, &env.name), &bearer) {
-        (Some(expected), Some(TypedHeader(Authorization(token)))) => token.token() == expected,
-        _ => false,
+    let include_srv = {
+        let config = state.config.read().unwrap();
+        match (config.srv_token(&project.name, &env.name), &bearer) {
+            (Some(expected), Some(TypedHeader(Authorization(token)))) => token.token() == expected,
+            _ => false,
+        }
     };
 
     let variants = identity::get_identity_variants(&mut conn, &env, &identity)

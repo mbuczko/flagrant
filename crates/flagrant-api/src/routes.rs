@@ -5,7 +5,9 @@ use axum::{
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 
-use crate::handlers::{environments, features, identities, projects, segments, traits, variants};
+use crate::handlers::{
+    admin, environments, features, identities, projects, segments, traits, variants,
+};
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
 use crate::{api, handlers::tags};
@@ -122,6 +124,8 @@ pub fn init_router() -> Router<AppState> {
 
     Router::new()
         .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        // Admin
+        .route("/admin/reload", post(admin::reload_config))
         // Projects
         .route("/projects/", get(projects::list))
         .route("/projects/", post(projects::create))

@@ -122,8 +122,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 .into_iter()
                                 .map(|i| format!("{feature_part}@{}", i.value))
                                 .collect::<Vec<_>>()
-                        } else if let Some((feature_part, segment_prefix)) =
-                            prefix.split_once('+')
+                        } else if let Some((feature_part, segment_prefix)) = prefix.split_once('+')
                         {
                             ctx.client
                                 .get::<Vec<Segment>>(
@@ -152,7 +151,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .collect::<Vec<_>>(),
 
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
-                    "srv" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
+                    "server-side" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
                     // Auto-complete tag names for `FEATURE tag`. A `-` prefix means removal.
                     "tag" if arg_n >= 2 => {
                         let (modifier, val) = match prefix.strip_prefix('-') {
