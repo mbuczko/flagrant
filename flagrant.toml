@@ -1,0 +1,7 @@
+# sample configuration
+
+[projects.demo.envs.dev]
+srv-token = "dev-srv-token"
+
+[projects.demo.envs.base]
+srv-token = "base-srv-token"
