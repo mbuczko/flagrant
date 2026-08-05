@@ -6,7 +6,7 @@ The feature-flagging space is already well served by excellent solutions like [U
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
 
-Flagrant also tries its best to be a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
+Flagrant also tries its best to be a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays for an inline help and an internal REPL tester.
 
 ## What's there today
 
@@ -54,7 +54,7 @@ FEATURE use <feature>@<identity>
 FEATURE use <feature>+<segment>
 ```
 
-A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is *also* active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
+A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Features & variants
 
@@ -70,9 +70,11 @@ The prompt then shows the active feature, and these become available:
 
 - `FEATURE status on|off|archived` to switch feature status to active (ON), inactive (OFF) or archived
 - `FEATURE describe [description]` to add informative feature description
+- `FEATURE server-side on|off` to change server-side only property of the feature 
 - `VARIANT add <weight> <value>` to stage a new variant
-- `VARIANT value <index> <value>` / `VARIANT weight <index> [+/-]weight` to edit an existing one
-- `VARIANT delete <index>` / `VARIANT discard <index>` to remove a variant (or drop a still-staged one)
+- `VARIANT value <index> <value>` to modify value that variant conveys
+- `VARIANT weight <index> [+/-]weight` to modify variant's weight - either explicitly or relatively to current value
+- `VARIANT delete <index>` to stage variant for removal
 
 None of this reaches the API until you run `COMMIT` (or `DISCARD` to drop it). Once commited, the change gets applied server-side in a single transaction.
 
