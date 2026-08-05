@@ -873,6 +873,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "termimad",
+ "terminal_size",
 ]
 
 [[package]]

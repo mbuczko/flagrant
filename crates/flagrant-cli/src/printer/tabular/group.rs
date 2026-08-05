@@ -4,7 +4,10 @@ use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlig
 use super::Tabular;
 use super::rule::subject_label;
 use super::segment::format_connector;
-use crate::handlers::internal::effectives::{EffectiveGroup, EffectiveRule};
+use crate::{
+    handlers::internal::effectives::{EffectiveGroup, EffectiveRule},
+    printer::legend,
+};
 
 const UTF_TOP_CORNER: &str = "╭─";
 const UTF_MIDDLE_BAR: &str = "│";
@@ -35,80 +38,45 @@ impl Tabular for EffectiveGroup {
             sym.bright_cyan().to_string()
         };
 
-        let joiner_stage = if group.is_deleted {
-            "✕ deleting".red().to_string()
-        } else {
-            String::new()
-        };
-
-        let (group_lines, group_stage) = group_body_lines(group, false);
+        let (group_lines, group_staged) = group_body_lines(group, false);
         let group_str = group_lines.join("\n");
-        let group_stage_str = group_stage.join("\n");
-        let has_staged = !joiner_stage.is_empty() || group_stage.iter().any(|s| !s.is_empty());
+        let has_staged = group.is_deleted || group_staged;
         let nlines = group_lines.len();
 
-        if has_staged {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .add_column(
-                    None,
-                    Layout::Fixed(12),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
-                .width(Width::Percentage(100))
-                .build();
-            table.render(vec![
-                vec!["joiner".to_string(), sym_colored, joiner_stage],
-                vec!["group".to_string(), group_str, group_stage_str],
-            ]);
-        } else {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Truncate,
-                    nlines,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
-                .width(Width::Percentage(100))
-                .build();
-            table.render(vec![
-                vec!["joiner".to_string(), sym_colored],
-                vec!["group".to_string(), group_str],
-            ]);
-        }
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(100),
+                Align::Left,
+                Overflow::Truncate,
+                nlines,
+            )
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
+            .width(Width::Percentage(100))
+            .build();
+        table.render(vec![
+            vec!["joiner".to_string(), sym_colored],
+            vec!["group".to_string(), group_str],
+        ]);
+
+        legend::print_footer("", has_staged);
     }
 }
 
 /// Renders a group's own body: its label/description header, its rules (or a placeholder if
 /// it has none), and the closing corner - everything except the leading connector/joiner
 /// symbol, which is shown differently by each caller (inlined by `Segment::display`, shown as
-/// its own row by `EffectiveGroup::display`).
+/// its own row by `EffectiveGroup::display`). Also returns whether *any* line is staged.
 ///
 /// `force_deleted` lets a caller (namely `Segment::display`, when the whole segment is staged
 /// for deletion) render every group as deleting too, regardless of the group's own state -
 /// since a segment deletion takes every one of its groups down with it.
-pub(super) fn group_body_lines(
-    group: &EffectiveGroup,
-    force_deleted: bool,
-) -> (Vec<String>, Vec<String>) {
+pub(super) fn group_body_lines(group: &EffectiveGroup, force_deleted: bool) -> (Vec<String>, bool) {
     let is_deleted = group.is_deleted || force_deleted;
     let mut lines: Vec<String> = Vec::new();
-    let mut stages: Vec<String> = Vec::new();
+    let mut staged = is_deleted || group.is_staged_add || group.description_modified;
 
     let label_colored = if is_deleted {
         group.label.red()
@@ -139,23 +107,12 @@ pub(super) fn group_body_lines(
         UTF_TOP_CORNER.dimmed()
     ));
 
-    stages.push(if is_deleted {
-        "✕ deleting".red().to_string()
-    } else if group.is_staged_add {
-        "‣ adding".green().to_string()
-    } else if group.description_modified {
-        "‣ updating".yellow().to_string()
-    } else {
-        String::new()
-    });
-
     if group.rules.is_empty() {
         lines.push(format!(
             "{}  {}",
             UTF_MIDDLE_BAR.dimmed(),
             "(no rules)".dimmed()
         ));
-        stages.push(String::new());
     } else {
         let max_subject = group
             .rules
@@ -167,9 +124,9 @@ pub(super) fn group_body_lines(
         let mut display_idx = 1usize;
 
         for r in &group.rules {
-            let (line, stage) = rule_line(r, display_idx, is_deleted, max_subject);
+            let (line, rule_staged) = rule_line(r, display_idx, is_deleted, max_subject);
             lines.push(line);
-            stages.push(stage);
+            staged |= rule_staged;
 
             if !r.is_staged_add {
                 display_idx += 1;
@@ -178,13 +135,13 @@ pub(super) fn group_body_lines(
     }
 
     lines.push(UTF_BTM_CORNER.dimmed().to_string());
-    stages.push(String::new());
 
-    (lines, stages)
+    (lines, staged)
 }
 
-/// Renders one rule as a single compact colored line (with its stage annotation), used both
-/// when a group is shown standalone and when a segment inlines every one of its groups' rules.
+/// Renders one rule as a single compact colored line, used both when a group is shown
+/// standalone and when a segment inlines every one of its groups' rules. Also returns
+/// whether the rule is currently staged.
 ///
 /// `display_idx` is the 1-based position to show (tracked by the caller since it depends on
 /// position within the group's rule list, not on the rule alone - staged-add rules show "+"
@@ -194,22 +151,18 @@ fn rule_line(
     display_idx: usize,
     group_deleted: bool,
     max_subject: usize,
-) -> (String, String) {
+) -> (String, bool) {
     let subject = subject_label(&rule.subject);
     let cmp = rule.comparator.to_string();
 
-    let (pipe, idx_str, subject_s, cmp_s, val_s, rule_stage) = if group_deleted || rule.is_deleted {
+    let (pipe, idx_str, subject_s, cmp_s, val_s, staged) = if group_deleted || rule.is_deleted {
         (
             UTF_MIDDLE_BAR.dimmed(),
             display_idx.to_string().red(),
             subject.red(),
             cmp.red(),
             rule.value.as_str().red(),
-            if rule.is_deleted {
-                "✕ deleting".red().to_string()
-            } else {
-                String::new()
-            },
+            rule.is_deleted,
         )
     } else if rule.is_staged_add {
         (
@@ -218,7 +171,7 @@ fn rule_line(
             subject.bright_blue(),
             cmp.dimmed(),
             rule.value.as_str().green(),
-            "‣ adding".green().to_string(),
+            true,
         )
     } else if rule.value_modified || rule.comparator_modified {
         (
@@ -235,7 +188,7 @@ fn rule_line(
             } else {
                 rule.value.as_str().green()
             },
-            "‣ updating".yellow().to_string(),
+            true,
         )
     } else {
         (
@@ -244,7 +197,7 @@ fn rule_line(
             subject.bright_blue(),
             cmp.dimmed(),
             rule.value.as_str().green(),
-            String::new(),
+            false,
         )
     };
 
@@ -252,5 +205,5 @@ fn rule_line(
         "{pipe}  {idx_str}  {subject_s:<dw$}  {cmp_s}  {val_s}",
         dw = max_subject
     );
-    (line, rule_stage)
+    (line, staged)
 }

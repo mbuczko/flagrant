@@ -5,7 +5,7 @@ use flagrant_types::{
     payload::{SegmentPatch, SegmentPatchOp},
 };
 
-use crate::handlers::internal::effectives as effective;
+use crate::{handlers::internal::effectives as effective, printer::legend};
 
 use super::Tabular;
 
@@ -51,23 +51,19 @@ impl Tabular for Segment {
         let is_deleted =
             patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
 
-        let (name_str, name_stage) = if is_deleted {
-            (eff.name.red().to_string(), "✕ deleting".red().to_string())
+        let name_staged = is_deleted || eff.name_modified;
+        let name_str = if is_deleted {
+            eff.name.red().to_string()
         } else if eff.name_modified {
-            (
-                eff.name.yellow().to_string(),
-                "‣ updating".yellow().to_string(),
-            )
+            eff.name.yellow().to_string()
         } else {
-            (eff.name, String::new())
+            eff.name
         };
-        let (desc_str, desc_stage) = if eff.description_modified {
-            (
-                eff.description.unwrap_or_default().yellow().to_string(),
-                "‣ updating".yellow().to_string(),
-            )
+        let desc_staged = eff.description_modified;
+        let desc_str = if eff.description_modified {
+            eff.description.unwrap_or_default().yellow().to_string()
         } else {
-            (eff.description.unwrap_or_default(), String::new())
+            eff.description.unwrap_or_default()
         };
 
         // Upper-bound capacity: each group pushes at most 3 lines for its connector, 1 for
@@ -75,7 +71,7 @@ impl Tabular for Segment {
         // the single "(no rules)" placeholder line when a group has none).
         let group_capacity: usize = eff.groups.iter().map(|g| g.rules.len() + 6).sum();
         let mut group_lines: Vec<String> = Vec::with_capacity(group_capacity);
-        let mut group_stage: Vec<String> = Vec::with_capacity(group_capacity);
+        let mut groups_staged = false;
 
         for group in &eff.groups {
             if let Some(connector) = &group.connector {
@@ -87,28 +83,18 @@ impl Tabular for Segment {
                 } else {
                     sym.bright_cyan()
                 };
-                // Three separate pushes rather than one entry with embedded "\n"s: the
-                // stage column height is set to group_stage.len(), so every visual line
-                // must correspond to exactly one vector element. Otherwise the column is
-                // sized too small and trailing annotations (e.g. "deleting") get cut off.
                 group_lines.push(String::new());
-                group_stage.push(String::new());
                 group_lines.push(format!(" {sym_colored}"));
-                group_stage.push(String::new());
                 group_lines.push(String::new());
-                group_stage.push(String::new());
             }
 
-            let (body_lines, body_stage) = super::group::group_body_lines(group, is_deleted);
+            let (body_lines, body_staged) = super::group::group_body_lines(group, is_deleted);
             group_lines.extend(body_lines);
-            group_stage.extend(body_stage);
+            groups_staged |= body_staged;
         }
 
-        // overrides_lines and overrides_stages must stay in lockstep (one stage entry per
-        // content line) since they're joined by "\n" and rendered as aligned rows in
-        // adjacent table columns.
         let mut overrides_lines: Vec<String> = Vec::new();
-        let mut overrides_stages: Vec<String> = Vec::new();
+        let mut overrides_staged = false;
 
         for o in &ctx.overrides {
             let pending_op = patch.into_iter().flat_map(|p| &p.ops).find(|op| {
@@ -130,93 +116,53 @@ impl Tabular for Segment {
             match pending_op {
                 Some(SegmentPatchOp::UnsetFeatureOverride { .. }) => {
                     overrides_lines.push(plain_line.red().to_string());
-                    overrides_stages.push("‣ removing".red().to_string());
+                    overrides_staged = true;
                 }
                 Some(SegmentPatchOp::SetFeatureOverride { .. }) => {
                     overrides_lines.push(plain_line.yellow().to_string());
-                    overrides_stages.push("‣ updating".yellow().to_string());
+                    overrides_staged = true;
                 }
                 _ => {
                     overrides_lines.push(plain_line);
-                    overrides_stages.push(String::new());
                 }
             }
         }
 
-        let has_staged_overrides = overrides_stages.iter().any(|s| !s.is_empty());
-        let has_staged = !name_stage.is_empty()
-            || !desc_stage.is_empty()
-            || group_stage.iter().any(|s| !s.is_empty())
-            || has_staged_overrides;
+        let has_staged = name_staged || desc_staged || groups_staged || overrides_staged;
 
-        let table = if has_staged {
-            FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(120),
-                    Align::Left,
-                    Overflow::Truncate,
-                    20,
-                )
-                .add_column(
-                    None,
-                    Layout::Fixed(14),
-                    Align::Left,
-                    Overflow::Truncate,
-                    group_stage.len().max(1),
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
-                .width(Width::Percentage(100))
-                .build()
-        } else {
-            FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(120),
-                    Align::Left,
-                    Overflow::Truncate,
-                    20,
-                )
-                .hseparator(Some(fancy_table::Separator::Custom('-')))
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
-                .width(Width::Percentage(100))
-                .build()
-        };
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                20,
+            )
+            .hseparator(Some(fancy_table::Separator::Custom('-')))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
+            .width(Width::Percentage(100))
+            .build();
 
         let mut rows = vec![
-            vec!["name".to_string(), name_str, name_stage],
-            vec![
-                "rules".to_string(),
-                group_lines.join("\n"),
-                group_stage.join("\n"),
-            ],
+            vec!["name".to_string(), name_str],
+            vec!["rules".to_string(), group_lines.join("\n")],
         ];
-        if let overrides_str = overrides_lines.join("\n")
-            && !overrides_str.is_empty()
-        {
-            rows.push(vec![
-                "overrides".to_string(),
-                overrides_str,
-                overrides_stages.join("\n"),
-            ]);
-        }
-        rows.push(vec!["description".to_string(), desc_str, desc_stage]);
+        let overrides_str = overrides_lines.join("\n");
 
-        // The table itself only has a stage column when has_staged, so drop it from each
-        // row to match - it would be all empty strings anyway in that case.
-        if !has_staged {
-            for row in &mut rows {
-                row.truncate(2);
-            }
+        if !overrides_str.is_empty() {
+            rows.push(vec!["overrides".to_string(), overrides_str]);
         }
+        rows.push(vec!["description".to_string(), desc_str]);
         table.render(rows);
 
-        if !overrides_lines.is_empty() {
-            println!("  {} control variant\n", "★".dimmed());
-        }
+        let left = if overrides_lines.is_empty() {
+            String::new()
+        } else {
+            format!("  {} control variant", "★".dimmed())
+        };
+        legend::print_footer(&left, has_staged);
+
         if !(eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add)) {
             println!(
                 "{}",
