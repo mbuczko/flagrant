@@ -387,14 +387,31 @@ pub async fn patch(
                 rule::remove_from_groups(&mut segment.groups, rule_id);
             }
             SegmentPatchOp::SetRuleValue { rule_id, value } => {
-                rule::set_value(conn, segment.id, rule_id, value.clone()).await?;
+                let comparator = segment
+                    .groups
+                    .iter()
+                    .flat_map(|g| &g.rules)
+                    .find(|r| r.id == rule_id)
+                    .map(|r| r.comparator.clone())
+                    .ok_or(FlagrantError::NotFound("Rule not found"))?;
+
+                rule::set_value(conn, segment.id, rule_id, &comparator, value.clone()).await?;
                 rule::update_value_in_groups(&mut segment.groups, rule_id, value);
             }
             SegmentPatchOp::SetRuleComparator {
                 rule_id,
                 comparator,
             } => {
-                rule::set_comparator(conn, segment.id, rule_id, comparator.clone()).await?;
+                let value = segment
+                    .groups
+                    .iter()
+                    .flat_map(|g| &g.rules)
+                    .find(|r| r.id == rule_id)
+                    .map(|r| r.value.clone())
+                    .ok_or(FlagrantError::NotFound("Rule not found"))?;
+
+                rule::set_comparator(conn, segment.id, rule_id, comparator.clone(), &value)
+                    .await?;
                 rule::update_comparator_in_groups(&mut segment.groups, rule_id, comparator);
             }
             SegmentPatchOp::SetFeatureOverride {

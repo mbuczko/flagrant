@@ -14,6 +14,11 @@ use super::{completer::CommandLineCompleter, hinter::ReplHinter, parser::split_c
 
 pub type ReplEditor<'a, T> = Editor<ReplHelper<'a, T>, DefaultHistory>;
 
+/// Called with the text following a help-overlay trigger char (e.g. `?FEATURE` yields
+/// `"FEATURE"`, a bare `?` yields `""`) and the session, so it can print whatever help
+/// text it wants without `flagrant-repl` needing to know what "help" means.
+pub type HelpHandler<T> = fn(&str, &Session<T>) -> anyhow::Result<()>;
+
 #[derive(Helper, Completer, Hinter, Validator, Overlayer)]
 pub struct ReplHelper<'a, T: 'static> {
     pub prompter: PromptFn<T>,
@@ -35,6 +40,7 @@ pub fn init<T>(
     helper: ReplHelper<T>,
     session: &Session<T>,
     commands: &[ReplCommand<T>],
+    help: Option<(char, HelpHandler<T>)>,
 ) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper<T>, DefaultHistory> = Editor::new()?;
     let prompter = helper.prompter;
@@ -46,6 +52,16 @@ pub fn init<T>(
     loop {
         match rl.readline(prompter(session).as_str()) {
             Ok(line) => {
+                if let Some((trigger, handler)) = help
+                    && let Some(rest) = line.strip_prefix(trigger)
+                {
+                    rl.add_history_entry(line.as_str())?;
+                    if let Err(error) = handler(rest.trim(), session) {
+                        eprintln!("{error}");
+                    }
+                    continue;
+                }
+
                 let slices = split_command_line(&line)?;
 
                 if slices.is_empty() {

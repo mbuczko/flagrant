@@ -15,6 +15,7 @@ regex = {workspace = true}
 chrono = {workspace = true}
 utoipa = {workspace = true}
 serde = {workspace = true}
+serde_json = {workspace = true}
 serde_valid = {workspace = true}
 sqlx = {workspace = true}
 thiserror = {workspace = true}

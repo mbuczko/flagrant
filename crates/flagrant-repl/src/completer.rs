@@ -19,6 +19,10 @@ pub type CommandList<'a> = Vec<(
 pub struct CommandLineCompleter<'a> {
     commands: CommandList<'a>,
     arg_completer: Option<&'a dyn AutoCompleter>,
+    /// Trigger character and topic names for a reduced, single-token completion mode
+    /// (e.g. a `?FEATURE` help overlay) - active only when the line starts with the
+    /// trigger char, and offers no operation/argument completion.
+    help: Option<(char, Vec<String>)>,
 }
 
 pub trait AutoCompleter {
@@ -147,10 +151,18 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
+    /// Restricts completion to a fixed list of topic names whenever the line starts
+    /// with `trigger` - no operations or arguments are offered in this mode.
+    pub fn with_help_topics(mut self, trigger: char, topics: Vec<String>) -> Self {
+        self.help = Some((trigger, topics));
+        self
+    }
+
     pub fn new(commands: CommandList<'a>) -> CommandLineCompleter<'a> {
         Self {
             commands,
             arg_completer: None,
+            help: None,
         }
     }
 }
@@ -159,6 +171,34 @@ impl Completer for CommandLineCompleter<'_> {
     type Candidate = Pair;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        if let Some((trigger, topics)) = &self.help
+            && let Some(rest) = line.strip_prefix(*trigger)
+        {
+            let trigger_len = trigger.len_utf8();
+            let adjusted_pos = pos.saturating_sub(trigger_len);
+            let args = split_command_line(rest).unwrap();
+            let (arg_n, offset) = find_arg_by_position(&args, adjusted_pos);
+
+            if arg_n == 0 {
+                let start = args.first().map(|a| a.1).unwrap_or(0) + trigger_len;
+                let prefix = args
+                    .first()
+                    .map(|a| a[..offset].to_uppercase())
+                    .unwrap_or_default();
+                let pairs = topics
+                    .iter()
+                    .filter(|t| prefix.is_empty() || t.starts_with(&prefix))
+                    .map(|t| Pair {
+                        display: String::default(),
+                        replacement: t.clone(),
+                    })
+                    .collect();
+
+                return Ok((start, pairs));
+            }
+            return Ok((pos, vec![]));
+        }
+
         let args = split_command_line(line).unwrap();
         let (arg_n, offset) = find_arg_by_position(&args, pos);
 
@@ -227,5 +267,55 @@ mod tests {
         // "e" from "use" while a 3rd token is still present on the line.
         let (_start, pairs) = completer.complete("FEATURE us ui_theme", 10, &ctx).unwrap();
         assert!(pairs.iter().any(|p| p.replacement == "use"));
+    }
+
+    #[test]
+    fn completes_help_topic_with_no_space_after_trigger() {
+        let completer = CommandLineCompleter::new(vec![])
+            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        // "?FEAT" - how it actually looks on screen, since the leading trigger char is
+        // hidden from the rendered line by the overlay mechanism.
+        let (start, pairs) = completer.complete("?FEAT", 5, &ctx).unwrap();
+        assert_eq!(start, 1);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].replacement, "FEATURE");
+    }
+
+    #[test]
+    fn completes_help_topic_with_space_after_trigger() {
+        let completer = CommandLineCompleter::new(vec![])
+            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        let (start, pairs) = completer.complete("? FEAT", 6, &ctx).unwrap();
+        assert_eq!(start, 2);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].replacement, "FEATURE");
+    }
+
+    #[test]
+    fn lists_all_help_topics_for_bare_trigger() {
+        let completer = CommandLineCompleter::new(vec![])
+            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        let (_start, pairs) = completer.complete("?", 1, &ctx).unwrap();
+        assert_eq!(pairs.len(), 2);
+    }
+
+    #[test]
+    fn offers_no_completions_past_help_topic() {
+        let completer = CommandLineCompleter::new(vec![])
+            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        let (_start, pairs) = completer.complete("?FEATURE foo", 12, &ctx).unwrap();
+        assert!(pairs.is_empty());
     }
 }

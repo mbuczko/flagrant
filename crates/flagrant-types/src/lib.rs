@@ -179,6 +179,22 @@ pub enum Comparator {
     NotIn,
 }
 
+impl Comparator {
+    /// Validates that `value` is well-formed for this comparator - currently only `In`/
+    /// `NotIn` have a constraint, requiring a JSON array. Shared by the CLI and the API/DB
+    /// layer so the check can't be bypassed by going through one path but not the other.
+    pub fn validate_value(&self, value: &str) -> Result<(), &'static str> {
+        if matches!(self, Comparator::In | Comparator::NotIn)
+            && serde_json::from_str::<Vec<serde_json::Value>>(value).is_err()
+        {
+            return Err(
+                "Value must be a valid JSON array for the 'in'/'not_in' comparator, e.g. [\"a\",\"b\"].",
+            );
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct SegmentRule {
     #[sqlx(rename = "rule_id")]

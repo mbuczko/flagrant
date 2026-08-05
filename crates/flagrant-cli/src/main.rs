@@ -17,7 +17,13 @@ use rustyline::overlay::GenericOverlayer;
 mod command;
 mod completer;
 mod handlers;
+mod help;
 mod printer;
+
+/// First-character trigger for the `?` help overlay - shared by the cosmetic prompt
+/// overlay, the reduced tab-completion mode, and the REPL's help dispatch, so they
+/// can't drift out of sync.
+const HELP_TRIGGER: char = '?';
 
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
@@ -394,9 +400,10 @@ fn main() -> anyhow::Result<()> {
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
-        ('?', "\x1b[33mhelp> \x1b[0m"),
+        (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
         ('\\', "\x1b[36mset> \x1b[0m"),
     ];
+    let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
     let helper = ReplHelper {
         prompter,
@@ -418,10 +425,11 @@ fn main() -> anyhow::Result<()> {
                 })
                 .collect()
         })
-        .with_arg_completer(&arg_completer),
+        .with_arg_completer(&arg_completer)
+        .with_help_topics(HELP_TRIGGER, help_topics),
     };
 
-    readline::init(helper, &session, &commands)?;
+    readline::init(helper, &session, &commands, Some((HELP_TRIGGER, help::show)))?;
 
     Ok(())
 }
