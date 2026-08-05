@@ -98,7 +98,7 @@ use utoipa::OpenApi;
     ),
     info(
         title = "Flagrant API",
-        version = "0.0.12",
+        version = "0.0.13",
         description = "CLI-powered feature-flagging service"
     )
 )]
