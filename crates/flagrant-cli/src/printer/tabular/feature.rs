@@ -90,15 +90,18 @@ impl Tabular for Feature {
         let title = "FEATURE".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
 
-        let name_staged = is_deleted || patch.and_then(|p| p.name.as_deref()).is_some();
-        let name_str = if is_deleted {
-            self.name.red().to_string()
-        } else {
-            match patch.and_then(|p| p.name.as_deref()) {
-                Some(n) => n.yellow().to_string(),
-                None => self.name.clone(),
-            }
-        };
+        let staged_name = patch.and_then(|p| p.name.as_deref());
+        let name_modified = staged_name.is_some();
+        let name_str = legend::stage_color(
+            if is_deleted {
+                self.name.as_str()
+            } else {
+                staged_name.unwrap_or(&self.name)
+            },
+            is_deleted,
+            name_modified,
+        )
+        .into_owned();
 
         let has_tag_ops = !is_deleted && patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if is_deleted {
@@ -165,26 +168,34 @@ impl Tabular for Feature {
             )
         };
 
-        let tags_staged = is_deleted || has_tag_ops;
-        let desc_staged = is_deleted || patch.and_then(|p| p.description.as_ref()).is_some();
-        let status_staged = is_deleted || pending_enabled.is_some() || pending_archived.is_some();
-        let srv_staged = is_deleted || patch.and_then(|p| p.is_srv).is_some();
+        let status_modified = pending_enabled.is_some() || pending_archived.is_some();
 
-        let mut srv_str = (if self.is_srv { "ON" } else { "OFF" }).to_string();
+        let staged_srv = (!is_deleted).then(|| patch.and_then(|p| p.is_srv)).flatten();
+        let srv_modified = staged_srv.is_some();
+        let srv_effective = staged_srv.unwrap_or(self.is_srv);
+        let srv_str = legend::stage_color(
+            if srv_effective { "ON" } else { "OFF" },
+            is_deleted,
+            srv_modified,
+        )
+        .into_owned();
 
-        if is_deleted {
-            srv_str = srv_str.red().to_string();
-        }
-
-        let desc_str = if is_deleted {
-            self.description.red().to_string()
-        } else {
-            match patch.and_then(|p| p.description.as_deref()) {
-                Some("") => "(cleared)".yellow().to_string(),
-                Some(d) => d.yellow().to_string(),
-                None => self.description.clone(),
-            }
-        };
+        let staged_desc = patch.and_then(|p| p.description.as_deref());
+        let desc_modified = staged_desc.is_some();
+        let desc_str = legend::stage_color(
+            if is_deleted {
+                self.description.as_str()
+            } else {
+                match staged_desc {
+                    Some("") => "(cleared)",
+                    Some(d) => d,
+                    None => &self.description,
+                }
+            },
+            is_deleted,
+            desc_modified,
+        )
+        .into_owned();
 
         let eff = effective::effective_variants(self, if is_deleted { None } else { patch });
         let total_lines = eff.len();
@@ -242,11 +253,12 @@ impl Tabular for Feature {
             override_lines(&self.variants, ctx, is_deleted);
         let overrides_str = overrides_lines.join("\n");
 
-        let has_staged = name_staged
-            || status_staged
-            || srv_staged
-            || desc_staged
-            || tags_staged
+        let has_staged = is_deleted
+            || name_modified
+            || status_modified
+            || srv_modified
+            || desc_modified
+            || has_tag_ops
             || variants_staged
             || overrides_has_staged;
 

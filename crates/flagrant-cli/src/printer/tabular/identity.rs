@@ -43,11 +43,7 @@ impl Tabular for IdentityWithTraits {
         let title = "IDENTITY".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
         let id_staged = is_deleted;
-        let id_str = if is_deleted {
-            self.value.red().to_string()
-        } else {
-            self.value.clone()
-        };
+        let id_str = legend::stage_color(self.value.as_str(), is_deleted, false).into_owned();
 
         let eff_traits = effective::effective_identity_traits(self, patch);
 
@@ -109,8 +105,14 @@ impl Tabular for IdentityWithTraits {
                 .iter()
                 .find(|o| o.feature_name == iv.feature_name)
             {
-                // Staged override: show the new value
-                variant_lines.push(format!("{feature} → {}", pin.variant_value.green()));
+                // Staged override: green for a brand-new pin, yellow when replacing an
+                // already-pinned variant.
+                let colored_value = if iv.pinned_at.is_some() {
+                    pin.variant_value.yellow()
+                } else {
+                    pin.variant_value.green()
+                };
+                variant_lines.push(format!("{feature} → {colored_value}"));
                 variants_staged = true;
             } else if staged_unpins.contains(&iv.feature_name) {
                 // Staged unoverride

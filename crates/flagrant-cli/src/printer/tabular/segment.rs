@@ -52,19 +52,14 @@ impl Tabular for Segment {
             patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
 
         let name_staged = is_deleted || eff.name_modified;
-        let name_str = if is_deleted {
-            eff.name.red().to_string()
-        } else if eff.name_modified {
-            eff.name.yellow().to_string()
-        } else {
-            eff.name
-        };
-        let desc_staged = eff.description_modified;
-        let desc_str = if eff.description_modified {
-            eff.description.unwrap_or_default().yellow().to_string()
-        } else {
-            eff.description.unwrap_or_default()
-        };
+        let name_str = legend::stage_color(eff.name, is_deleted, eff.name_modified).into_owned();
+        let desc_staged = is_deleted || eff.description_modified;
+        let desc_str = legend::stage_color(
+            eff.description.unwrap_or_default(),
+            is_deleted,
+            eff.description_modified,
+        )
+        .into_owned();
 
         // Upper-bound capacity: each group pushes at most 3 lines for its connector, 1 for
         // the label, 1 for the closing corner, plus one per rule (the +1 also safely covers
@@ -97,14 +92,6 @@ impl Tabular for Segment {
         let mut overrides_staged = false;
 
         for o in &ctx.overrides {
-            let pending_op = patch.into_iter().flat_map(|p| &p.ops).find(|op| {
-                matches!(op,
-                    SegmentPatchOp::SetFeatureOverride { feature_id, .. }
-                    | SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
-                    if *feature_id == o.feature_id
-                )
-            });
-
             let parts = overridden_variant_parts(&o.weights);
             let plain_line = format!(
                 "{} › {} {}",
@@ -112,6 +99,20 @@ impl Tabular for Segment {
                 o.feature_name.dimmed(),
                 parts.join(", ")
             );
+
+            if is_deleted {
+                overrides_lines.push(plain_line.red().to_string());
+                overrides_staged = true;
+                continue;
+            }
+
+            let pending_op = patch.into_iter().flat_map(|p| &p.ops).find(|op| {
+                matches!(op,
+                    SegmentPatchOp::SetFeatureOverride { feature_id, .. }
+                    | SegmentPatchOp::UnsetFeatureOverride { feature_id, .. }
+                    if *feature_id == o.feature_id
+                )
+            });
 
             match pending_op {
                 Some(SegmentPatchOp::UnsetFeatureOverride { .. }) => {

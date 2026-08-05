@@ -32,6 +32,8 @@ impl Tabular for EffectiveGroup {
 
         let sym_colored = if group.is_deleted {
             sym.red().to_string()
+        } else if group.is_staged_add {
+            sym.green().to_string()
         } else if sym.len() >= 10 {
             sym.dimmed().to_string()
         } else {
@@ -82,8 +84,10 @@ pub(super) fn group_body_lines(group: &EffectiveGroup, force_deleted: bool) -> (
         group.label.red()
     } else if group.is_staged_add {
         group.label.green()
-    } else {
+    } else if group.description_modified {
         group.label.yellow()
+    } else {
+        group.label.normal()
     };
     let desc_part = group
         .description
@@ -196,7 +200,7 @@ fn rule_line(
             display_idx.to_string().dimmed(),
             subject.bright_blue(),
             cmp.dimmed(),
-            rule.value.as_str().green(),
+            rule.value.as_str().white(),
             false,
         )
     };

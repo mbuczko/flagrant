@@ -47,7 +47,7 @@ impl Tabular for EffectiveRule {
                 if rule.value_modified {
                     rule.value.as_str().yellow()
                 } else {
-                    rule.value.as_str().green()
+                    rule.value.as_str().white()
                 },
             )
         };
@@ -70,6 +70,7 @@ impl Tabular for EffectiveRule {
             .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
             .width(Width::Percentage(100))
             .build();
+
         table.render(vec![
             vec!["group".to_string(), group_label.clone()],
             vec!["subject".to_string(), subject_s.to_string()],
