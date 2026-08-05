@@ -37,6 +37,7 @@ pub enum Command {
     Commit,
     Discard,
     Reset,
+    Reload,
 }
 
 impl Command {

@@ -93,6 +93,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         Some("descriptozzo".to_owned()),
         FeatureValue::build("foo"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -195,6 +196,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         None,
         FeatureValue::build("foo"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -358,6 +360,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
         None,
         FeatureValue::build("control_value"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -420,6 +423,7 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
         None,
         FeatureValue::build("default"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -457,6 +461,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         None,
         FeatureValue::build("control"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -649,6 +654,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         None,
         FeatureValue::build("control"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -669,6 +675,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         None,
         FeatureValue::build("control"),
         true,
+        false,
     )
     .await
     .unwrap();
@@ -904,6 +911,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
         None,
         FeatureValue::build("control_value"),
         true,
+        false,
     )
     .await
     .unwrap();

@@ -6,7 +6,7 @@ The feature-flagging space is already well served by excellent solutions like [U
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
 
-Flagrant also tries its best to be a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays - wired in but not yet put to use, marked for an upcoming inline `HELP` and an internal REPL tester.
+Flagrant also tries its best to be a real-world showcase for a few other libraries of mine: [hugsqlx](https://github.com/mbuczko/hugsqlx) (compile-time-checked, macro-driven SQL queries) powers the entire persistence layer, [fancy-table](https://github.com/mbuczko/fancy-table) renders every table the CLI prints, and the CLI's readline stack is built on [my fork of rustyline](https://github.com/mbuczko/rustyline) (`feat/prompt-overlays` branch) adding dynamic prompt overlays for an inline help and an internal REPL tester.
 
 ## What's there today
 
@@ -24,11 +24,21 @@ As it's written in Rust, Flagrant comes with low-level resource utilisation and 
 
 ## Concepts
 
-Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based `USE` commands: enter a context, stage changes with `SET`/`UNSET`, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
+Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based `USE` commands: enter a context, stage changes, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
 
 ### Context composition
 
-Contexts compose: a **feature** context can be combined with either an **identity** or a **segment** context - but not both at once, since identity and segment are mutually exclusive with each other (entering one clears the other). The prompt reflects whatever's active, e.g. `myproject/prod → ui_theme @ alice` or `myproject/prod → ui_theme [beta_testers]`.
+Contexts compose: a **feature** context can be combined with either an **identity** or a **segment** context - but not both at once, since identity and segment are mutually exclusive with each other (entering one clears the other). The prompt reflects whatever's active:
+
+``` sh
+myproject/prod → ui_theme @ alice › ...
+```
+
+or
+
+``` sh
+myproject/prod → ui_theme + beta_testers › ...
+```
 
 Combine them in two steps:
 
@@ -44,7 +54,7 @@ FEATURE use <feature>@<identity>
 FEATURE use <feature>+<segment>
 ```
 
-A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is *also* active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which pin or override that specific identity's or segment's variant assignment for the feature in context.
+A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Features & variants
 
@@ -58,16 +68,19 @@ FEATURE use <feature>
 
 The prompt then shows the active feature, and these become available:
 
-- `FEATURE status on|off|archived`, `FEATURE describe [description]`
-- `VARIANT add <weight> <value>` - stage a new variant
-- `VARIANT value <index> <value>` / `VARIANT weight <index> [+/-]weight` - edit an existing one
-- `VARIANT delete <index>` / `VARIANT discard <index>` - remove a variant (or drop a still-staged one)
+- `FEATURE status on|off|archived` to switch feature status to active (ON), inactive (OFF) or archived
+- `FEATURE describe [description]` to add informative feature description
+- `FEATURE server-side on|off` to change server-side only property of the feature 
+- `VARIANT add <weight> <value>` to stage a new variant
+- `VARIANT value <index> <value>` to modify value that variant conveys
+- `VARIANT weight <index> [+/-]weight` to modify variant's weight - either explicitly or relatively to current value
+- `VARIANT delete <index>` to stage variant for removal
 
-None of this reaches the API until you run `COMMIT` (or `DISCARD` to drop it).
+None of this reaches the API until you run `COMMIT` (or `DISCARD` to drop it). Once commited, the change gets applied server-side in a single transaction.
 
 ### Identities & traits
 
-An **identity** is a caller recognized across requests - identified by an arbitrary string value (a user id, session id, anything) sent via the `X-Flagrant-Identity` header. Identities can carry arbitrary typed **traits** (string/int/float/bool), used by segment rules to decide which cohort an identity belongs to. Once distributed to a variant for a feature, an identity keeps seeing that same variant on subsequent requests, unless something explicitly changes it - a weight change migrates a portion of identities, an override pins/unpins one, or its distribution is cleared outright.
+An **identity** is a caller recognized across requests, identified by an arbitrary string value (a user id, session id, anything) sent via the `X-Flagrant-Identity` header. Identities can carry arbitrary typed **traits** (string/int/float/bool), used by segment rules to decide which cohort an identity belongs to. Once distributed to a variant for a feature, an identity keeps seeing that same variant on subsequent requests, unless something explicitly changes it - a weight change migrates a portion of identities, an override pins/unpins one, or its distribution is cleared outright.
 
 Enter an identity's context with:
 
@@ -77,8 +90,8 @@ IDENTITY use <identity>
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
-- `IDENTITY trait <name:value|-name ...>` - stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
-- `SET override [value]` / `UNSET override` - see Overrides below
+- `IDENTITY trait <name:value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
+- `SET override [value]` / `UNSET override` see Overrides below
 
 ### Segments
 
@@ -92,9 +105,9 @@ SEGMENT use <name>
 
 (mutually exclusive with an identity context - entering one clears the other). Inside the context:
 
-- `GROUP add [--and|--and-not] [description]` - add a rule group
-- `RULE add <group-label> <identity|trait|environment> <comparator> <value>` - add a condition to a group
-- `GROUP delete <label>` / `RULE delete <group-label> <rule-index>` - remove them
+- `GROUP add [--and|--and-not] [description]` to add a rule group
+- `RULE add <group-label> <identity|trait|environment> <comparator> <value>` to add a condition to a group
+- `GROUP delete <label>` / `RULE delete <group-label> <rule-index>` to remove them
 
 ### Overrides
 
@@ -102,7 +115,7 @@ Overrides bypass a feature's normal weighted distribution for a specific identit
 
 - **Identity override**: `SET override [value]` pins that one identity to a specific variant of the feature, regardless of its weight-based assignment. Omit the value to open an editor listing every variant (marking the identity's current one), and pick from there. `UNSET override` releases the pin, freeing the identity to be redistributed on its next request.
 - **Segment override**: `SET override [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit the arguments to open an editor for setting weights across all variants at once. `UNSET override` removes it, falling back to the feature's normal weights for that segment's identities.
-- **Bulk clearing** (feature context only, no identity/segment context needed): `UNSET distribution <pattern>` clears the variant assignment for every identity whose value matches `pattern` (`*` as a wildcard), without deleting the identities or their traits - handy for forcing a whole cohort to be redistributed after a weight change, instead of waiting for the natural migration.
+- **Bulk clearing** (feature context only, no identity/segment context needed): `UNSET distribution <pattern>` clears the variant assignment for every identity whose value matches `pattern` (`*` as a wildcard), without deleting the identities or their traits - handy for forcing a whole cohort to be redistributed in case of emergency.
 
 All staged changes across every active context - feature edits, identity/segment overrides, trait changes - are applied together with `COMMIT`, or dropped together with `DISCARD`.
 

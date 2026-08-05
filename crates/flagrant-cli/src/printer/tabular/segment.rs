@@ -52,10 +52,7 @@ impl Tabular for Segment {
             patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
 
         let (name_str, name_stage) = if is_deleted {
-            (
-                eff.name.red().to_string(),
-                "✕ deleting".red().to_string(),
-            )
+            (eff.name.red().to_string(), "✕ deleting".red().to_string())
         } else if eff.name_modified {
             (
                 eff.name.yellow().to_string(),
@@ -217,7 +214,7 @@ impl Tabular for Segment {
         }
         table.render(rows);
 
-        if overrides_lines.len() > 0 {
+        if !overrides_lines.is_empty() {
             println!("  {} control variant\n", "★".dimmed());
         }
         if !(eff.groups.iter().any(|g| !g.is_deleted || g.is_staged_add)) {

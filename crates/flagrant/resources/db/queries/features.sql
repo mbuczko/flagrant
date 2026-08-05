@@ -1,11 +1,11 @@
 -- :name create_feature :|| :1
 -- :doc Creates a new feature with name, on/off status and value type
-INSERT INTO features(project_id, name, description, is_enabled) VALUES($1, $2, $3, $4)
-RETURNING feature_id, project_id, name, description, is_enabled, archived_at
+INSERT INTO features(project_id, name, description, is_enabled, is_srv) VALUES($1, $2, $3, $4, $5)
+RETURNING feature_id, project_id, name, description, is_enabled, is_srv, archived_at
 
 -- :name fetch_feature_by_id :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
-SELECT f.feature_id, project_id, name, description, is_enabled, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
+SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.feature_id = $1
@@ -13,7 +13,7 @@ GROUP BY f.feature_id
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
-SELECT f.feature_id, project_id, name, description, is_enabled, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
+SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE project_id = $1 AND name = $2
@@ -26,7 +26,7 @@ WITH feature_tag_groups AS (
   FROM feature_tags
   GROUP BY feature_id
 )
-SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.archived_at,
+SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.is_srv, f.archived_at,
        v.variant_id, v.environment_id, v.value,
        COALESCE(vw.weight, 0) AS weight, vw.accumulator,
        ftg.tags
@@ -59,9 +59,9 @@ AND NOT EXISTS (
 ORDER BY f.is_enabled DESC, f.archived_at ASC, f.name, weight DESC
 
 -- :name update_feature :<> :!
--- :doc Updates feature with new values of name and is_enabled flag
+-- :doc Updates feature with new values of name, is_enabled and is_srv flags
 UPDATE features
-SET name = $2, is_enabled = $3
+SET name = $2, is_enabled = $3, is_srv = $4
 WHERE feature_id = $1
 
 -- :name update_feature_description :<> :!

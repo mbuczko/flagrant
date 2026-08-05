@@ -127,6 +127,7 @@ impl Tabular for Feature {
         } else {
             self.tags.to_string().blue().to_string()
         };
+
         let tags_stage = if is_deleted {
             "✕ deleting".red().to_string()
         } else if has_tag_ops {
@@ -135,25 +136,13 @@ impl Tabular for Feature {
             String::new()
         };
 
-        let resolve = |pending: Option<bool>, committed: bool, on: &str, off: &str| -> String {
-            let (effective, is_pending) = match pending {
-                Some(v) => (v, true),
-                None => (committed, false),
-            };
-            let s = if effective { on } else { off };
-            if is_pending {
-                s.yellow().to_string()
-            } else {
-                s.to_string()
-            }
-        };
-
         let pending_enabled = (!is_deleted)
             .then(|| patch.and_then(|p| p.is_enabled))
             .flatten();
         let pending_archived = (!is_deleted)
             .then(|| patch.and_then(|p| p.is_archived))
             .flatten();
+
         let status = if is_deleted {
             format!(
                 "● {}",
@@ -182,9 +171,28 @@ impl Tabular for Feature {
                 &format!("{} OFF", "●".red()),
             )
         };
+
         let status_stage = if is_deleted {
             "✕ deleting".red().to_string()
         } else if pending_enabled.is_some() || pending_archived.is_some() {
+            "‣ updating".yellow().to_string()
+        } else {
+            String::new()
+        };
+
+        let pending_srv = (!is_deleted)
+            .then(|| patch.and_then(|p| p.is_srv))
+            .flatten();
+        let srv_str = if is_deleted {
+            format!("● {}", if self.is_srv { "ON" } else { "OFF" })
+                .red()
+                .to_string()
+        } else {
+            resolve(pending_srv, self.is_srv, "ON", "OFF")
+        };
+        let srv_stage = if is_deleted {
+            "✕ deleting".red().to_string()
+        } else if pending_srv.is_some() {
             "‣ updating".yellow().to_string()
         } else {
             String::new()
@@ -199,6 +207,7 @@ impl Tabular for Feature {
                 None => self.description.clone(),
             }
         };
+
         let desc_stage = if is_deleted {
             "✕ deleting".red().to_string()
         } else if patch.and_then(|p| p.description.as_ref()).is_some() {
@@ -277,6 +286,7 @@ impl Tabular for Feature {
 
         let has_staged = !name_stage.is_empty()
             || !status_stage.is_empty()
+            || !srv_stage.is_empty()
             || !desc_stage.is_empty()
             || !tags_stage.is_empty()
             || variant_stage.iter().any(|s| !s.is_empty())
@@ -300,7 +310,7 @@ impl Tabular for Feature {
                     variant_stage.len().max(1),
                 )
                 .width(Width::Percentage(100))
-                .add_title_with_align(&title, TitleAlign::LeftOffset(1))
+                .add_title_with_align(&title, TitleAlign::LeftOffset(6))
                 .build()
         } else {
             FancyTable::create(FancyTableOpts::default())
@@ -332,6 +342,7 @@ impl Tabular for Feature {
             }
             rows.push(vec!["tags".to_string(), tags_str, tags_stage]);
             rows.push(vec!["description".to_string(), desc_str, desc_stage]);
+            rows.push(vec!["server-side".to_string(), srv_str, srv_stage]);
             rows
         } else {
             let mut rows = vec![
@@ -344,6 +355,7 @@ impl Tabular for Feature {
             }
             rows.push(vec!["tags".to_string(), tags_str]);
             rows.push(vec!["description".to_string(), desc_str]);
+            rows.push(vec!["server-side".to_string(), srv_str]);
             rows
         };
         table.render(rows);
@@ -551,6 +563,22 @@ fn segment_override_lines(
     }
 
     (lines, stages)
+}
+
+/// Resolves a boolean flag's committed value against an optional staged one, formatting it
+/// as `on` (or `off`, depending which is effective) - colored yellow if a staged value is
+/// overriding the committed one, plain otherwise.
+fn resolve(pending: Option<bool>, committed: bool, on: &str, off: &str) -> String {
+    let (effective, is_pending) = match pending {
+        Some(v) => (v, true),
+        None => (committed, false),
+    };
+    let s = if effective { on } else { off };
+    if is_pending {
+        s.yellow().to_string()
+    } else {
+        s.to_string()
+    }
 }
 
 /// Formats each weight as `"<value> → <weight>%"`, skipping any whose `variant_id` no

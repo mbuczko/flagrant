@@ -3,7 +3,7 @@ members = [ "crates/*" ]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.12"
+version = "0.0.13"
 description = "CLI powered feature-flagging"
 repository = "https://github.com/mbuczko/flagrant"
 authors = ["Michal Buczko <michal@buczko.pl>"]
@@ -31,6 +31,7 @@ anyhow = "1.0.80"
 thiserror = "1.0.29"
 reqwest = "0.11"
 smallvec = "1.15.1"
+toml = "0.8"
 regex = "1.10.4"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-scalar = { version = "0.2", features = ["axum"] }

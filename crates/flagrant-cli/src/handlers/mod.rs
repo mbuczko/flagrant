@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod environments;
 pub mod features;
 pub mod groups;

@@ -17,7 +17,13 @@ use rustyline::overlay::GenericOverlayer;
 mod command;
 mod completer;
 mod handlers;
+mod help;
 mod printer;
+
+/// First-character trigger for the `?` help overlay - shared by the cosmetic prompt
+/// overlay, the reduced tab-completion mode, and the REPL's help dispatch, so they
+/// can't drift out of sync.
+const HELP_TRIGGER: char = '?';
 
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
@@ -170,6 +176,12 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Feature.op_in_context(
+            "server-side",
+            "on|off",
+            handlers::features::server_side,
+            in_context!(feature_ctx),
+        ),
+        Command::Feature.op_in_context(
             "tag",
             "tag1[, tag2, ...]",
             handlers::features::tag,
@@ -181,7 +193,7 @@ fn main() -> anyhow::Result<()> {
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · rename · show · status · tag · use",
+            "add · delete · describe · list · rename · show · server-side · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),
@@ -337,6 +349,7 @@ fn main() -> anyhow::Result<()> {
             handlers::reset,
             in_context!(any_ctx),
         ),
+        Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
         // Identity setters (only in identity context)
         Command::Set.op_in_context(
             "override",
@@ -387,9 +400,10 @@ fn main() -> anyhow::Result<()> {
     ];
     let overlays = vec![
         (']', "\x1b[36mdir> \x1b[0m"),
-        ('?', "\x1b[33mhelp> \x1b[0m"),
+        (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
         ('\\', "\x1b[36mset> \x1b[0m"),
     ];
+    let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
     let helper = ReplHelper {
         prompter,
@@ -411,10 +425,11 @@ fn main() -> anyhow::Result<()> {
                 })
                 .collect()
         })
-        .with_arg_completer(&arg_completer),
+        .with_arg_completer(&arg_completer)
+        .with_help_topics(HELP_TRIGGER, help_topics),
     };
 
-    readline::init(helper, &session, &commands)?;
+    readline::init(helper, &session, &commands, Some((HELP_TRIGGER, help::show)))?;
 
     Ok(())
 }
