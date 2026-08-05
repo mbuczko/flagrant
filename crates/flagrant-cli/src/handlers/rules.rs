@@ -43,6 +43,10 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let subject = parse_subject(subject_str)?;
     let comparator = parse_comparator(comparator_str)?;
+    comparator
+        .validate_value(value)
+        .map_err(|e| anyhow::anyhow!(e))?;
+
     let mut ctx = session.context.write().unwrap();
 
     if ctx.segment.is_none() {
@@ -167,7 +171,9 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("No value provided.");
     }
 
-    validate_value_for_comparator(&effective_comparator, &value)?;
+    effective_comparator
+        .validate_value(&value)
+        .map_err(|e| anyhow::anyhow!(e))?;
     println!("Staged: rule #{index} in [{label}] value = {value}");
 
     let mut ctx = session.context.write().unwrap();
@@ -209,7 +215,9 @@ pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
         .trim(),
     )?;
 
-    validate_value_for_comparator(&comparator, &effective_value)?;
+    comparator
+        .validate_value(&effective_value)
+        .map_err(|e| anyhow::anyhow!(e))?;
     println!("Staged: rule #{index} in [{label}] comparator = {comparator}");
 
     let mut ctx = session.context.write().unwrap();
@@ -289,18 +297,6 @@ fn effective_rule_state(rule: &SegmentRule, patch: Option<&SegmentPatch>) -> (Co
         }
     }
     (comparator, value)
-}
-
-/// Validates that `value` is a JSON array when `comparator` is `in`/`not-in`.
-fn validate_value_for_comparator(comparator: &Comparator, value: &str) -> anyhow::Result<()> {
-    if matches!(comparator, Comparator::In | Comparator::NotIn)
-        && serde_json::from_str::<Vec<serde_json::Value>>(value).is_err()
-    {
-        bail!(
-            "Value must be a valid JSON array for the 'in'/'not_in' comparator, e.g. [\"a\",\"b\"]."
-        );
-    }
-    Ok(())
 }
 
 /// Builds editor content listing every available comparator (from `Comparator::iter()`,

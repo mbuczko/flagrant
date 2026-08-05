@@ -24,7 +24,7 @@ struct RuleRow {
 /// Adds a rule to the given group, then reconciles already distributed identities against
 /// the segment's updated rules. This is the shared mutation point for both the CLI's
 /// `segment::patch` and the direct `POST .../rules` REST endpoint, so both trigger segment
-/// reconciliation the same way.
+/// reconciliation the same way, and both get the `comparator`/`value` validation below.
 pub async fn add(
     conn: &mut SqliteConnection,
     segment_id: i32,
@@ -33,6 +33,10 @@ pub async fn add(
     comparator: Comparator,
     value: String,
 ) -> anyhow::Result<SegmentRule> {
+    comparator
+        .validate_value(&value)
+        .map_err(FlagrantError::BadRequest)?;
+
     let rule = SQLSegments::add_rule::<_, SegmentRule>(
         &mut *conn,
         params![group_id, subject, comparator, value],
@@ -61,12 +65,21 @@ pub async fn delete(
 
 /// Updates a rule's value, then reconciles already distributed identities against the
 /// segment's updated rules (see [`add`] for why this lives at the mutation point).
+///
+/// `comparator` is the rule's current (effective) comparator, supplied by the caller, so
+/// the new value can be validated against it (e.g. rejecting a non-JSON-array value for an
+/// `in`/`not_in` rule) without an extra DB round-trip.
 pub async fn set_value(
     conn: &mut SqliteConnection,
     segment_id: i32,
     rule_id: i32,
+    comparator: &Comparator,
     value: String,
 ) -> anyhow::Result<()> {
+    comparator
+        .validate_value(&value)
+        .map_err(FlagrantError::BadRequest)?;
+
     SQLSegments::update_rule_value::<_>(&mut *conn, params![rule_id, value])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not update rule value", e))?;
@@ -77,12 +90,20 @@ pub async fn set_value(
 
 /// Updates a rule's comparator, then reconciles already distributed identities against the
 /// segment's updated rules (see [`add`] for why this lives at the mutation point).
+///
+/// `value` is the rule's current (effective) value, supplied by the caller, so a switch to
+/// `in`/`not_in` can be validated against it without an extra DB round-trip.
 pub async fn set_comparator(
     conn: &mut SqliteConnection,
     segment_id: i32,
     rule_id: i32,
     comparator: Comparator,
+    value: &str,
 ) -> anyhow::Result<()> {
+    comparator
+        .validate_value(value)
+        .map_err(FlagrantError::BadRequest)?;
+
     SQLSegments::update_rule_comparator::<_>(&mut *conn, params![rule_id, comparator])
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not update rule comparator", e))?;

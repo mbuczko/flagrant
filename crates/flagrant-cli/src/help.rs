@@ -12,19 +12,24 @@ pub const TOPICS: &[&str] = &["FEATURE", "SEGMENT", "IDENTITY", "VARIANT", "GROU
 const FEATURE: &str = include_str!("help/feature.md");
 const FEATURE_IN_CONTEXT: &str = include_str!("help/feature_in_context.md");
 const FEATURE_NO_CONTEXT: &str = include_str!("help/feature_no_context.md");
+const FEATURE_SEGMENT_NOTE: &str = include_str!("help/feature_segment_note.md");
+
 const SEGMENT: &str = include_str!("help/segment.md");
 const SEGMENT_IN_CONTEXT: &str = include_str!("help/segment_in_context.md");
 const SEGMENT_NO_CONTEXT: &str = include_str!("help/segment_no_context.md");
+
 const IDENTITY: &str = include_str!("help/identity.md");
 const IDENTITY_IN_CONTEXT: &str = include_str!("help/identity_in_context.md");
 const IDENTITY_NO_CONTEXT: &str = include_str!("help/identity_no_context.md");
+
 const VARIANT: &str = include_str!("help/variant.md");
 const VARIANT_NO_CONTEXT: &str = include_str!("help/variant_no_context.md");
+
 const GROUP: &str = include_str!("help/group.md");
 const GROUP_NO_CONTEXT: &str = include_str!("help/group_no_context.md");
+
 const RULE: &str = include_str!("help/rule.md");
 const RULE_NO_CONTEXT: &str = include_str!("help/rule_no_context.md");
-const FEATURE_SEGMENT_NOTE: &str = include_str!("help/feature_segment_note.md");
 
 pub fn show(topic: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     let topic = topic.trim().to_uppercase();

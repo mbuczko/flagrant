@@ -255,12 +255,11 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
         .await
         .unwrap();
     assert_eq!(scoped.iter().find(|v| v.id == beta.id).unwrap().weight, 20);
-    assert_eq!(
-        scoped.iter().find(|v| v.is_control()).unwrap().weight,
-        50
-    );
+    assert_eq!(scoped.iter().find(|v| v.is_control()).unwrap().weight, 50);
 
-    variant::delete(&mut conn, &environment, &beta).await.unwrap();
+    variant::delete(&mut conn, &environment, &beta)
+        .await
+        .unwrap();
 
     let scoped = variant::get_for_feature(&mut conn, &environment, feature.id, Some(segment.id))
         .await
@@ -271,10 +270,7 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
 
     // The segment's control-variant remainder is rebalanced to account for beta's weight
     // no longer being part of the segment's total: 100 - alt(30) = 70, not the stale 50.
-    assert_eq!(
-        scoped.iter().find(|v| v.is_control()).unwrap().weight,
-        70
-    );
+    assert_eq!(scoped.iter().find(|v| v.is_control()).unwrap().weight, 70);
 }
 
 /// Deleting a segment must not leave identities dangling: any `identity_variants` row
@@ -464,10 +460,9 @@ async fn deleting_a_segment_does_not_affect_other_segments_overrides(
     segment::delete(&mut conn, &vip).await.unwrap();
 
     // testers' own override is untouched by vip's deletion.
-    let scoped =
-        variant::get_for_feature(&mut conn, &environment, feature.id, Some(testers.id))
-            .await
-            .unwrap();
+    let scoped = variant::get_for_feature(&mut conn, &environment, feature.id, Some(testers.id))
+        .await
+        .unwrap();
     assert_eq!(scoped.iter().find(|v| v.id == alt.id).unwrap().weight, 55);
 }
 
@@ -1141,4 +1136,100 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
 
     let after = attribution_for(&mut conn, &environment, &feature, ident.id).await;
     assert_eq!(after.segment_id, Some(older.id));
+}
+
+// `in`/`not_in` rule values must be a JSON array, enforced at write time so the
+// evaluator (which assumes this at read time) never has to fail closed on bad data
+
+/// `SegmentPatchOp::AddRule` with an `in` comparator and a non-JSON-array value is rejected
+/// by `segment::patch`, and the rule is not persisted.
+#[sqlx::test]
+async fn patch_rejects_invalid_json_for_in_comparator_and_does_not_persist(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, _environment) = create_context(&mut conn).await;
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(&mut conn, &project, segment, vec![add_group(None)]).await;
+
+    let result = segment::patch(
+        &mut conn,
+        &project,
+        segment.clone(),
+        SegmentPatch {
+            ops: vec![add_rule(
+                "group-1",
+                Subject::Trait("plan".to_owned()),
+                Comparator::In,
+                "not-json",
+            )],
+        },
+    )
+    .await;
+    assert!(result.is_err());
+
+    let reloaded = segment::get_by_id(&mut conn, &project, segment.id)
+        .await
+        .unwrap();
+    assert!(reloaded.groups[0].rules.is_empty());
+}
+
+/// Calling `rule::add` directly (simulating the REST `POST .../rules` endpoint, which
+/// bypasses `segment::patch` entirely) rejects the same invalid value for `not_in`, and
+/// does not persist it either.
+#[sqlx::test]
+async fn direct_rule_add_rejects_invalid_json_for_not_in_comparator_and_does_not_persist(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, _environment) = create_context(&mut conn).await;
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(&mut conn, &project, segment, vec![add_group(None)]).await;
+    let group_id = segment.groups[0].id;
+
+    let result = rule::add(
+        &mut conn,
+        segment.id,
+        group_id,
+        Subject::Trait("plan".to_owned()),
+        Comparator::NotIn,
+        "not-json".to_owned(),
+    )
+    .await;
+    assert!(result.is_err());
+
+    let reloaded = segment::get_by_id(&mut conn, &project, segment.id)
+        .await
+        .unwrap();
+    assert!(reloaded.groups[0].rules.is_empty());
+}
+
+/// A well-formed JSON array value for `in` is accepted and persisted normally - guards
+/// against the validation above being overly strict.
+#[sqlx::test]
+async fn valid_json_array_for_in_comparator_is_persisted(mut conn: PoolConnection<Sqlite>) {
+    let (project, _environment) = create_context(&mut conn).await;
+    let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
+        .await
+        .unwrap();
+    let segment = apply(
+        &mut conn,
+        &project,
+        segment,
+        vec![
+            add_group(None),
+            add_rule(
+                "group-1",
+                Subject::Trait("plan".to_owned()),
+                Comparator::In,
+                r#"["pro","enterprise"]"#,
+            ),
+        ],
+    )
+    .await;
+
+    assert_eq!(segment.groups[0].rules.len(), 1);
+    assert_eq!(segment.groups[0].rules[0].value, r#"["pro","enterprise"]"#);
 }
