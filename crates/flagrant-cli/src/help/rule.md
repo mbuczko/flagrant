@@ -1,3 +1,4 @@
+
 ## RULE
 
 Manage rules within a segment's groups (requires an active segment context).
