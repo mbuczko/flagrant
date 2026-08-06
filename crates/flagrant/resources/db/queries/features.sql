@@ -32,7 +32,7 @@ SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.is_srv
        ftg.tags
 FROM features f
 LEFT JOIN variants v ON v.feature_id = f.feature_id AND COALESCE(v.environment_id, $2) = $2
-LEFT JOIN variant_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $2
+LEFT JOIN variant_weights vw ON vw.variant_id = v.variant_id AND vw.environment_id = $2 AND vw.segment_id IS NULL
 LEFT JOIN feature_tag_groups ftg ON ftg.feature_id = f.feature_id
 WHERE f.project_id = $1
 --~{ is_archived

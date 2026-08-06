@@ -60,7 +60,20 @@ impl Tabular for Feature {
             .iter()
             .map(|feat| {
                 let tags = feat.tags.to_string();
-                let value = feat.get_default_value().to_string();
+                let other_variants = feat.variants.iter().filter(|v| !v.is_control()).count();
+                let value = if other_variants > 0 {
+                    format!(
+                        "{} {}",
+                        feat.get_default_value(),
+                        format!(
+                            "(+{other_variants} other variant{})",
+                            if other_variants == 1 { "" } else { "s" }
+                        )
+                        .dimmed()
+                    )
+                } else {
+                    feat.get_default_value().to_string()
+                };
                 let state = if feat.is_archived {
                     format!("{} archived", "●".dimmed())
                 } else if feat.is_enabled {

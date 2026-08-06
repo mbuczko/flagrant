@@ -64,7 +64,7 @@ pub fn print_footer(left: &str, has_staged: bool) {
         let gap = table_width()
             .saturating_sub(display_width(left) + display_width(&right))
             .max(1);
-        println!("{left}{}{right}\n", " ".repeat(gap));
+        println!("{left}{}{right} \n", " ".repeat(gap - 1));
     } else {
         println!("{left}\n");
     }
