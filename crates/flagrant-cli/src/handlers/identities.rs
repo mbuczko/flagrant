@@ -8,8 +8,8 @@
 //! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
 //! | `IDENTITY trait <name:value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
-//! | `SET override [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
-//! | `UNSET override`                 | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
+//! | `OVERRIDE add [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
+//! | `OVERRIDE delete`                | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
 //! | `COMMIT`                         | [`commit`]        | Send staged trait changes to the API.               |
 //! | `DISCARD`                        | [`discard`]       | Drop all staged trait changes.                      |
 
@@ -218,7 +218,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// Expected args: `<identity>`
 ///
 /// Fetches the identity and stores it in the session so that subsequent `IDENTITY
-/// trait` and `SET`/`UNSET` commands stage changes for it. Fails if there are
+/// trait` and `OVERRIDE` commands stage changes for it. Fails if there are
 /// uncommitted staged trait changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {

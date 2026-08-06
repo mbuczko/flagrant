@@ -24,5 +24,5 @@ A **feature** is a named flag scoped to a project + environment (e.g. `prod`, `s
 - **Kill switch**: a feature with only the control variant. `FEATURE status off` disables it for everyone instantly, no variants needed.
 - **A/B test**: two variants, `dark` and `light`, each weighted 50. Roughly half of identities land on one, half on the other, and each identity keeps seeing the same one.
 - **Gradual rollout**: the control variant holds most of the weight, and a new variant starts small, say `weight: 5`. Raise it over time with `VARIANT weight <index> +10` until it reaches 100 and the rollout is complete.
-- **Beta cohort**: normal weights favor the control variant for everyone, but a `beta_testers` segment gets its own override (`SEGMENT use beta_testers`, then `SET override`) so testers see the new variant while everyone else keeps the default.
+- **Beta cohort**: normal weights favor the control variant for everyone, but a `beta_testers` segment gets its own override (`SEGMENT use beta_testers`, then `OVERRIDE add`) so testers see the new variant while everyone else keeps the default.
 

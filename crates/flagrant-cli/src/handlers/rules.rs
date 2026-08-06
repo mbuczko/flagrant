@@ -302,7 +302,7 @@ fn effective_rule_state(rule: &SegmentRule, patch: Option<&SegmentPatch>) -> (Co
 /// Builds editor content listing every available comparator (from `Comparator::iter()`,
 /// so a new variant can't be missed here), one per line, with the current one marked
 /// explicitly. The user selects a comparator by leaving exactly one line uncommented
-/// (mirroring the `SET override` variant picker).
+/// (mirroring the `OVERRIDE add` variant picker).
 fn build_comparator_editor_content(current: &Comparator) -> String {
     let mut content = String::new();
     content.push_str(

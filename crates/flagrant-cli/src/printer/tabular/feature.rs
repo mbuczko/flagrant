@@ -13,9 +13,9 @@ const SHOW_OVERRIDES: usize = 3;
 
 /// A staged change to the in-context identity's override for this feature.
 pub enum IdentityPending {
-    /// A new or updated override was staged (`SET override`).
+    /// A new or updated override was staged (`OVERRIDE add`).
     Override(String),
-    /// The existing override was staged for removal (`UNSET override`).
+    /// The existing override was staged for removal (`OVERRIDE delete`).
     Unpin(String),
 }
 

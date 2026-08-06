@@ -9,8 +9,8 @@
 //! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                                              |
 //! | `SEGMENT rename`          | [`rename`]         | Stage a segment name change.                                                |
 //! | `SEGMENT describe`        | [`describe`]       | Stage a segment description change.                                         |
-//! | `SET override`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
-//! | `UNSET override`          | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
+//! | `OVERRIDE add`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
+//! | `OVERRIDE delete`         | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
 //! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.                                     |
 //! | `DISCARD`                 | [`discard`]        | Drop all staged segment changes.                                            |
 
@@ -166,7 +166,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .flatten()
         .filter(|p| !p.is_empty());
 
-    // `SET override` requires a feature+segment context and switching feature is
+    // `OVERRIDE add` requires a feature+segment context and switching feature is
     // blocked while this patch is pending, so the in-context feature is guaranteed to
     // be the one any `SetFeatureOverride` op refers to - at most one can be staged.
     if is_in_context && let Some(feature) = ctx.feature.as_ref() {
@@ -401,11 +401,11 @@ fn current_weights_for<'a>(
 
 /// Stage variant weight overrides for the current feature within this segment.
 ///
-/// **Editor mode** (`SET override` - no args):
+/// **Editor mode** (`OVERRIDE add` - no args):
 /// Opens an editor pre-filled with all non-control variants. Lines starting with `#`
 /// are comments; each non-comment line is parsed as a weight (0–100) in display order.
 ///
-/// **Inline mode** (`SET override <variant-index> <weight>`):
+/// **Inline mode** (`OVERRIDE add <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
 ///
 /// Either way, every non-control variant ends up with an explicit entry (0 for any not
@@ -429,7 +429,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         let idx = args.get(1).unwrap().parse::<usize>()?;
         let weight = args
             .get(2)
-            .ok_or_else(|| anyhow::anyhow!("Usage: SET override <variant-index> <weight>"))?
+            .ok_or_else(|| anyhow::anyhow!("Usage: OVERRIDE add <variant-index> <weight>"))?
             .parse::<u8>()?;
 
         let variant_ref = index::resolve(idx, &ctx)?;
