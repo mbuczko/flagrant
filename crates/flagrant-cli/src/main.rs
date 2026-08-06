@@ -183,7 +183,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "tag",
-            "tag1[, tag2, ...]",
+            "tag1 [tag2 ...]",
             handlers::features::tag,
             in_context!(feature_ctx),
         ),
@@ -429,7 +429,12 @@ fn main() -> anyhow::Result<()> {
         .with_help_topics(HELP_TRIGGER, help_topics),
     };
 
-    readline::init(helper, &session, &commands, Some((HELP_TRIGGER, help::show)))?;
+    readline::init(
+        helper,
+        &session,
+        &commands,
+        Some((HELP_TRIGGER, help::show)),
+    )?;
 
     Ok(())
 }

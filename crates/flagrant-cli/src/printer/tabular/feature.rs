@@ -75,25 +75,32 @@ impl Tabular for Feature {
                     feat.get_default_value().to_string()
                 };
                 let state = if feat.is_archived {
-                    format!("{} archived", "●".dimmed())
+                    format!("{} ARCH", "●".dimmed())
                 } else if feat.is_enabled {
                     format!("{} ON", "●".green())
                 } else {
                     format!("{} OFF", "●".red())
                 };
-                [feat.name.clone(), state, value, tags]
+                [
+                    feat.name.clone(),
+                    state,
+                    value,
+                    feat.description.clone(),
+                    tags,
+                ]
             })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
-            .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
+            .add_column_named_with_align("STATUS".into(), Layout::Fixed(8), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
                 Layout::Expandable(40),
                 Align::Left,
             )
-            .add_column_named_with_align("TAGS".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows)
@@ -152,38 +159,20 @@ impl Tabular for Feature {
             .then(|| patch.and_then(|p| p.is_archived))
             .flatten();
 
-        let status = if is_deleted {
-            format!(
-                "● {}",
-                if self.is_archived {
-                    "archived"
-                } else if self.is_enabled {
-                    "ON"
-                } else {
-                    "OFF"
-                }
-            )
-            .red()
-            .to_string()
-        } else if pending_archived.unwrap_or(self.is_archived) {
-            resolve(
-                pending_archived,
-                self.is_archived,
-                &format!("{} archived", "●".dimmed()),
-                &format!("{} active", "●".green()),
-            )
+        let status = if pending_archived.unwrap_or(self.is_archived) {
+            format!("{} ARCHIVED", "●".dimmed())
+        } else if pending_enabled.unwrap_or(self.is_enabled) {
+            format!("{} ON", "●".green())
         } else {
-            resolve(
-                pending_enabled,
-                self.is_enabled,
-                &format!("{} ON", "●".green()),
-                &format!("{} OFF", "●".red()),
-            )
+            format!("{} OFF", "●".red())
         };
 
         let status_modified = pending_enabled.is_some() || pending_archived.is_some();
+        let status = legend::stage_color(status, is_deleted, status_modified).into_owned();
 
-        let staged_srv = (!is_deleted).then(|| patch.and_then(|p| p.is_srv)).flatten();
+        let staged_srv = (!is_deleted)
+            .then(|| patch.and_then(|p| p.is_srv))
+            .flatten();
         let srv_modified = staged_srv.is_some();
         let srv_effective = staged_srv.unwrap_or(self.is_srv);
         let srv_str = legend::stage_color(
@@ -491,22 +480,6 @@ fn segment_override_lines(
     }
 
     (lines, staged)
-}
-
-/// Resolves a boolean flag's committed value against an optional staged one, formatting it
-/// as `on` (or `off`, depending which is effective) - colored yellow if a staged value is
-/// overriding the committed one, plain otherwise.
-fn resolve(pending: Option<bool>, committed: bool, on: &str, off: &str) -> String {
-    let (effective, is_pending) = match pending {
-        Some(v) => (v, true),
-        None => (committed, false),
-    };
-    let s = if effective { on } else { off };
-    if is_pending {
-        s.yellow().to_string()
-    } else {
-        s.to_string()
-    }
 }
 
 /// Formats each weight as `"<value> → <weight>%"`, skipping any whose `variant_id` no
