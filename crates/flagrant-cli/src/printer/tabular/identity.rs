@@ -115,8 +115,13 @@ impl Tabular for IdentityWithTraits {
                 variant_lines.push(format!("{feature} → {colored_value}"));
                 variants_staged = true;
             } else if staged_unpins.contains(&iv.feature_name) {
-                // Staged unoverride
-                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".red()));
+                // Staged unoverride - show the currently pinned variant being removed.
+                let value = iv
+                    .feature_value
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "(no variant assigned)".to_string());
+                variant_lines.push(format!("{feature} → {}", value.red()));
                 variants_staged = true;
             } else if iv.identity_id.is_some() {
                 let pin_marker = if iv.pinned_at.is_some() {

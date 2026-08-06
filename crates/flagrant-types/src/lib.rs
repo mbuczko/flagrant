@@ -473,7 +473,7 @@ impl fmt::Display for TagList {
                 .iter()
                 .map(|tag| tag.name.as_str())
                 .collect::<Vec<_>>()
-                .join(",")
+                .join(", ")
         ))
     }
 }

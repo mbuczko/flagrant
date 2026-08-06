@@ -149,7 +149,7 @@ impl Tabular for Feature {
                     .join(", ")
             }
         } else {
-            self.tags.to_string().blue().to_string()
+            self.tags.to_string().white().to_string()
         };
 
         let pending_enabled = (!is_deleted)
