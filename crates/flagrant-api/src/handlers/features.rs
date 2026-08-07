@@ -3,10 +3,7 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, feature, identity, project, segment};
-use flagrant_types::{
-    Feature, FeatureOverride,
-    payload::{FeaturePatch, NewFeaturePayload},
-};
+use flagrant_types::{Feature, FeatureOverride, payload::NewFeaturePayload};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -231,37 +228,6 @@ pub async fn delete(
 
     feature::delete(&mut conn, &env, &feature).await?;
     Ok(Json(()))
-}
-
-/// Applies a batch of staged changes to a feature atomically.
-///
-/// All changes (feature properties and variant operations) are applied within
-/// a single transaction. Validation errors are returned as 4xx responses.
-#[utoipa::path(
-    patch,
-    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
-    ),
-    request_body = FeaturePatch,
-    responses(
-        (status = 200, description = "Patched feature with updated state, or null if the patch staged deletion", body = Option<Feature>)
-    ),
-    tag = "features"
-)]
-pub async fn patch(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
-    Json(patch): Json<FeaturePatch>,
-) -> Result<Json<Option<Feature>>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-
-    let updated = feature::patch(&mut conn, &env, &feature, patch).await?;
-    Ok(Json(updated))
 }
 
 /// Returns explicit variant overrides (pinned identities) for a feature.

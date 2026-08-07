@@ -318,6 +318,89 @@ pub struct Segment {
     pub groups: Vec<SegmentGroup>,
 }
 
+/// A single variant's snapshotted state - value/weight as of right after a commit.
+/// `accumulator` is deliberately excluded: it's live distributor state, rebalanced
+/// fresh whenever weights are (re)applied, not configuration worth restoring.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotVariant {
+    pub id: i32,
+    pub value: FeatureValue,
+    pub weight: u8,
+    pub is_control: bool,
+}
+
+/// A segment group as captured inside a snapshot's segment override - enough to
+/// recreate the group (and its rules) if the owning segment was later deleted. Vec
+/// order (not a stored position field) carries the intended group order - mirrors
+/// `Segment::groups`, which already omits `position` for the same reason.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotSegmentGroup {
+    pub label: String,
+    pub connector: Option<GroupConnector>,
+    pub description: Option<String>,
+    pub rules: Vec<SegmentRule>,
+}
+
+/// A segment's full definition plus its weight override for one feature, as of right
+/// after a commit. Carries the full definition (not just `segment_id`) so a restore can
+/// recreate the segment if it was deleted in the meantime - see the "Restoring segment
+/// overrides" rationale in the snapshots design.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotSegmentOverride {
+    pub segment_id: i32,
+    pub segment_name: String,
+    pub segment_description: Option<String>,
+    pub groups: Vec<SnapshotSegmentGroup>,
+    pub weights: Vec<payload::SegmentVariantWeight>,
+}
+
+/// A single pinned identity override as captured inside a snapshot. Organic
+/// (non-pinned) assignments are never part of snapshot state - only deliberate,
+/// bounded `OVERRIDE add` pins are.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotIdentityOverride {
+    pub identity_id: i32,
+    pub identity_value: String,
+    pub variant_id: i32,
+}
+
+/// The full materialized state of a feature captured by a snapshot - self-contained,
+/// so restoring never depends on replaying any other snapshot or patch.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotState {
+    pub name: String,
+    pub description: String,
+    pub is_enabled: bool,
+    pub is_srv: bool,
+    pub is_archived: bool,
+    pub tags: Vec<String>,
+    pub variants: Vec<SnapshotVariant>,
+    pub segment_overrides: Vec<SnapshotSegmentOverride>,
+    pub identity_overrides: Vec<SnapshotIdentityOverride>,
+}
+
+/// A numbered, commented, point-in-time snapshot of a feature's state within one
+/// environment, recorded automatically by every commit that affects it.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct Snapshot {
+    #[sqlx(rename = "snapshot_id")]
+    pub id: i32,
+    pub feature_id: i32,
+    pub environment_id: i32,
+    pub version: i32,
+    pub comment: Option<String>,
+    /// Raw JSON text - parse via [`Snapshot::parsed_state`]. Kept untyped at the row
+    /// level so a future addition to `SnapshotState` doesn't require a migration.
+    pub state: String,
+    pub created_at: NaiveDateTime,
+}
+
+impl Snapshot {
+    pub fn parsed_state(&self) -> serde_json::Result<SnapshotState> {
+        serde_json::from_str(&self.state)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum FeatureOverride {

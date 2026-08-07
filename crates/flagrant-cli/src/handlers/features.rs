@@ -16,8 +16,6 @@
 //! | `FEATURE server-side`| [`server-side`]        | Stage a feature server-side only state (`on` / `off`).|
 //! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.              |
 //! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.         |
-//! | `COMMIT`             | [`commit`]             | Send all staged changes to the API.                   |
-//! | `DISCARD`            | [`discard`]            | Drop all staged changes for the current feature.      |
 
 use std::ops::Deref;
 

@@ -333,12 +333,37 @@ fn main() -> anyhow::Result<()> {
             "add · delete · show · value · comparator",
             in_context!(segment_ctx),
         ),
-        // Commit / discard (available when any context has pending changes)
-        Command::Commit.no_op_in_context(
-            "→ commit staged changes",
-            handlers::commit,
-            in_context!(pending_ctx),
+        // Snapshots (only in feature context)
+        Command::Snapshot.op_in_context(
+            "list",
+            "",
+            handlers::snapshots::list,
+            in_context!(feature_ctx),
         ),
+        Command::Snapshot.op_in_context(
+            "show",
+            "version",
+            handlers::snapshots::show,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.op_in_context(
+            "describe",
+            "version [comment]",
+            handlers::snapshots::describe,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.op_in_context(
+            "restore",
+            "version [comment]",
+            handlers::snapshots::restore,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.args_in_context(
+            "describe · list · restore · show",
+            in_context!(feature_ctx),
+        ),
+        // Commit / discard (available when any context has pending changes)
+        Command::Commit.no_op_in_context("[comment]", handlers::commit, in_context!(pending_ctx)),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
             handlers::discard,

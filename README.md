@@ -119,14 +119,27 @@ Overrides bypass a feature's normal weighted distribution for a specific identit
 
 All staged changes across every active context - feature edits, identity/segment overrides, trait changes - are applied together with `COMMIT`, or dropped together with `DISCARD`.
 
+### Snapshots
+
+Every `COMMIT` that changes a feature - directly, or indirectly through a segment/identity override that touches it - automatically records a numbered **snapshot** of that feature's full state: its variants, any segment overrides (including the overriding segment's own rules, so it can be recreated if that segment is later deleted), and any pinned identity overrides. There's nothing to stage - it's just a side effect of committing, one snapshot per affected feature per commit, versions never reused even across restores.
+
+Snapshots require a feature context (`FEATURE use <feature>`):
+
+- `SNAPSHOT list` to see every version recorded for the feature, most recent first
+- `SNAPSHOT show <version>` to inspect exactly what a version captured
+- `SNAPSHOT describe <version> [comment]` to change a version's comment after the fact (omit the comment to edit it in an editor)
+- `SNAPSHOT restore <version> [comment]` to bring the feature back to how it looked at that version
+
+`COMMIT` itself takes an optional trailing comment (`COMMIT [comment]`), recorded on whichever snapshot(s) that commit produces.
+
+Restoring is itself a commit, not a rewrite of history - it produces a brand-new snapshot matching the target version's state, so version numbers only ever go up. It reproduces variants (recreating one under a new id if it was deleted since), segment overrides (recreating the segment from its stored definition if it was deleted - though a still-existing segment's *rules* are left untouched, since rewriting them would silently change behaviour for every other feature that segment also overrides), and pinned identity overrides. Anything not part of the target version - like an override added after that point - is cleared rather than left behind. Organic (non-pinned) identity assignments are always cleared and left to redistribute on the next request, never restored.
+
 ## What's next
 
-- [ ] **Backend only flags** - allow to reach for certain flags only from the backend
-- [ ] **JWT based identities** - use JWT to discover the identity and serve the right feature variant
-- [ ] **Versioning** - track and roll back changes to features/segments over time (yes, just as git commits!)
-- [ ] **Snapshots** - capture and restore the full state of a project/environment at a point in time
+- [x] **Backend only flags** - allow to reach for certain flags only from the backend
+- [x] **Snapshots** - capture and restore the full state of a feature definition and its overrides at a point in time
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
-- [ ] **Socket-based communication protocol** - a lighter-weight, persistent alternative to HTTP for client libraries that need low-latency flag reads
+- [ ] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 
