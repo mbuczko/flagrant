@@ -8,10 +8,8 @@
 //! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
 //! | `IDENTITY trait <name:value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
-//! | `SET override [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
-//! | `UNSET override`                 | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
-//! | `COMMIT`                         | [`commit`]        | Send staged trait changes to the API.               |
-//! | `DISCARD`                        | [`discard`]       | Drop all staged trait changes.                      |
+//! | `OVERRIDE add [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
+//! | `OVERRIDE delete`                | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
 
 use std::ops::Deref;
 
@@ -28,7 +26,6 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
-        features,
         internal::{
             concat_values_for_arg, effectives as effective, extract_single_value, index, stage,
         },
@@ -218,7 +215,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// Expected args: `<identity>`
 ///
 /// Fetches the identity and stores it in the session so that subsequent `IDENTITY
-/// trait` and `SET`/`UNSET` commands stage changes for it. Fails if there are
+/// trait` and `OVERRIDE` commands stage changes for it. Fails if there are
 /// uncommitted staged trait changes.
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
@@ -431,62 +428,6 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
         "Staged: unpin '{}' identity from feature '{}' variant",
         identity_value, feature_name
     );
-    Ok(())
-}
-
-/// Commit staged trait changes for the current identity to the API.
-pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-
-    if ctx.identity.is_none() {
-        return Ok(());
-    }
-
-    let patch = match &ctx.identity_patch {
-        Some(p) if !p.is_empty() => p.clone(),
-        _ => return Ok(()),
-    };
-
-    let path = ctx.env_resource().subpath(format!(
-        "/identities/{}",
-        ctx.identity.as_ref().unwrap().value
-    ));
-
-    // Overrides/unpins always target the feature currently in context - `ensure_no_pending`
-    // forbids switching away from it while either is staged.
-    let touched_feature = (!patch.overrides.is_empty() || !patch.unpins.is_empty())
-        .then(|| ctx.feature.as_ref().map(|f| f.id))
-        .flatten();
-
-    let updated = ctx
-        .client
-        .patch::<_, Option<IdentityWithTraits>>(path, patch)
-        .map_err(|err| anyhow::anyhow!("Identity commit failed: {err}"))?;
-
-    let Some(updated) = updated else {
-        println!(
-            "Identity '{}' deleted.",
-            ctx.identity.as_ref().unwrap().value
-        );
-        ctx.identity = None;
-        ctx.identity_patch = None;
-
-        return Ok(());
-    };
-
-    updated.display(None, &fetch_variant_assignments(&ctx, &updated));
-    ctx.identity_patch = None;
-    ctx.identity = Some(updated);
-    drop(ctx);
-
-    // The feature's OVERRIDES section just changed even though the feature itself may have
-    // no pending patch of its own (or had one that was already committed and printed before
-    // this override existed) - show it again, so the user doesn't have to run `FEATURE
-    // show` separately.
-    if let Some(feature_id) = touched_feature {
-        features::show_by_id(feature_id, session)?;
-    }
-
     Ok(())
 }
 

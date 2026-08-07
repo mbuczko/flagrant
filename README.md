@@ -54,7 +54,7 @@ FEATURE use <feature>@<identity>
 FEATURE use <feature>+<segment>
 ```
 
-A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `SET override [...]` / `UNSET override` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
+A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Features & variants
 
@@ -91,7 +91,7 @@ IDENTITY use <identity>
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
 - `IDENTITY trait <name:value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
-- `SET override [value]` / `UNSET override` see Overrides below
+- `OVERRIDE add [value]` / `OVERRIDE delete` see Overrides below
 
 ### Segments
 
@@ -113,20 +113,33 @@ SEGMENT use <name>
 
 Overrides bypass a feature's normal weighted distribution for a specific identity or a whole segment. Both require a feature + identity/segment context (see [Context composition](#context-composition)):
 
-- **Identity override**: `SET override [value]` pins that one identity to a specific variant of the feature, regardless of its weight-based assignment. Omit the value to open an editor listing every variant (marking the identity's current one), and pick from there. `UNSET override` releases the pin, freeing the identity to be redistributed on its next request.
-- **Segment override**: `SET override [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit the arguments to open an editor for setting weights across all variants at once. `UNSET override` removes it, falling back to the feature's normal weights for that segment's identities.
+- **Identity override**: `OVERRIDE add [value]` pins that one identity to a specific variant of the feature, regardless of its weight-based assignment. Omit the value to open an editor listing every variant (marking the identity's current one), and pick from there. `OVERRIDE delete` releases the pin, freeing the identity to be redistributed on its next request.
+- **Segment override**: `OVERRIDE add [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit the arguments to open an editor for setting weights across all variants at once. `OVERRIDE delete` removes it, falling back to the feature's normal weights for that segment's identities.
 - **Bulk clearing** (feature context only, no identity/segment context needed): `UNSET distribution <pattern>` clears the variant assignment for every identity whose value matches `pattern` (`*` as a wildcard), without deleting the identities or their traits - handy for forcing a whole cohort to be redistributed in case of emergency.
 
 All staged changes across every active context - feature edits, identity/segment overrides, trait changes - are applied together with `COMMIT`, or dropped together with `DISCARD`.
 
+### Snapshots
+
+Every `COMMIT` that changes a feature - directly, or indirectly through a segment/identity override that touches it - automatically records a numbered **snapshot** of that feature's full state: its variants, any segment overrides (including the overriding segment's own rules, so it can be recreated if that segment is later deleted), and any pinned identity overrides. There's nothing to stage - it's just a side effect of committing, one snapshot per affected feature per commit, versions never reused even across restores.
+
+Snapshots require a feature context (`FEATURE use <feature>`):
+
+- `SNAPSHOT list` to see every version recorded for the feature, most recent first
+- `SNAPSHOT show <version>` to inspect exactly what a version captured
+- `SNAPSHOT describe <version> [comment]` to change a version's comment after the fact (omit the comment to edit it in an editor)
+- `SNAPSHOT restore <version> [comment]` to bring the feature back to how it looked at that version
+
+`COMMIT` itself takes an optional trailing comment (`COMMIT [comment]`), recorded on whichever snapshot(s) that commit produces.
+
+Restoring is itself a commit, not a rewrite of history - it produces a brand-new snapshot matching the target version's state, so version numbers only ever go up. It reproduces variants (recreating one under a new id if it was deleted since), segment overrides (recreating the segment from its stored definition if it was deleted - though a still-existing segment's *rules* are left untouched, since rewriting them would silently change behaviour for every other feature that segment also overrides), and pinned identity overrides. Anything not part of the target version - like an override added after that point - is cleared rather than left behind. Organic (non-pinned) identity assignments are always cleared and left to redistribute on the next request, never restored.
+
 ## What's next
 
-- [ ] **Backend only flags** - allow to reach for certain flags only from the backend
-- [ ] **JWT based identities** - use JWT to discover the identity and serve the right feature variant
-- [ ] **Versioning** - track and roll back changes to features/segments over time (yes, just as git commits!)
-- [ ] **Snapshots** - capture and restore the full state of a project/environment at a point in time
+- [x] **Backend only flags** - allow to reach for certain flags only from the backend
+- [x] **Snapshots** - capture and restore the full state of a feature definition and its overrides at a point in time
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
-- [ ] **Socket-based communication protocol** - a lighter-weight, persistent alternative to HTTP for client libraries that need low-latency flag reads
+- [ ] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 

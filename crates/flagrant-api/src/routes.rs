@@ -6,7 +6,8 @@ use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 
 use crate::handlers::{
-    admin, environments, features, identities, projects, segments, traits, variants,
+    admin, commit, environments, features, identities, projects, segments, snapshots, traits,
+    variants,
 };
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
@@ -36,9 +37,24 @@ pub fn init_router() -> Router<AppState> {
             "/envs/:environment/features/:feature_id",
             delete(features::delete),
         )
+        // Unified commit - see flagrant::models::commit::apply
+        .route("/envs/:environment/commit", post(commit::apply))
+        // Snapshots
         .route(
-            "/envs/:environment/features/:feature_id",
-            patch(features::patch),
+            "/envs/:environment/features/:feature_id/snapshots",
+            get(snapshots::list),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id/snapshots/:version",
+            get(snapshots::fetch),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id/snapshots/:version",
+            patch(snapshots::update_comment),
+        )
+        .route(
+            "/envs/:environment/features/:feature_id/snapshots/:version/restore",
+            post(snapshots::restore),
         )
         // Variants
         .route(
@@ -82,10 +98,6 @@ pub fn init_router() -> Router<AppState> {
             delete(identities::delete),
         )
         .route(
-            "/envs/:environment/identities/:identity",
-            patch(identities::update),
-        )
-        .route(
             "/envs/:environment/identities/:identity/variants",
             get(identities::get_variants),
         )
@@ -98,7 +110,6 @@ pub fn init_router() -> Router<AppState> {
         .route("/segments", post(segments::create))
         .route("/segments/:segment_id", get(segments::fetch_by_id_or_name))
         .route("/segments/:segment_id", put(segments::update))
-        .route("/segments/:segment_id", patch(segments::patch_segment))
         .route("/segments/:segment_id", delete(segments::delete))
         .route("/segments/:segment_id/groups", post(segments::add_group))
         .route(

@@ -32,6 +32,8 @@ pub enum Command {
     Segment,
     Group,
     Rule,
+    Snapshot,
+    Override,
     Set,
     Unset,
     Commit,

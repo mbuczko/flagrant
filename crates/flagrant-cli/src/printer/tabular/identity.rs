@@ -5,7 +5,7 @@ use flagrant_types::{
     payload::{IdentityOverridePatch, IdentityPatch},
 };
 
-use crate::handlers::internal::effectives as effective;
+use crate::{handlers::internal::effectives as effective, printer::legend};
 
 use super::Tabular;
 
@@ -42,40 +42,36 @@ impl Tabular for IdentityWithTraits {
     fn display(&self, patch: Option<&IdentityPatch>, ctx: &Vec<IdentityVariant>) {
         let title = "IDENTITY".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
-        let (id_str, id_stage) = if is_deleted {
-            (self.value.red().to_string(), "✕ deleting".red().to_string())
-        } else {
-            (self.value.clone(), String::new())
-        };
+        let id_staged = is_deleted;
+        let id_str = legend::stage_color(self.value.as_str(), is_deleted, false).into_owned();
 
         let eff_traits = effective::effective_identity_traits(self, patch);
 
         let mut trait_lines: Vec<String> = Vec::new();
-        let mut trait_stage: Vec<String> = Vec::new();
+        let mut traits_staged = false;
 
         for t in &eff_traits {
             let name = t.name.bright_blue().to_string();
 
             if is_deleted || t.is_deleted {
                 trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
-                trait_stage.push("✕ deleting".red().to_string());
+                traits_staged = true;
             } else if t.value_modified {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .yellow()
                         .to_string(),
                 );
-                trait_stage.push("‣ updating".yellow().to_string());
+                traits_staged = true;
             } else if t.is_staged_add {
                 trait_lines.push(
                     format_trait_value(&name, &t.value, true)
                         .green()
                         .to_string(),
                 );
-                trait_stage.push("‣ adding".green().to_string());
+                traits_staged = true;
             } else {
                 trait_lines.push(format_trait_value(&name, &t.value, true));
-                trait_stage.push(String::new());
             }
         }
 
@@ -91,7 +87,7 @@ impl Tabular for IdentityWithTraits {
 
         // Build variant lines: committed state overlaid with staged pins/unpins.
         let mut variant_lines: Vec<String> = Vec::new();
-        let mut variant_stage: Vec<String> = Vec::new();
+        let mut variants_staged = false;
 
         for iv in ctx {
             let feature = iv.feature_name.bright_blue().to_string();
@@ -104,18 +100,29 @@ impl Tabular for IdentityWithTraits {
                     .unwrap_or_else(|| "(no variant assigned)".to_string());
 
                 variant_lines.push(format!("{feature} → {}", value.red()));
-                variant_stage.push("✕ deleting".red().to_string());
+                variants_staged = true;
             } else if let Some(pin) = staged_pins
                 .iter()
                 .find(|o| o.feature_name == iv.feature_name)
             {
-                // Staged override: show the new value
-                variant_lines.push(format!("{feature} → {}", pin.variant_value.green()));
-                variant_stage.push("‣ override".yellow().to_string());
+                // Staged override: green for a brand-new pin, yellow when replacing an
+                // already-pinned variant.
+                let colored_value = if iv.pinned_at.is_some() {
+                    pin.variant_value.yellow()
+                } else {
+                    pin.variant_value.green()
+                };
+                variant_lines.push(format!("{feature} → {colored_value}"));
+                variants_staged = true;
             } else if staged_unpins.contains(&iv.feature_name) {
-                // Staged unoverride
-                variant_lines.push(format!("{feature} → {}", "(no variant assigned)".red()));
-                variant_stage.push("- override".red().to_string());
+                // Staged unoverride - show the currently pinned variant being removed.
+                let value = iv
+                    .feature_value
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "(no variant assigned)".to_string());
+                variant_lines.push(format!("{feature} → {}", value.red()));
+                variants_staged = true;
             } else if iv.identity_id.is_some() {
                 let pin_marker = if iv.pinned_at.is_some() {
                     String::from(" ★")
@@ -130,98 +137,62 @@ impl Tabular for IdentityWithTraits {
                         .unwrap_or_default(),
                     pin_marker
                 ));
-                variant_stage.push(String::new());
             } else {
                 variant_lines.push(format!("{feature} → {}", "(no variant assigned)".dimmed()));
-                variant_stage.push(String::new());
             }
         }
 
         // Staged pins for features not yet in committed state
         for o in staged_pins {
             if !ctx.iter().any(|iv| iv.feature_name == o.feature_name) {
-                if is_deleted {
-                    variant_lines.push(format!(
-                        "{} → {}",
-                        o.feature_name.bright_blue(),
+                variant_lines.push(format!(
+                    "{} → {}",
+                    o.feature_name.bright_blue(),
+                    if is_deleted {
                         o.variant_value.red()
-                    ));
-                    variant_stage.push("✕ deleting".red().to_string());
-                } else {
-                    variant_lines.push(format!(
-                        "{} → {}",
-                        o.feature_name.bright_blue(),
+                    } else {
                         o.variant_value.green()
-                    ));
-                    variant_stage.push("+ override".green().to_string());
-                }
+                    }
+                ));
+                variants_staged = true;
             }
         }
 
         let variants_str = variant_lines.join("\n");
-        let variants_stage_str = variant_stage.join("\n");
         let has_variants = !variant_lines.is_empty();
+        let has_staged = id_staged || traits_staged || variants_staged;
 
-        let has_staged_traits = is_deleted || !trait_stage.iter().all(|s| s.is_empty());
-        let has_staged_variants = is_deleted || !variant_stage.iter().all(|s| s.is_empty());
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                10,
+            )
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
+            .width(Width::Percentage(100))
+            .build();
 
-        if has_staged_traits || has_staged_variants {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(100),
-                    Align::Left,
-                    Overflow::Truncate,
-                    11,
-                )
-                .add_column(None, Layout::Fixed(14), Align::Left, Overflow::Truncate, 10)
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
-                .width(Width::Percentage(100))
-                .build();
-
-            let mut rows: Vec<Vec<String>> = vec![
-                vec!["id".to_string(), id_str, id_stage],
-                vec!["traits".to_string(), traits_str, trait_stage.join("\n")],
-            ];
-            if has_variants {
-                rows.push(vec![
-                    "variants".to_string(),
-                    variants_str,
-                    variants_stage_str,
-                ]);
-            }
-            table.render(rows);
-        } else {
-            let table = FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(120),
-                    Align::Left,
-                    Overflow::Truncate,
-                    10,
-                )
-                .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
-                .width(Width::Percentage(100))
-                .build();
-
-            let mut rows: Vec<Vec<String>> = vec![
-                vec!["id".to_string(), id_str],
-                vec!["traits".to_string(), traits_str],
-            ];
-            if has_variants {
-                rows.push(vec!["variants".to_string(), variants_str]);
-            }
-            table.render(rows);
+        let mut rows: Vec<Vec<String>> = vec![
+            vec!["id".to_string(), id_str],
+            vec!["traits".to_string(), traits_str],
+        ];
+        if has_variants {
+            rows.push(vec!["variants".to_string(), variants_str]);
         }
+        table.render(rows);
 
         let has_any_override =
             ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
 
-        if has_any_override {
-            println!("  {} variant explicitly overridden\n", "★".dimmed());
-        }
+        let left = if has_any_override {
+            format!(" {} variant explicitly overridden", "★".dimmed())
+        } else {
+            String::new()
+        };
+        legend::print_footer(&left, has_staged);
     }
 }
 
@@ -234,8 +205,7 @@ fn format_trait_value(trait_name: &str, value: &Option<TraitValue>, with_type: b
         None => ("unset", String::new()),
     };
     if with_type {
-        let padded = format!("{:<6}", type_label);
-        format!("{} : {trait_name}={val}", padded.dimmed())
+        format!("{trait_name}={val} {}", type_label.dimmed())
     } else {
         format!("{}={val}", trait_name.bright_blue())
     }

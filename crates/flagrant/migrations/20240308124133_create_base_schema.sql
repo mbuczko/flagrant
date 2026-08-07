@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS features (
   is_srv BOOLEAN NOT NULL DEFAULT FALSE,
   archived_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  version INTEGER NOT NULL DEFAULT 0,
 
   UNIQUE(project_id, name)
 );
@@ -42,7 +41,6 @@ CREATE TABLE IF NOT EXISTS variants (
   environment_id INTEGER REFERENCES environments,
   value TEXT NOT NULL CHECK(LENGTH(value) <= 1024),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  version INTEGER NOT NULL DEFAULT 0,
 
   UNIQUE(feature_id, variant_id),
   UNIQUE(feature_id, environment_id)

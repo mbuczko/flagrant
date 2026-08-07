@@ -6,6 +6,7 @@ pub mod identities;
 pub mod projects;
 pub mod rules;
 pub mod segments;
+pub mod snapshots;
 pub mod variants;
 
 pub(crate) mod internal;

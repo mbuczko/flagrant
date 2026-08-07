@@ -1,3 +1,4 @@
+
 ## RULE
 
 Manage rules within a segment's groups (requires an active segment context).
@@ -10,6 +11,14 @@ A **rule** is a single condition, matching on identity value, environment name, 
 - `RULE value <group-label> <index> [value]` - stage a value change for a rule
 - `RULE comparator <group-label> <index> [comparator]` - stage a comparator change
 
+Available comparators:
+- `exactly_matches`
+- `does_not_match`
+- `contains` and `does_not_contain`
+- `greater_than` and `greater_equal_than`
+- `lower_than` and `lower_equal_than`
+- `in` and `not_in` - expect a JSON array value, e.g. `["a","b"]`
+
 ### Examples
 
 - `RULE add group-1 identity exactly_matches alice` - match the identity `alice` exactly
@@ -18,14 +27,6 @@ A **rule** is a single condition, matching on identity value, environment name, 
 - `RULE add group-2 trait:age greater_than 18` - match identities whose `age` trait is greater than `18`
 - `RULE value group-1 1 pro` - change rule 1 in `group-1` to match value `pro`
 - `RULE comparator group-1 1 contains` - change rule 1 in `group-1` to use the `contains` comparator
-
-Available comparators:
-- `exactly_matches`
-- `does_not_match`
-- `contains` and `does_not_contain`
-- `greater_than` and `greater_equal_than`
-- `lower_than` and `lower_equal_than`
-- `in` and `not_in` - expect a JSON array value, e.g. `["a","b"]`
 
 ### Example scenarios
 

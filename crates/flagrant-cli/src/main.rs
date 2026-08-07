@@ -183,7 +183,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "tag",
-            "tag1[, tag2, ...]",
+            "tag1 [tag2 ...]",
             handlers::features::tag,
             in_context!(feature_ctx),
         ),
@@ -333,12 +333,37 @@ fn main() -> anyhow::Result<()> {
             "add · delete · show · value · comparator",
             in_context!(segment_ctx),
         ),
-        // Commit / discard (available when any context has pending changes)
-        Command::Commit.no_op_in_context(
-            "→ commit staged changes",
-            handlers::commit,
-            in_context!(pending_ctx),
+        // Snapshots (only in feature context)
+        Command::Snapshot.op_in_context(
+            "list",
+            "",
+            handlers::snapshots::list,
+            in_context!(feature_ctx),
         ),
+        Command::Snapshot.op_in_context(
+            "show",
+            "version",
+            handlers::snapshots::show,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.op_in_context(
+            "describe",
+            "version [comment]",
+            handlers::snapshots::describe,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.op_in_context(
+            "restore",
+            "version [comment]",
+            handlers::snapshots::restore,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.args_in_context(
+            "describe · list · restore · show",
+            in_context!(feature_ctx),
+        ),
+        // Commit / discard (available when any context has pending changes)
+        Command::Commit.no_op_in_context("[comment]", handlers::commit, in_context!(pending_ctx)),
         Command::Discard.no_op_in_context(
             "→ discard staged changes",
             handlers::discard,
@@ -350,22 +375,34 @@ fn main() -> anyhow::Result<()> {
             in_context!(any_ctx),
         ),
         Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
-        // Identity setters (only in identity context)
-        Command::Set.op_in_context(
-            "override",
+        // Identity overrides (only in identity context)
+        Command::Override.op_in_context(
+            "add",
             "[value]",
             handlers::identities::set_override,
             in_context!(identity_ctx),
         ),
-        // Segment setters (only in segment context)
-        Command::Set.op_in_context(
-            "override",
+        Command::Override.op_in_context(
+            "delete",
+            "",
+            handlers::identities::unset_override,
+            in_context!(identity_ctx),
+        ),
+        Command::Override.args_in_context("add · delete", in_context!(identity_ctx)),
+        // Segment overrides (only in feature + segment context)
+        Command::Override.op_in_context(
+            "add",
             "[variant-index weight]",
             handlers::segments::set_override,
             in_context!(feature_ctx, segment_ctx),
         ),
-        Command::Set.args_in_context("override", in_context!(feature_ctx, segment_ctx)),
-        Command::Set.args_in_context("override", in_context!(identity_ctx)),
+        Command::Override.op_in_context(
+            "delete",
+            "",
+            handlers::segments::unset_override,
+            in_context!(feature_ctx, segment_ctx),
+        ),
+        Command::Override.args_in_context("add · delete", in_context!(feature_ctx, segment_ctx)),
         // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",
@@ -373,29 +410,6 @@ fn main() -> anyhow::Result<()> {
             handlers::features::unset_distribution,
             in_context!(feature_ctx),
         ),
-        // UNSET (only in identity context)
-        Command::Unset.op_in_context(
-            "override",
-            "",
-            handlers::identities::unset_override,
-            in_context!(identity_ctx),
-        ),
-        // UNSET (only in segment context)
-        Command::Unset.op_in_context(
-            "override",
-            "",
-            handlers::segments::unset_override,
-            in_context!(segment_ctx),
-        ),
-        Command::Unset.args_in_context(
-            "distribution · override",
-            in_context!(feature_ctx, segment_ctx),
-        ),
-        Command::Unset.args_in_context(
-            "distribution · override",
-            in_context!(feature_ctx, identity_ctx),
-        ),
-        Command::Unset.args_in_context("override", in_context!(identity_ctx)),
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
     let overlays = vec![
@@ -429,7 +443,12 @@ fn main() -> anyhow::Result<()> {
         .with_help_topics(HELP_TRIGGER, help_topics),
     };
 
-    readline::init(helper, &session, &commands, Some((HELP_TRIGGER, help::show)))?;
+    readline::init(
+        helper,
+        &session,
+        &commands,
+        Some((HELP_TRIGGER, help::show)),
+    )?;
 
     Ok(())
 }

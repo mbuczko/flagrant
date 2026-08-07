@@ -189,6 +189,26 @@ pub async fn get_or_create_by_value(
     })
 }
 
+/// Fetches a single identity with no traits by environment and identity id.
+pub async fn get_by_id(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    identity_id: i32,
+) -> anyhow::Result<Identity> {
+    let (id, value, environment_id) = SQLIdentities::fetch_identity_by_id::<_, (i32, String, i32)>(
+        conn,
+        params![environment.id, identity_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity", e))?;
+
+    Ok(Identity {
+        id,
+        value,
+        environment_id,
+    })
+}
+
 /// Fetches a single identity with no traits by environment and identity value
 pub async fn get_by_value(
     conn: &mut SqliteConnection,
@@ -675,6 +695,40 @@ pub async fn list_overrides(
         .into_iter()
         .map(|(s,)| FeatureOverride::Identity(s))
         .collect())
+}
+
+/// Returns every pinned override (`pinned_at IS NOT NULL`) for a feature+environment as
+/// `(identity_id, identity_value, variant_id)` - used to capture snapshot state. Organic
+/// (non-pinned) assignments are never included; they're never part of snapshot state.
+pub async fn list_pinned_overrides(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<Vec<(i32, String, i32)>> {
+    SQLIdentities::fetch_pinned_overrides_with_details_for_feature(
+        conn,
+        params![environment_id, feature_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into())
+}
+
+/// Removes every variant assignment (pinned and organic alike) for a feature within a
+/// single environment - the first step of restoring a snapshot's identity overrides:
+/// clear everything, then re-apply only the pins present in the target snapshot.
+pub async fn clear_variants_for_feature_environment(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+) -> anyhow::Result<()> {
+    SQLIdentities::delete_identity_variants_for_feature_environment(
+        conn,
+        params![feature_id, environment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not clear identity variants for feature", e))?;
+
+    Ok(())
 }
 
 pub async fn detach_identities(

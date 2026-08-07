@@ -5,7 +5,7 @@ use flagrant_types::{
     payload::{FeaturePatch, SegmentVariantWeight},
 };
 
-use crate::handlers::internal::effectives as effective;
+use crate::{handlers::internal::effectives as effective, printer::legend};
 
 use super::Tabular;
 
@@ -13,9 +13,9 @@ const SHOW_OVERRIDES: usize = 3;
 
 /// A staged change to the in-context identity's override for this feature.
 pub enum IdentityPending {
-    /// A new or updated override was staged (`SET override`).
+    /// A new or updated override was staged (`OVERRIDE add`).
     Override(String),
-    /// The existing override was staged for removal (`UNSET override`).
+    /// The existing override was staged for removal (`OVERRIDE delete`).
     Unpin(String),
 }
 
@@ -60,27 +60,47 @@ impl Tabular for Feature {
             .iter()
             .map(|feat| {
                 let tags = feat.tags.to_string();
-                let value = feat.get_default_value().to_string();
+                let other_variants = feat.variants.iter().filter(|v| !v.is_control()).count();
+                let value = if other_variants > 0 {
+                    format!(
+                        "{} {}",
+                        feat.get_default_value(),
+                        format!(
+                            "(+{other_variants} other variant{})",
+                            if other_variants == 1 { "" } else { "s" }
+                        )
+                        .dimmed()
+                    )
+                } else {
+                    feat.get_default_value().to_string()
+                };
                 let state = if feat.is_archived {
-                    format!("{} archived", "●".dimmed())
+                    format!("{} ARCH", "●".dimmed())
                 } else if feat.is_enabled {
                     format!("{} ON", "●".green())
                 } else {
                     format!("{} OFF", "●".red())
                 };
-                [feat.name.clone(), state, value, tags]
+                [
+                    feat.name.clone(),
+                    state,
+                    value,
+                    feat.description.clone(),
+                    tags,
+                ]
             })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
-            .add_column_named_with_align("STATUS".into(), Layout::Fixed(12), Align::Left)
+            .add_column_named_with_align("STATUS".into(), Layout::Fixed(8), Align::Left)
             .add_column_named_with_align(
                 "DEFAULT VALUE".into(),
                 Layout::Expandable(40),
                 Align::Left,
             )
-            .add_column_named_with_align("TAGS".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(30), Align::Left)
+            .add_column_named_with_align("TAGS".into(), Layout::Expandable(20), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows)
@@ -90,14 +110,18 @@ impl Tabular for Feature {
         let title = "FEATURE".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
 
-        let (name_str, name_stage) = if is_deleted {
-            (self.name.red().to_string(), "✕ deleting".red().to_string())
-        } else {
-            match patch.and_then(|p| p.name.as_deref()) {
-                Some(n) => (n.yellow().to_string(), "‣ updating".yellow().to_string()),
-                None => (self.name.clone(), String::new()),
-            }
-        };
+        let staged_name = patch.and_then(|p| p.name.as_deref());
+        let name_modified = staged_name.is_some();
+        let name_str = legend::stage_color(
+            if is_deleted {
+                self.name.as_str()
+            } else {
+                staged_name.unwrap_or(&self.name)
+            },
+            is_deleted,
+            name_modified,
+        )
+        .into_owned();
 
         let has_tag_ops = !is_deleted && patch.is_some_and(|p| !p.tags.is_empty());
         let tags_str = if is_deleted {
@@ -125,15 +149,7 @@ impl Tabular for Feature {
                     .join(", ")
             }
         } else {
-            self.tags.to_string().blue().to_string()
-        };
-
-        let tags_stage = if is_deleted {
-            "✕ deleting".red().to_string()
-        } else if has_tag_ops {
-            "‣ updating".yellow().to_string()
-        } else {
-            String::new()
+            self.tags.to_string().white().to_string()
         };
 
         let pending_enabled = (!is_deleted)
@@ -143,84 +159,49 @@ impl Tabular for Feature {
             .then(|| patch.and_then(|p| p.is_archived))
             .flatten();
 
-        let status = if is_deleted {
-            format!(
-                "● {}",
-                if self.is_archived {
-                    "archived"
-                } else if self.is_enabled {
-                    "ON"
-                } else {
-                    "OFF"
-                }
-            )
-            .red()
-            .to_string()
-        } else if pending_archived.unwrap_or(self.is_archived) {
-            resolve(
-                pending_archived,
-                self.is_archived,
-                &format!("{} archived", "●".dimmed()),
-                &format!("{} active", "●".green()),
-            )
+        let status = if pending_archived.unwrap_or(self.is_archived) {
+            format!("{} ARCHIVED", "●".dimmed())
+        } else if pending_enabled.unwrap_or(self.is_enabled) {
+            format!("{} ON", "●".green())
         } else {
-            resolve(
-                pending_enabled,
-                self.is_enabled,
-                &format!("{} ON", "●".green()),
-                &format!("{} OFF", "●".red()),
-            )
+            format!("{} OFF", "●".red())
         };
 
-        let status_stage = if is_deleted {
-            "✕ deleting".red().to_string()
-        } else if pending_enabled.is_some() || pending_archived.is_some() {
-            "‣ updating".yellow().to_string()
-        } else {
-            String::new()
-        };
+        let status_modified = pending_enabled.is_some() || pending_archived.is_some();
+        let status = legend::stage_color(status, is_deleted, status_modified).into_owned();
 
-        let pending_srv = (!is_deleted)
+        let staged_srv = (!is_deleted)
             .then(|| patch.and_then(|p| p.is_srv))
             .flatten();
-        let srv_str = if is_deleted {
-            format!("● {}", if self.is_srv { "ON" } else { "OFF" })
-                .red()
-                .to_string()
-        } else {
-            resolve(pending_srv, self.is_srv, "ON", "OFF")
-        };
-        let srv_stage = if is_deleted {
-            "✕ deleting".red().to_string()
-        } else if pending_srv.is_some() {
-            "‣ updating".yellow().to_string()
-        } else {
-            String::new()
-        };
+        let srv_modified = staged_srv.is_some();
+        let srv_effective = staged_srv.unwrap_or(self.is_srv);
+        let srv_str = legend::stage_color(
+            if srv_effective { "ON" } else { "OFF" },
+            is_deleted,
+            srv_modified,
+        )
+        .into_owned();
 
-        let desc_str = if is_deleted {
-            self.description.red().to_string()
-        } else {
-            match patch.and_then(|p| p.description.as_deref()) {
-                Some("") => "(cleared)".yellow().to_string(),
-                Some(d) => d.yellow().to_string(),
-                None => self.description.clone(),
-            }
-        };
+        let staged_desc = patch.and_then(|p| p.description.as_deref());
+        let desc_modified = staged_desc.is_some();
+        let desc_str = legend::stage_color(
+            if is_deleted {
+                self.description.as_str()
+            } else {
+                match staged_desc {
+                    Some("") => "(cleared)",
+                    Some(d) => d,
+                    None => &self.description,
+                }
+            },
+            is_deleted,
+            desc_modified,
+        )
+        .into_owned();
 
-        let desc_stage = if is_deleted {
-            "✕ deleting".red().to_string()
-        } else if patch.and_then(|p| p.description.as_ref()).is_some() {
-            "‣ updating".yellow().to_string()
-        } else {
-            String::new()
-        };
+        let eff = effective::effective_variants(self, if is_deleted { None } else { patch });
+        let total_lines = eff.len();
 
-        let eff = if is_deleted {
-            effective::effective_variants(self, None)
-        } else {
-            effective::effective_variants(self, patch)
-        };
         let has_ops = !is_deleted && patch.is_some_and(|p| !p.variants.is_empty());
         let non_control_total: u32 = eff
             .iter()
@@ -228,9 +209,8 @@ impl Tabular for Feature {
             .map(|e| e.weight as u32)
             .sum();
 
-        let total_lines = eff.len();
         let mut variant_lines: Vec<String> = Vec::with_capacity(total_lines);
-        let mut variant_stage: Vec<String> = Vec::with_capacity(total_lines);
+        let mut variants_staged = false;
 
         for (i, e) in eff.iter().enumerate() {
             let connector = if i + 1 == total_lines {
@@ -243,155 +223,104 @@ impl Tabular for Feature {
             } else {
                 e.weight
             };
-            let marker = if e.is_control { "★" } else { " " };
             let line = format!(
                 "{}{} {}{} │ {}",
                 connector,
                 format_weight_bar(weight, 10),
-                marker,
+                if e.is_control { "★" } else { " " },
                 (i + 1).to_string().dimmed(),
                 e.value
             );
 
             if is_deleted || e.is_deleted {
                 variant_lines.push(line.red().to_string());
-                variant_stage.push("✕ deleting".red().to_string());
+                variants_staged = true;
             } else if e.is_staged_add {
                 variant_lines.push(line.green().to_string());
-                variant_stage.push("‣ adding".green().to_string());
+                variants_staged = true;
             } else if e.value_modified
                 || e.weight_modified
                 || (e.is_control && has_ops && weight != e.weight)
             {
                 variant_lines.push(line.yellow().to_string());
-                let label = if e.value_modified || e.weight_modified {
-                    "‣ updating"
-                } else {
-                    "~ adjusting"
-                };
-                variant_stage.push(label.yellow().to_string());
+                variants_staged = true;
             } else {
                 variant_lines.push(line);
-                variant_stage.push(String::new());
             }
         }
 
         let variants = variant_lines.join("\n");
-        let variants_stage_str = variant_stage.join("\n");
 
-        let (overrides_lines, overrides_stages) = override_lines(&self.variants, ctx, is_deleted);
+        let (overrides_lines, overrides_has_staged) =
+            override_lines(&self.variants, ctx, is_deleted);
         let overrides_str = overrides_lines.join("\n");
-        let overrides_stage_str = overrides_stages.join("\n");
-        let overrides_has_staged = overrides_stages.iter().any(|s| !s.is_empty());
 
-        let has_staged = !name_stage.is_empty()
-            || !status_stage.is_empty()
-            || !srv_stage.is_empty()
-            || !desc_stage.is_empty()
-            || !tags_stage.is_empty()
-            || variant_stage.iter().any(|s| !s.is_empty())
+        let has_staged = is_deleted
+            || name_modified
+            || status_modified
+            || srv_modified
+            || desc_modified
+            || has_tag_ops
+            || variants_staged
             || overrides_has_staged;
 
-        let table = if has_staged {
-            FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(120),
-                    Align::Left,
-                    Overflow::Truncate,
-                    10,
-                )
-                .add_column(
-                    None,
-                    Layout::Fixed(14),
-                    Align::Left,
-                    Overflow::Truncate,
-                    variant_stage.len().max(1),
-                )
-                .width(Width::Percentage(100))
-                .add_title_with_align(&title, TitleAlign::LeftOffset(6))
-                .build()
-        } else {
-            FancyTable::create(FancyTableOpts::default())
-                .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
-                .add_column(
-                    None,
-                    Layout::Expandable(120),
-                    Align::Left,
-                    Overflow::Truncate,
-                    10,
-                )
-                .width(Width::Percentage(100))
-                .add_title_with_align(&title, TitleAlign::LeftOffset(6))
-                .build()
-        };
+        let table = FancyTable::create(FancyTableOpts::default())
+            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(
+                None,
+                Layout::Expandable(120),
+                Align::Left,
+                Overflow::Truncate,
+                10,
+            )
+            .width(Width::Percentage(100))
+            .add_title_with_align(&title, TitleAlign::LeftOffset(6))
+            .build();
 
-        let rows: Vec<Vec<String>> = if has_staged {
-            let mut rows = vec![
-                vec!["name".to_string(), name_str, name_stage],
-                vec!["status".to_string(), status, status_stage],
-                vec!["variants".to_string(), variants, variants_stage_str],
-            ];
-            if !overrides_str.is_empty() {
-                rows.push(vec![
-                    "overrides".to_string(),
-                    overrides_str,
-                    overrides_stage_str,
-                ]);
-            }
-            rows.push(vec!["tags".to_string(), tags_str, tags_stage]);
-            rows.push(vec!["description".to_string(), desc_str, desc_stage]);
-            rows.push(vec!["server-side".to_string(), srv_str, srv_stage]);
-            rows
-        } else {
-            let mut rows = vec![
-                vec!["name".to_string(), name_str],
-                vec!["status".to_string(), status],
-                vec!["variants".to_string(), variants],
-            ];
-            if !overrides_str.is_empty() {
-                rows.push(vec!["overridden-by".to_string(), overrides_str]);
-            }
-            rows.push(vec!["tags".to_string(), tags_str]);
-            rows.push(vec!["description".to_string(), desc_str]);
-            rows.push(vec!["server-side".to_string(), srv_str]);
-            rows
-        };
+        let mut rows = vec![
+            vec!["name".to_string(), name_str],
+            vec!["status".to_string(), status],
+            vec!["variants".to_string(), variants],
+        ];
+        if !overrides_str.is_empty() {
+            rows.push(vec!["overridden-by".to_string(), overrides_str]);
+        }
+        rows.push(vec!["tags".to_string(), tags_str]);
+        rows.push(vec!["description".to_string(), desc_str]);
+        rows.push(vec!["server-side".to_string(), srv_str]);
+
         table.render(rows);
-        println!("  {} control variant\n", "★".dimmed());
+        legend::print_footer(&format!(" {} control variant", "★".dimmed()), has_staged);
     }
 }
 
 /// Builds the "overrides" row content: one line per identity-overrides group (if any) and
-/// one line per segment override, each paired with its staging annotation (empty string if
-/// unstaged). Returned vectors stay in lockstep - one stage entry per content line - since
-/// callers join them by "\n" and render as aligned rows in adjacent table columns.
+/// one line per segment override, plus whether *any* of those lines is currently staged.
 fn override_lines(
     variants: &[Variant],
     ctx: &OverridesContext,
     is_deleted: bool,
-) -> (Vec<String>, Vec<String>) {
+) -> (Vec<String>, bool) {
     let mut overrides_lines: Vec<String> = Vec::new();
-    let mut overrides_stages: Vec<String> = Vec::new();
+    let mut overrides_staged = false;
 
-    if let Some((content, stage)) = identity_override_line(ctx, is_deleted) {
+    if let Some((content, staged)) = identity_override_line(ctx, is_deleted) {
         overrides_lines.push(content);
-        overrides_stages.push(stage);
+        overrides_staged |= staged;
     }
 
-    let (segment_lines, segment_stages) = segment_override_lines(variants, ctx, is_deleted);
+    let (segment_lines, segment_staged) = segment_override_lines(variants, ctx, is_deleted);
     overrides_lines.extend(segment_lines);
-    overrides_stages.extend(segment_stages);
+    overrides_staged |= segment_staged;
 
-    (overrides_lines, overrides_stages)
+    (overrides_lines, overrides_staged)
 }
 
 /// Builds the single grouped "identity" overrides line - up to [`SHOW_OVERRIDES`] committed
 /// identities plus a "(+N more)" suffix, with the identity carrying a pending change (if any)
-/// colored to stand out from the rest - paired with its staging annotation. Returns `None`
-/// when there's nothing to show (no committed identities and no pending change).
-fn identity_override_line(ctx: &OverridesContext, is_deleted: bool) -> Option<(String, String)> {
+/// colored to stand out from the rest - paired with whether it's currently staged. Returns
+/// `None` when there's nothing to show (no committed identities and no pending change).
+fn identity_override_line(ctx: &OverridesContext, is_deleted: bool) -> Option<(String, bool)> {
     let committed_identities: Vec<&str> = ctx
         .committed
         .iter()
@@ -450,30 +379,21 @@ fn identity_override_line(ctx: &OverridesContext, is_deleted: bool) -> Option<(S
         content = content.red().to_string()
     }
 
-    let stage = if is_deleted {
-        "✕ deleting".red().to_string()
-    } else if let Some(pending) = &ctx.identity_pending {
-        match pending {
-            IdentityPending::Override(_) => "‣ updating".yellow().to_string(),
-            IdentityPending::Unpin(_) => "✕ deleting".red().to_string(),
-        }
-    } else {
-        String::new()
-    };
+    let staged = is_deleted || ctx.identity_pending.is_some();
 
-    Some((content, stage))
+    Some((content, staged))
 }
 
 /// Builds one line per segment override - every committed segment, plus (if not already
-/// among them) a newly staged segment override not yet committed - each paired with its
-/// staging annotation.
+/// among them) a newly staged segment override not yet committed - plus whether *any* of
+/// those lines is currently staged.
 fn segment_override_lines(
     variants: &[Variant],
     ctx: &OverridesContext,
     is_deleted: bool,
-) -> (Vec<String>, Vec<String>) {
+) -> (Vec<String>, bool) {
     let mut lines: Vec<String> = Vec::new();
-    let mut stages: Vec<String> = Vec::new();
+    let mut staged = false;
     let mut pending_seg_shown = false;
 
     for ovr in &ctx.committed {
@@ -497,39 +417,37 @@ fn segment_override_lines(
                 .to_string();
 
                 lines.push(line);
-                stages.push("✕ deleting".red().to_string());
+                staged = true;
             } else if is_current_pending {
                 pending_seg_shown = true;
-                let (line, stage) = match &ctx.segment_pending {
+                let line = match &ctx.segment_pending {
                     Some((_, Some(pending_weights))) => {
                         let parts =
                             segment_weights_with_control_remainder(pending_weights, variants);
-                        let line = format!(
+                        format!(
                             "{}  › {} {}",
                             "segment".bright_blue(),
                             name.dimmed(),
                             parts.join(", ")
                         )
                         .yellow()
-                        .to_string();
-                        (line, "‣ updating".yellow().to_string())
+                        .to_string()
                     }
                     Some((_, None)) => {
                         let parts = segment_weights(weights, variants);
-                        let line = format!(
+                        format!(
                             "{}  › {} {}",
                             "segment".bright_blue(),
                             name.dimmed(),
                             parts.join(", ")
                         )
                         .red()
-                        .to_string();
-                        (line, "✕ deleting".red().to_string())
+                        .to_string()
                     }
                     None => unreachable!(),
                 };
                 lines.push(line);
-                stages.push(stage);
+                staged = true;
             } else {
                 let parts = segment_weights(weights, variants);
                 lines.push(format!(
@@ -538,7 +456,6 @@ fn segment_override_lines(
                     name.dimmed(),
                     parts.join(", ")
                 ));
-                stages.push(String::new())
             }
         }
     }
@@ -559,26 +476,10 @@ fn segment_override_lines(
         .to_string();
 
         lines.push(line);
-        stages.push("‣ adding".green().to_string());
+        staged = true;
     }
 
-    (lines, stages)
-}
-
-/// Resolves a boolean flag's committed value against an optional staged one, formatting it
-/// as `on` (or `off`, depending which is effective) - colored yellow if a staged value is
-/// overriding the committed one, plain otherwise.
-fn resolve(pending: Option<bool>, committed: bool, on: &str, off: &str) -> String {
-    let (effective, is_pending) = match pending {
-        Some(v) => (v, true),
-        None => (committed, false),
-    };
-    let s = if effective { on } else { off };
-    if is_pending {
-        s.yellow().to_string()
-    } else {
-        s.to_string()
-    }
+    (lines, staged)
 }
 
 /// Formats each weight as `"<value> → <weight>%"`, skipping any whose `variant_id` no
