@@ -3,8 +3,8 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, Subject,
-    TraitValue,
+    Comparator, Environment, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Project,
+    Segment, Snapshot, Subject, TraitValue,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -257,4 +257,73 @@ impl SegmentPatch {
     pub fn is_empty(&self) -> bool {
         self.ops.is_empty()
     }
+}
+
+/// One request's worth of a staged feature patch, addressed by id - part of
+/// [`CommitPayload`].
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct FeatureCommitPart {
+    pub id: i32,
+    pub patch: FeaturePatch,
+}
+
+/// One request's worth of a staged identity patch, addressed by value - part of
+/// [`CommitPayload`].
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityCommitPart {
+    pub value: String,
+    pub patch: IdentityPatch,
+}
+
+/// One request's worth of a staged segment patch, addressed by id - part of
+/// [`CommitPayload`].
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SegmentCommitPart {
+    pub id: i32,
+    pub patch: SegmentPatch,
+}
+
+/// A single `COMMIT` as one atomic server-side operation: whichever of the feature,
+/// identity, and segment contexts have pending changes are applied together in one
+/// transaction, and every `(feature, environment)` pair affected by the combined change
+/// gets exactly one new snapshot - never zero (silently missed), never more than one
+/// (uncoordinated duplicate writes from what the user experienced as a single commit).
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CommitPayload {
+    pub comment: Option<String>,
+    pub feature: Option<FeatureCommitPart>,
+    pub identity: Option<IdentityCommitPart>,
+    pub segment: Option<SegmentCommitPart>,
+}
+
+impl CommitPayload {
+    pub fn is_empty(&self) -> bool {
+        self.feature.is_none() && self.identity.is_none() && self.segment.is_none()
+    }
+}
+
+/// Result of a [`CommitPayload`]. Each of `feature`/`identity`/`segment` is only
+/// meaningful when the corresponding request part was present - in that case `None`
+/// means the patch staged a delete (mirrors the existing single-resource PATCH
+/// endpoints' `Option<T>` convention), not "nothing happened."
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CommitResult {
+    pub feature: Option<Feature>,
+    pub identity: Option<IdentityWithTraits>,
+    pub segment: Option<Segment>,
+    pub snapshots: Vec<Snapshot>,
+}
+
+/// Request body for `SNAPSHOT restore` - an optional comment override for the new
+/// snapshot the restore itself produces (defaults server-side to `restored from v{N}`).
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema)]
+pub struct RestoreRequest {
+    pub comment: Option<String>,
+}
+
+/// Request body for `SNAPSHOT describe` - replaces a snapshot's comment in place. `None`
+/// clears it.
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSnapshotCommentPayload {
+    pub comment: Option<String>,
 }

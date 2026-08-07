@@ -150,6 +150,14 @@ FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE iv.environment_id = $1 AND iv.feature_id = $2 AND iv.pinned_at IS NOT NULL
 ORDER BY i.identity
 
+-- :name fetch_pinned_overrides_with_details_for_feature :<> :*
+-- :doc Returns (identity_id, identity value, variant_id) for every explicit override
+-- (pinned_at IS NOT NULL) on given feature+environment - used to capture snapshot state.
+SELECT i.identity_id, i.identity, iv.variant_id
+FROM identity_variants iv JOIN identities i USING(identity_id)
+WHERE iv.environment_id = $1 AND iv.feature_id = $2 AND iv.pinned_at IS NOT NULL
+ORDER BY i.identity
+
 -- :name migrate_identities :<> :!
 -- :doc Migrates given percent of organic (non-segment-governed) identities attached to one
 -- variant into the other variant, for the feature those variants belong to. Segment-governed
@@ -176,6 +184,12 @@ WHERE environment_id = $1
 -- :name delete_identity_variant_for_feature :<> :!
 -- :doc Removes a single variant assignment for given identity+feature+environment (unpin)
 DELETE FROM identity_variants WHERE identity_id = $1 AND feature_id = $2 AND environment_id = $3
+
+-- :name delete_identity_variants_for_feature_environment :<> :!
+-- :doc Removes every variant assignment (pinned and organic alike) for a feature within a
+-- single environment - used when restoring a snapshot, so both stale pins and organic
+-- assignments are cleared before the snapshot's own pins (if any) are re-applied.
+DELETE FROM identity_variants WHERE feature_id = $1 AND environment_id = $2
 
 -- :name delete_attachments :<> :!
 -- :doc Removes attachments of all identitites to given variant. This is executed only on variant deletion.

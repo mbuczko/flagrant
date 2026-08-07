@@ -11,8 +11,6 @@
 //! | `SEGMENT describe`        | [`describe`]       | Stage a segment description change.                                         |
 //! | `OVERRIDE add`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
 //! | `OVERRIDE delete`         | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
-//! | `COMMIT`                  | [`commit`]         | Send staged segment changes to the API.                                     |
-//! | `DISCARD`                 | [`discard`]        | Drop all staged segment changes.                                            |
 
 use std::borrow::Cow;
 
@@ -26,7 +24,6 @@ use flagrant_types::{
 
 use crate::{
     handlers::{
-        features,
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
@@ -453,7 +450,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 
         // Every non-control variant gets an explicit entry (0 if not already weighted),
         // then the targeted one is updated - so untouched variants still show up in
-        // FEATURE show's OVERRIDES row instead of being silently absent.
+        // FEATURE show's OVERRIDEN-BY row instead of being silently absent.
         let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
         let mut weights: Vec<SegmentVariantWeight> = variants
             .iter()
@@ -677,71 +674,6 @@ fn weights_equal(a: &[SegmentVariantWeight], b: &[SegmentVariantWeight]) -> bool
         .iter()
         .zip(b_sorted.iter())
         .all(|(x, y)| x.variant_id == y.variant_id && x.weight == y.weight)
-}
-
-/// Commit all staged segment changes to the API.
-pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-    let segment_id = ctx
-        .segment
-        .as_ref()
-        .map(|s| s.id)
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-
-    let patch = match &ctx.segment_patch {
-        Some(p) if !p.is_empty() => p.clone(),
-        _ => return Ok(()),
-    };
-
-    // Collected before the patch is moved into the request below - doesn't depend on
-    // the server response, only on which ops we're about to send.
-    let overridden_feature_ids: std::collections::HashSet<i32> = patch
-        .ops
-        .iter()
-        .filter_map(|op| match op {
-            SegmentPatchOp::SetFeatureOverride { feature_id, .. }
-            | SegmentPatchOp::UnsetFeatureOverride { feature_id, .. } => Some(*feature_id),
-            _ => None,
-        })
-        .collect();
-
-    let path = ctx
-        .project_resource()
-        .subpath(format!("/segments/{segment_id}"));
-    let updated = ctx
-        .client
-        .patch::<_, Option<Segment>>(path, patch)
-        .map_err(|err| anyhow::anyhow!("Segment commit failed: {err}"))?;
-
-    let Some(updated) = updated else {
-        println!("Segment '{}' deleted.", ctx.segment.as_ref().unwrap().name);
-        ctx.segment = None;
-        ctx.segment_patch = None;
-
-        return Ok(());
-    };
-
-    ctx.segment_patch = None;
-    ctx.segment = Some(updated);
-    drop(ctx);
-
-    let overrides = fetch_overridden_features(segment_id, session);
-    let ctx = session.context.read().unwrap();
-
-    ctx.segment
-        .as_ref()
-        .unwrap()
-        .display(None, &SegmentContext { overrides });
-
-    drop(ctx);
-
-    // If this commit touched a feature's overrides, that feature's OVERRIDES section
-    // just changed even though the feature itself has no pending patch of its own -
-    // show it too, so the user doesn't have to run `FEATURE show` separately.
-    for feature_id in overridden_feature_ids {
-        features::show_by_id(feature_id, session)?;
-    }
-    Ok(())
 }
 
 /// Drop all staged segment changes.

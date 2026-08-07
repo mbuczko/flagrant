@@ -5,10 +5,7 @@ use axum::{
 };
 use flagrant::models::identity::TraitCondition;
 use flagrant::models::{environment, identity, project};
-use flagrant_types::{
-    IdentityVariant, IdentityWithTraits,
-    payload::{IdentityPatch, NewIdentityPayload},
-};
+use flagrant_types::{IdentityVariant, IdentityWithTraits, payload::NewIdentityPayload};
 use serde::Deserialize;
 use smallvec::{SmallVec, smallvec};
 use utoipa::IntoParams;
@@ -167,36 +164,6 @@ pub async fn create(
         payload.traits.unwrap_or_default(),
     )
     .await?;
-
-    Ok(Json(identity))
-}
-
-/// Applies a patch to an identity: applies granular trait operations
-/// and pins the identity to specific variants per feature (overrides).
-#[utoipa::path(
-    patch,
-    path = "/projects/{project}/envs/{environment}/identities/{identity}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("identity" = String, Path, description = "Identity value")
-    ),
-    request_body = IdentityPatch,
-    responses(
-        (status = 200, description = "Updated identity with traits, or null if the patch staged deletion", body = Option<IdentityWithTraits>),
-        (status = 404, description = "Identity not found")
-    ),
-    tag = "identities"
-)]
-pub async fn update(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, identity_value)): Path<(String, String, String)>,
-    Json(patch): Json<IdentityPatch>,
-) -> Result<Json<Option<IdentityWithTraits>>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let identity = identity::get_by_value(&mut conn, &env, identity_value).await?;
-    let identity = identity::patch(&mut conn, &env, identity, patch).await?;
 
     Ok(Json(identity))
 }

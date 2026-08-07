@@ -1,14 +1,20 @@
 //! Staging helpers for building up a [`FeaturePatch`] or [`IdentityPatch`] before
 //! they are committed to the API.
 
+use std::collections::HashSet;
+
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     FeatureValue, TraitValue,
-    payload::{FeaturePatch, IdentityPatch, TagPatchOp, TraitPatchOp, VariantPatchOp},
+    payload::{
+        CommitPayload, CommitResult, FeatureCommitPart, FeaturePatch, IdentityCommitPart,
+        IdentityPatch, SegmentCommitPart, TagPatchOp, TraitPatchOp, VariantPatchOp,
+    },
 };
 
+use super::index;
 use crate::handlers::{features, identities, segments};
 
 /// Bail if any context has uncommitted staged changes.
@@ -214,32 +220,132 @@ pub(crate) fn stage_trait_delete(pending: &mut IdentityPatch, name: String) {
     println!("Staged: unset {name}");
 }
 
-/// Commits all staged changes across active contexts (feature, identity, and/or segment).
+/// Commits all staged changes across active contexts (feature, identity, and/or segment)
+/// as a single atomic server-side operation - see [`CommitPayload`] / `commit::apply` on
+/// the API side. A trailing argument, if given, becomes the comment recorded on every
+/// snapshot this commit produces.
+///
+/// Whichever of `ctx.feature_patch` / `ctx.identity_patch` / `ctx.segment_patch` are
+/// pending are sent together in one request and applied together in one transaction - this
+/// used to be up to three independent `PATCH` calls (one per context), which meant a
+/// partial failure across them wasn't rolled back, and (once segment/identity overrides
+/// could affect a feature's snapshot history) risked recording multiple uncoordinated
+/// snapshots from what the user experienced as a single `COMMIT`.
 pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let ctx = session.context.read().unwrap();
-    let has_feature = ctx.feature.is_some()
-        && ctx
-            .feature_patch
-            .as_ref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false);
+    let mut ctx = session.context.write().unwrap();
+    let has_feature = ctx.has_feature_pending() && ctx.feature.is_some();
     let has_identity = ctx.identity.is_some() && ctx.has_identity_pending();
     let has_segment = ctx.segment.is_some() && ctx.has_segment_pending();
-    drop(ctx);
 
     if !has_feature && !has_identity && !has_segment {
         println!("No pending changes to commit.");
         return Ok(());
     }
+
+    let comment = args.first().map(|a| a.to_string());
+    let current_env_id = ctx.environment.id;
+    let feature_id = ctx.feature.as_ref().map(|f| f.id);
+    let identity_value = ctx.identity.as_ref().map(|i| i.value.clone());
+
+    let payload = CommitPayload {
+        comment,
+        feature: has_feature.then(|| FeatureCommitPart {
+            id: feature_id.unwrap(),
+            patch: ctx.feature_patch.clone().unwrap(),
+        }),
+        identity: has_identity.then(|| IdentityCommitPart {
+            value: identity_value.clone().unwrap(),
+            patch: ctx.identity_patch.clone().unwrap(),
+        }),
+        segment: has_segment.then(|| SegmentCommitPart {
+            id: ctx.segment.as_ref().unwrap().id,
+            patch: ctx.segment_patch.clone().unwrap(),
+        }),
+    };
+
+    let path = ctx.env_resource().subpath("/commit");
+    let result: CommitResult = ctx
+        .client
+        .post(path, payload)
+        .map_err(|err| anyhow::anyhow!("Commit failed: {err}"))?;
+
+    let feature_deleted = has_feature && result.feature.is_none();
+    let identity_deleted = has_identity && result.identity.is_none();
+    let segment_deleted = has_segment && result.segment.is_none();
+
     if has_feature {
-        features::commit(args, session)?;
+        ctx.feature_patch = None;
+        match result.feature {
+            Some(updated) => {
+                ctx.feature = Some(updated);
+                index::rebuild(&mut ctx);
+            }
+            None => {
+                println!("Feature '{}' deleted.", ctx.feature.as_ref().unwrap().name);
+                ctx.feature = None;
+                ctx.variant_index.clear();
+            }
+        }
     }
+
     if has_identity {
-        identities::commit(args, session)?;
+        ctx.identity_patch = None;
+        match result.identity {
+            Some(updated) => ctx.identity = Some(updated),
+            None => {
+                println!("Identity '{}' deleted.", identity_value.unwrap());
+                ctx.identity = None;
+            }
+        }
     }
+
     if has_segment {
-        segments::commit(args, session)?;
+        ctx.segment_patch = None;
+        match result.segment {
+            Some(updated) => ctx.segment = Some(updated),
+            None => {
+                println!("Segment '{}' deleted.", ctx.segment.as_ref().unwrap().name);
+                ctx.segment = None;
+            }
+        }
     }
+
+    drop(ctx);
+
+    let mut shown: HashSet<i32> = HashSet::new();
+    if has_feature && !feature_deleted {
+        features::show_by_id(feature_id.unwrap(), session)?;
+        shown.insert(feature_id.unwrap());
+    }
+    if has_identity && !identity_deleted {
+        identities::show(&[], session)?;
+    }
+    if has_segment && !segment_deleted {
+        segments::show(&[], session)?;
+    }
+
+    // A segment/identity override cascade can produce a new snapshot for a feature that
+    // isn't in context at all (e.g. editing a segment's rules with no `FEATURE use` set) -
+    // show it too, so the user doesn't have to run `FEATURE show` separately. Only for
+    // snapshots in the current environment - one from a segment's cross-environment
+    // structural cascade would display the wrong environment's data if shown here.
+    for snapshot in &result.snapshots {
+        if snapshot.environment_id == current_env_id && shown.insert(snapshot.feature_id) {
+            features::show_by_id(snapshot.feature_id, session)?;
+        }
+    }
+
+    for snapshot in &result.snapshots {
+        if snapshot.environment_id == current_env_id {
+            println!("Snapshot v{} recorded.", snapshot.version);
+        } else {
+            println!(
+                "Snapshot v{} recorded for feature #{} (environment #{}).",
+                snapshot.version, snapshot.feature_id, snapshot.environment_id
+            );
+        }
+    }
+
     Ok(())
 }
 
