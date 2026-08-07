@@ -414,94 +414,35 @@ pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Parses a list of tag ops out of REPL args, one tag per (whitespace-separated) arg.
+/// Parses a list of tag ops out of REPL args - tags may be whitespace-separated across
+/// args and/or comma-separated within one arg (e.g. `ui,experiment` and `ui experiment`
+/// are equivalent), so a comma typed where a space was meant never ends up embedded in a
+/// tag name (which would otherwise fail the tag charset validation as a single bogus tag).
 ///
-/// A tag prefixed with `-` is a removal, otherwise it's an addition. Deduplicates by
-/// tag name (keeping the first occurrence) and sorts the result by name.
+/// A `-` prefix marks a removal; when it prefixes a comma-separated group (e.g.
+/// `-old,stale`), it applies to every tag in that group, not just the first. Deduplicates
+/// by tag name (keeping the first occurrence) and sorts the result by name.
 fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
     let mut ops: Vec<(String, bool)> = args
         .iter()
         .map(|a| a.trim())
         .filter(|t| !t.is_empty())
-        .map(|t| match t.strip_prefix('-') {
-            Some(rest) => (rest.to_string(), false),
-            None => (t.to_string(), true),
+        .flat_map(|t| {
+            let (add, rest) = match t.strip_prefix('-') {
+                Some(rest) => (false, rest),
+                None => (true, t),
+            };
+            rest.split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(move |name| (name.to_string(), add))
+                .collect::<Vec<_>>()
         })
         .collect();
 
     ops.sort_by(|(a, _), (b, _)| a.cmp(b));
     ops.dedup_by(|(a, _), (b, _)| a == b);
     ops
-}
-
-/// Commits all staged changes for the current feature to the API atomically.
-pub fn commit(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let mut ctx = session.context.write().unwrap();
-    let feature_id = ctx.feature.as_ref().map(|f| f.id).ok_or_else(|| {
-        anyhow::anyhow!("Not within a feature context. Use \"FEATURE use ...\" to set a context.")
-    })?;
-    let patch = match &ctx.feature_patch {
-        Some(p) if !p.is_empty() => p.clone(),
-        _ => return Ok(()),
-    };
-
-    let path = ctx
-        .env_resource()
-        .subpath(format!("/features/{feature_id}"));
-
-    let updated = ctx
-        .client
-        .patch::<_, Option<Feature>>(path, patch)
-        .map_err(|err| anyhow::anyhow!("Feature commit failed: {err}"))?;
-
-    let Some(updated) = updated else {
-        println!("Feature '{}' deleted.", ctx.feature.as_ref().unwrap().name);
-
-        ctx.feature = None;
-        ctx.feature_patch = None;
-        ctx.variant_index = vec![];
-        return Ok(());
-    };
-
-    // If a segment override for this same feature is about to be committed too (as part of
-    // the same top-level COMMIT), skip printing here - `show_by_id` will show the feature
-    // afterward with the up-to-date overrides, so we don't print it twice.
-    let defer_to_segment_commit = ctx.segment_patch.as_ref().is_some_and(|p| {
-        p.ops.iter().any(|op| {
-            matches!(op,
-                SegmentPatchOp::SetFeatureOverride { feature_id: fid, .. }
-                | SegmentPatchOp::UnsetFeatureOverride { feature_id: fid, .. }
-                if *fid == feature_id
-            )
-        })
-    });
-
-    // Same reasoning, but for an identity override/unpin about to be committed for this
-    // feature right after this - `identities::commit` will show the feature afterward with
-    // the up-to-date overrides.
-    let defer_to_identity_commit = ctx
-        .identity_patch
-        .as_ref()
-        .is_some_and(|p| !p.overrides.is_empty() || !p.unpins.is_empty());
-
-    if !defer_to_segment_commit && !defer_to_identity_commit {
-        let overrides_path = ctx
-            .env_resource()
-            .subpath(format!("/features/{}/overrides", updated.id));
-
-        let overrides = ctx
-            .client
-            .get::<Vec<FeatureOverride>>(overrides_path)
-            .unwrap_or_default();
-
-        updated.display(None, &OverridesContext::committed_only(overrides));
-    }
-
-    ctx.feature_patch = None;
-    ctx.feature = Some(updated);
-    index::rebuild(&mut ctx);
-
-    Ok(())
 }
 
 /// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
