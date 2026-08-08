@@ -156,7 +156,7 @@ pub async fn get_by_id(
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    name: String,
+    name: &str,
 ) -> anyhow::Result<Feature> {
     let feature = SQLFeatures::fetch_feature_by_name(
         &mut *conn,

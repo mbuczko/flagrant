@@ -292,7 +292,7 @@ async fn recreate_segment(
     project: &Project,
     seg_override: &SnapshotSegmentOverride,
 ) -> anyhow::Result<Segment> {
-    let name = if segment::get_by_name(conn, project, seg_override.segment_name.clone())
+    let name = if segment::get_by_name(conn, project, &seg_override.segment_name)
         .await
         .is_ok()
     {

@@ -340,7 +340,7 @@ pub async fn patch(
     }
 
     for ovr in patch.overrides {
-        let feat = feature::get_by_name(&mut tx, environment, ovr.feature_name).await?;
+        let feat = feature::get_by_name(&mut tx, environment, &ovr.feature_name).await?;
         let fv: FeatureValue = ovr
             .variant_value
             .parse()
@@ -368,7 +368,7 @@ pub async fn patch(
     }
 
     for feature_name in patch.unpins {
-        let feat = feature::get_by_name(&mut tx, environment, feature_name).await?;
+        let feat = feature::get_by_name(&mut tx, environment, &feature_name).await?;
         SQLIdentities::delete_identity_variant_for_feature(
             &mut *tx,
             params![identity.id, feat.id, environment.id],

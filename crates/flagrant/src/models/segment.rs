@@ -82,7 +82,7 @@ pub async fn get_by_id(
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
     project: &Project,
-    name: String,
+    name: &str,
 ) -> anyhow::Result<Segment> {
     let row =
         SQLSegments::fetch_segment_by_name::<_, SegmentRow>(&mut *conn, params![name, project.id])

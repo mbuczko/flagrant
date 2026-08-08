@@ -46,7 +46,7 @@ async fn resolve_segment(
 ) -> anyhow::Result<Segment> {
     match segment_id {
         SegmentId::Id(id) => segment::get_by_id(conn, project, id).await,
-        SegmentId::Name(name) => segment::get_by_name(conn, project, name).await,
+        SegmentId::Name(name) => segment::get_by_name(conn, project, &name).await,
     }
 }
 
