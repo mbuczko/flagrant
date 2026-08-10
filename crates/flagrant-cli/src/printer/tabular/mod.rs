@@ -4,6 +4,7 @@ mod group;
 mod identity;
 mod rule;
 pub mod segment;
+mod variant;
 
 pub trait Tabular {
     type Patch;

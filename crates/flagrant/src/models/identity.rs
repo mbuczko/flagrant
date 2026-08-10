@@ -713,6 +713,26 @@ pub async fn list_pinned_overrides(
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into())
 }
 
+/// Returns identity values explicitly pinned (`pinned_at IS NOT NULL`) to a specific variant
+/// within a single environment. Non-control variants are shared across every environment of
+/// a feature, so `environment_id` must be included - otherwise pins made in other
+/// environments would leak into the result.
+pub async fn list_identities_pinned_to_variant(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    variant_id: i32,
+) -> anyhow::Result<Vec<String>> {
+    SQLIdentities::fetch_identities_pinned_to_variant::<_, (String,)>(
+        conn,
+        params![variant_id, environment_id],
+    )
+    .await
+    .map(|rows| rows.into_iter().map(|(s,)| s).collect())
+    .map_err(|e| {
+            FlagrantError::QueryFailed("Could not fetch identities pinned to variant", e).into()
+        })
+}
+
 /// Removes every variant assignment (pinned and organic alike) for a feature within a
 /// single environment - the first step of restoring a snapshot's identity overrides:
 /// clear everything, then re-apply only the pins present in the target snapshot.

@@ -26,6 +26,7 @@ use utoipa::OpenApi;
         crate::handlers::variants::create,
         crate::handlers::variants::update,
         crate::handlers::variants::delete,
+        crate::handlers::variants::get_pinned_identities,
         crate::handlers::tags::list,
         crate::handlers::identities::list,
         crate::handlers::identities::fetch,

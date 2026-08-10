@@ -235,6 +235,12 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
+            "show",
+            "index",
+            handlers::variants::show,
+            in_context!(feature_ctx),
+        ),
+        Command::Variant.op_in_context(
             "value",
             "index value",
             handlers::variants::value,
@@ -246,7 +252,10 @@ fn main() -> anyhow::Result<()> {
             handlers::variants::weight,
             in_context!(feature_ctx),
         ),
-        Command::Variant.args_in_context("add · delete · weight · value", in_context!(feature_ctx)),
+        Command::Variant.args_in_context(
+            "add · delete · show · weight · value",
+            in_context!(feature_ctx),
+        ),
         // Segments
         Command::Segment.op("add", "name [description]", handlers::segments::add),
         Command::Segment.op("list", "[pattern]", handlers::segments::list),

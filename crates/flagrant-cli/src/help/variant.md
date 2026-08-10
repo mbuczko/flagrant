@@ -8,6 +8,7 @@ A **variant** is one of the possible values a feature can resolve to. Every feat
 Once an identity lands on a variant it keeps seeing that same one on later requests: distribution uses a self-balancing accumulator rather than a fresh random roll each time, so a given split stays stable even as variants are added or weights change later.
 
 - `VARIANT add <weight> <value>` — stage a new variant addition
+- `VARIANT show <index>` — print a variant's weight, full value, control status, and any identities explicitly pinned to it
 - `VARIANT value <index> <value>` — stage a value change for an existing variant
 - `VARIANT weight <index> [+/-]weight` — stage a weight change for an existing variant
 - `VARIANT delete <index>` — stage a variant deletion

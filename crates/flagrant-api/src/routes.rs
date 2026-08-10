@@ -85,6 +85,10 @@ pub fn init_router() -> Router<AppState> {
             "/envs/:environment/variants/:variant_id",
             delete(variants::delete),
         )
+        .route(
+            "/envs/:environment/variants/:variant_id/identities",
+            get(variants::get_pinned_identities),
+        )
         // Identities
         .route("/envs/:environment/identities", get(identities::list))
         .route("/envs/:environment/identities", post(identities::create))

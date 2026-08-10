@@ -5,6 +5,7 @@
 //! | Command            | Handler    | Description                                      |
 //! |--------------------|------------|--------------------------------------------------|
 //! | `VARIANT add`      | [`add`]    | Stage a new variant addition.                    |
+//! | `VARIANT show`     | [`show`]   | Print details of an existing variant.            |
 //! | `VARIANT value`    | [`value`]  | Stage a value change for an existing variant.    |
 //! | `VARIANT weight`   | [`weight`] | Stage a weight change for an existing variant.   |
 //! | `VARIANT delete`   | [`delete`] | Stage a variant deletion.                        |
@@ -20,9 +21,12 @@ use flagrant_types::{
     payload::{FeaturePatch, VariantPatchOp},
 };
 
-use crate::handlers::{
-    internal::{index, stage},
-    open_in_editor,
+use crate::{
+    handlers::{
+        internal::{effectives as effective, index, stage},
+        open_in_editor,
+    },
+    printer::tabular::Tabular,
 };
 
 /// Stage a new variant addition with a given weight and value.
@@ -85,6 +89,53 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     index::rebuild(&mut ctx);
     Ok(())
+}
+
+/// Print details of a single variant identified by its display index: weight, full
+/// (possibly multi-line) value, whether it's the control variant, and any identities
+/// explicitly pinned to it.
+///
+/// Expected args: `<index>`
+pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+
+    if ctx.feature.is_none() {
+        bail!("Not within a feature context.");
+    }
+    let index: usize = match args.get(1) {
+        Some(idx) => idx.parse()?,
+        None => bail!("No variant index provided."),
+    };
+
+    // Validates the index against the current variant index (built the same way by
+    // `index::rebuild`), mirroring the range check used by value/weight/delete.
+    index::resolve(index, &ctx)?;
+
+    let feature = ctx.feature.as_ref().unwrap();
+    let eff = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+    let variant = eff
+        .iter()
+        .filter(|e| !e.is_deleted)
+        .nth(index - 1)
+        .ok_or_else(|| anyhow::anyhow!("No variant at index {index}."))?;
+
+    let identities = match variant.id {
+        Some(id) => fetch_pinned_identities(id, session),
+        None => Vec::new(),
+    };
+
+    variant.display(None, &(index, identities));
+    Ok(())
+}
+
+/// Fetches identity values explicitly pinned to the given committed variant.
+fn fetch_pinned_identities(variant_id: i32, session: &Session<Connection>) -> Vec<String> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.env_resource();
+
+    ctx.client
+        .get::<Vec<String>>(res.subpath(format!("/variants/{variant_id}/identities")))
+        .unwrap_or_default()
 }
 
 /// Stage a value change for an existing variant identified by its display index.
