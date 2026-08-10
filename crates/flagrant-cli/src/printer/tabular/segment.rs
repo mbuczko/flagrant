@@ -52,11 +52,13 @@ impl Tabular for Segment {
             patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
 
         let name_staged = is_deleted || eff.name_modified;
-        let name_str = legend::stage_color(eff.name, is_deleted, eff.name_modified).into_owned();
+        let name_str =
+            legend::stage_color(eff.name, is_deleted, false, eff.name_modified).into_owned();
         let desc_staged = is_deleted || eff.description_modified;
         let desc_str = legend::stage_color(
             eff.description.unwrap_or_default(),
             is_deleted,
+            false,
             eff.description_modified,
         )
         .into_owned();

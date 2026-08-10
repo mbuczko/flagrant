@@ -119,6 +119,7 @@ impl Tabular for Feature {
                 staged_name.unwrap_or(&self.name)
             },
             is_deleted,
+            false,
             name_modified,
         )
         .into_owned();
@@ -168,7 +169,7 @@ impl Tabular for Feature {
         };
 
         let status_modified = pending_enabled.is_some() || pending_archived.is_some();
-        let status = legend::stage_color(status, is_deleted, status_modified).into_owned();
+        let status = legend::stage_color(status, is_deleted, false, status_modified).into_owned();
 
         let staged_srv = (!is_deleted)
             .then(|| patch.and_then(|p| p.is_srv))
@@ -178,6 +179,7 @@ impl Tabular for Feature {
         let srv_str = legend::stage_color(
             if srv_effective { "ON" } else { "OFF" },
             is_deleted,
+            false,
             srv_modified,
         )
         .into_owned();
@@ -195,6 +197,7 @@ impl Tabular for Feature {
                 }
             },
             is_deleted,
+            false,
             desc_modified,
         )
         .into_owned();

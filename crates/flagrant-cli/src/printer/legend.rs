@@ -4,17 +4,20 @@ use colored::Colorize;
 use fancy_table::ansi;
 use terminal_size::{Width as TermWidth, terminal_size};
 
-/// Colors `text` red if `deleted`, yellow if `modified` (and not deleted), or returns it
-/// unchanged otherwise - the red/yellow/plain scheme repeated across every staged-change
-/// `Tabular` display.
+/// Colors `text` red if `deleted`, green if `added`, yellow if `modified` (and neither of the
+/// above), or returns it unchanged otherwise - the green/red/yellow/plain scheme repeated
+/// across every staged-change `Tabular` display.
 pub fn stage_color<'a>(
     text: impl Into<Cow<'a, str>>,
     deleted: bool,
+    added: bool,
     modified: bool,
 ) -> Cow<'a, str> {
     let text = text.into();
     if deleted {
         Cow::Owned(text.red().to_string())
+    } else if added {
+        Cow::Owned(text.green().to_string())
     } else if modified {
         Cow::Owned(text.yellow().to_string())
     } else {

@@ -43,7 +43,7 @@ impl Tabular for IdentityWithTraits {
         let title = "IDENTITY".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
         let id_staged = is_deleted;
-        let id_str = legend::stage_color(self.value.as_str(), is_deleted, false).into_owned();
+        let id_str = legend::stage_color(self.value.as_str(), is_deleted, false, false).into_owned();
 
         let eff_traits = effective::effective_identity_traits(self, patch);
 

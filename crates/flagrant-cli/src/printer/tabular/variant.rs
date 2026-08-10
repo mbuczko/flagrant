@@ -20,18 +20,22 @@ impl Tabular for EffectiveVariant {
 
         let (_, bare) = variant.value.decompose();
 
-        let value_s = if variant.is_staged_add {
-            bare.green().to_string()
-        } else {
-            legend::stage_color(bare, variant.is_deleted, variant.value_modified).into_owned()
-        };
+        let value_s = legend::stage_color(
+            bare,
+            variant.is_deleted,
+            variant.is_staged_add,
+            variant.value_modified,
+        )
+        .into_owned();
 
         let weight_str = format!("{}%", variant.weight);
-        let weight_s = if variant.is_staged_add {
-            weight_str.green().to_string()
-        } else {
-            legend::stage_color(weight_str, variant.is_deleted, variant.weight_modified).into_owned()
-        };
+        let weight_s = legend::stage_color(
+            weight_str,
+            variant.is_deleted,
+            variant.is_staged_add,
+            variant.weight_modified,
+        )
+        .into_owned();
 
         let control_s = if variant.is_control {
             "yes".to_string()
