@@ -11,7 +11,7 @@ use crate::{
 
 const UTF_TOP_CORNER: &str = "╭─";
 const UTF_MIDDLE_BAR: &str = "│";
-const UTF_BTM_CORNER: &str = "╰───";
+const UTF_BTM_CORNER: &str = "╰─";
 
 impl Tabular for EffectiveGroup {
     type Patch = ();

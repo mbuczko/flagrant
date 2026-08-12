@@ -38,7 +38,7 @@ impl Tabular for Segment {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(50), Align::Left)
-            .add_column_named_with_align("GROUPS".into(), Layout::Fixed(12), Align::Left)
+            .add_column_named_with_align("GROUPS".into(), Layout::Expandable(20), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows);

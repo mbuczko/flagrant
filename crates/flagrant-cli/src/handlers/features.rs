@@ -445,24 +445,6 @@ fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
     ops
 }
 
-/// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
-///
-/// Used after a segment or identity commit that touched a feature's overrides: the feature
-/// itself has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
-/// section just changed and is worth showing. Refreshes the current feature context too,
-/// if it still refers to this feature.
-pub(crate) fn show_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
-    let updated = fetch_feature(&feature_id.to_string(), session)?;
-    let overrides = fetch_overrides(updated.id, session);
-    updated.display(None, &OverridesContext::committed_only(overrides));
-
-    let mut ctx = session.context.write().unwrap();
-    if ctx.feature.as_ref().is_some_and(|f| f.id == updated.id) {
-        ctx.feature = Some(updated);
-    }
-    Ok(())
-}
-
 /// Drop all staged changes for the current feature.
 ///
 /// Must be called without arguments; passing any argument is an error that hints

@@ -16,7 +16,7 @@ use flagrant_types::{
     payload::{RestoreRequest, UpdateSnapshotCommentPayload},
 };
 
-use crate::handlers::{features, internal::stage, open_in_editor};
+use crate::handlers::{internal::stage, open_in_editor};
 
 fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
     session
@@ -178,6 +178,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// context has uncommitted staged changes, mirroring `COMMIT`/`DISCARD`'s own guard.
 pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
+
     let feature_id = current_feature_id(session)?;
     let version = parse_version(args, "SNAPSHOT restore <version> [comment]")?;
     let comment = args.get(2).map(|a| a.to_string());
@@ -189,12 +190,9 @@ pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let snapshot: Snapshot = ctx.client.post(path, RestoreRequest { comment })?;
     drop(ctx);
 
-    features::show_by_id(feature_id, session)?;
-
     println!(
         "Restored to v{version} - recorded as new snapshot v{}.",
         snapshot.version
     );
-
     Ok(())
 }

@@ -96,19 +96,57 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let Some(label) = args.get(1) else {
         bail!("No group label provided. Use: `GROUP delete <label>` (e.g. group-1 as the label).");
     };
-
-    if !segment.groups.iter().any(|g| g.label == label.as_ref()) {
-        bail!("Group '{label}' not found in current segment.");
-    }
+    let label: &str = label;
 
     let mut ctx = session.context.write().unwrap();
-    ctx.get_or_init_segment_patch()
-        .ops
-        .push(SegmentPatchOp::DeleteGroup {
-            label: label.to_string(),
-        });
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(&segment, patch);
 
-    println!("Staged: delete [{}]", label);
+    // Staged-add groups are appended to `eff.groups` in the same order their `AddGroup` ops
+    // appear in `ops`, so the Nth staged-add group found here is always the Nth `AddGroup`
+    // op - the same position-based addressing `VariantRef::Staged` uses for staged variants.
+    let mut staged_pos = 0usize;
+    let mut found = None;
+
+    for g in &eff.groups {
+        if g.label == label && !g.is_deleted {
+            found = Some(g);
+            break;
+        }
+        if g.is_staged_add {
+            staged_pos += 1;
+        }
+    }
+
+    let group =
+        found.ok_or_else(|| anyhow::anyhow!("Group '{label}' not found in current segment."))?;
+
+    if group.is_staged_add {
+        let pending = ctx.get_or_init_segment_patch();
+        let mut add_count = 0;
+        let index = pending.ops.iter().position(|op| {
+            matches!(op, SegmentPatchOp::AddGroup { .. }) && {
+                let is_target = add_count == staged_pos;
+                add_count += 1;
+                is_target
+            }
+        });
+        if let Some(i) = index {
+            pending.ops.remove(i);
+        }
+        pending.ops.retain(|op| {
+            !matches!(op, SegmentPatchOp::AddRule { group_label, .. } if group_label == label)
+                && !matches!(op, SegmentPatchOp::SetGroupDescription { label: l, .. } if l == label)
+        });
+        println!("Discarded staged group [{label}].");
+    } else {
+        ctx.get_or_init_segment_patch()
+            .ops
+            .push(SegmentPatchOp::DeleteGroup {
+                label: label.to_string(),
+            });
+        println!("Staged: delete [{label}]");
+    }
     Ok(())
 }
 
@@ -182,9 +220,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     };
     let patch = ctx.get_or_init_segment_patch();
 
-    if let Some(existing) = patch.ops.iter_mut().find(|o| {
-        matches!(o, SegmentPatchOp::SetGroupDescription { label: l, .. } if l == label)
-    }) {
+    if let Some(existing) = patch
+        .ops
+        .iter_mut()
+        .find(|o| matches!(o, SegmentPatchOp::SetGroupDescription { label: l, .. } if l == label))
+    {
         *existing = op;
     } else {
         patch.ops.push(op);

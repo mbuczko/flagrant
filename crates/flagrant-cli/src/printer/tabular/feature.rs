@@ -227,7 +227,7 @@ impl Tabular for Feature {
                 e.weight
             };
             let line = format!(
-                "{}{} {}{} │ {}",
+                "{}{} {}{} {}",
                 connector,
                 format_weight_bar(weight, 10),
                 if e.is_control { "★" } else { " " },
