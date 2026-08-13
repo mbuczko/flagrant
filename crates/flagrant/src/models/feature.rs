@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use flagrant_types::{
-    Environment, Feature, FeatureValue, Project, TagList, Variant,
+    Environment, Feature, VariantValue, Project, TagList, Variant,
     payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
@@ -22,7 +22,7 @@ pub struct FeatureUpdate<'a> {
     environment: &'a Environment,
     feature: &'a Feature,
     new_name: Option<String>,
-    new_value: Option<FeatureValue>,
+    new_value: Option<VariantValue>,
     is_enabled: Option<bool>,
     is_srv: Option<bool>,
 }
@@ -47,7 +47,7 @@ impl<'a> FeatureUpdate<'a> {
         self.new_name = Some(name);
         self
     }
-    pub fn value(mut self, value: FeatureValue) -> Self {
+    pub fn value(mut self, value: VariantValue) -> Self {
         self.new_value = Some(value);
         self
     }
@@ -97,7 +97,7 @@ pub async fn create(
     environment: &Environment,
     name: String,
     description: Option<String>,
-    value: FeatureValue,
+    value: VariantValue,
     is_enabled: bool,
     is_srv: bool,
 ) -> anyhow::Result<Feature> {
@@ -156,7 +156,7 @@ pub async fn get_by_id(
 pub async fn get_by_name(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    name: String,
+    name: &str,
 ) -> anyhow::Result<Feature> {
     let feature = SQLFeatures::fetch_feature_by_name(
         &mut *conn,
@@ -363,7 +363,7 @@ pub async fn patch(
     }
 
     // Group SetValue/SetWeight ops by variant id, fetch current state once, then update
-    let mut update_map: HashMap<i32, (Option<FeatureValue>, Option<u8>)> = HashMap::new();
+    let mut update_map: HashMap<i32, (Option<VariantValue>, Option<u8>)> = HashMap::new();
 
     for op in updates {
         match op {

@@ -3,14 +3,14 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Project,
+    Comparator, Environment, Feature, VariantValue, GroupConnector, IdentityWithTraits, Project,
     Segment, Snapshot, Subject, TraitValue,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VariantPatchOp {
-    Add { value: FeatureValue, weight: u8 },
-    SetValue { id: i32, value: FeatureValue },
+    Add { value: VariantValue, weight: u8 },
+    SetValue { id: i32, value: VariantValue },
     SetWeight { id: i32, weight: u8 },
     Delete { id: i32 },
 }
@@ -70,7 +70,7 @@ pub struct UpdateEnvironmentPayload {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewFeaturePayload {
     pub name: String,
-    pub value: FeatureValue,
+    pub value: VariantValue,
     pub description: Option<String>,
     pub is_enabled: bool,
     pub is_srv: bool,
@@ -151,7 +151,7 @@ impl FeaturePatch {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IdentityOverridePatch {
     pub feature_name: String,
-    pub variant_value: String,
+    pub variant_value: VariantValue,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]

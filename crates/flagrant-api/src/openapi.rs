@@ -26,6 +26,7 @@ use utoipa::OpenApi;
         crate::handlers::variants::create,
         crate::handlers::variants::update,
         crate::handlers::variants::delete,
+        crate::handlers::variants::get_pinned_identities,
         crate::handlers::tags::list,
         crate::handlers::identities::list,
         crate::handlers::identities::fetch,
@@ -45,6 +46,8 @@ use utoipa::OpenApi;
         crate::handlers::segments::delete_group,
         crate::handlers::segments::add_rule,
         crate::handlers::segments::delete_rule,
+        crate::handlers::segments::get_overridden_features,
+        crate::handlers::segments::get_feature_override_weights,
         crate::api::get_features,
         crate::handlers::admin::reload_config,
     ),
@@ -54,7 +57,7 @@ use utoipa::OpenApi;
             flagrant_types::Environment,
             flagrant_types::Feature,
             flagrant_types::Variant,
-            flagrant_types::FeatureValue,
+            flagrant_types::VariantValue,
             flagrant_types::Tag,
             flagrant_types::TagList,
             flagrant_types::FeatureResponse,
@@ -88,6 +91,8 @@ use utoipa::OpenApi;
             flagrant_types::payload::SegmentPatch,
             flagrant_types::payload::SegmentPatchOp,
             flagrant_types::payload::SegmentVariantWeight,
+            flagrant_types::SegmentFeatureOverride,
+            flagrant_types::OverriddenVariant,
             flagrant_types::payload::CommitPayload,
             flagrant_types::payload::CommitResult,
             flagrant_types::payload::FeatureCommitPart,
@@ -119,7 +124,7 @@ use utoipa::OpenApi;
     ),
     info(
         title = "Flagrant API",
-        version = "0.0.14",
+        version = "0.0.15",
         description = "CLI-powered feature-flagging service"
     )
 )]

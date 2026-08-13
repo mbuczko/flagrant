@@ -1,13 +1,13 @@
 //! Staging helpers for building up a [`FeaturePatch`] or [`IdentityPatch`] before
 //! they are committed to the API.
 
-use std::collections::HashSet;
+use std::borrow::Cow;
 
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    FeatureValue, TraitValue,
+    Environment, VariantValue, TraitValue,
     payload::{
         CommitPayload, CommitResult, FeatureCommitPart, FeaturePatch, IdentityCommitPart,
         IdentityPatch, SegmentCommitPart, TagPatchOp, TraitPatchOp, VariantPatchOp,
@@ -32,7 +32,7 @@ pub(crate) fn ensure_no_pending(session: &Session<Connection>) -> anyhow::Result
 pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
-    value: FeatureValue,
+    value: VariantValue,
 ) -> anyhow::Result<()> {
     let ops = &mut pending.variants;
     match variant_ref {
@@ -244,6 +244,7 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 
     let comment = args.first().map(|a| a.to_string());
     let current_env_id = ctx.environment.id;
+    let current_env_name = ctx.environment.name.clone();
     let feature_id = ctx.feature.as_ref().map(|f| f.id);
     let identity_value = ctx.identity.as_ref().map(|i| i.value.clone());
 
@@ -268,10 +269,6 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
         .client
         .post(path, payload)
         .map_err(|err| anyhow::anyhow!("Commit failed: {err}"))?;
-
-    let feature_deleted = has_feature && result.feature.is_none();
-    let identity_deleted = has_identity && result.identity.is_none();
-    let segment_deleted = has_segment && result.segment.is_none();
 
     if has_feature {
         ctx.feature_patch = None;
@@ -309,44 +306,42 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
             }
         }
     }
-
     drop(ctx);
 
-    let mut shown: HashSet<i32> = HashSet::new();
-    if has_feature && !feature_deleted {
-        features::show_by_id(feature_id.unwrap(), session)?;
-        shown.insert(feature_id.unwrap());
-    }
-    if has_identity && !identity_deleted {
-        identities::show(&[], session)?;
-    }
-    if has_segment && !segment_deleted {
-        segments::show(&[], session)?;
-    }
-
-    // A segment/identity override cascade can produce a new snapshot for a feature that
-    // isn't in context at all (e.g. editing a segment's rules with no `FEATURE use` set) -
-    // show it too, so the user doesn't have to run `FEATURE show` separately. Only for
-    // snapshots in the current environment - one from a segment's cross-environment
-    // structural cascade would display the wrong environment's data if shown here.
     for snapshot in &result.snapshots {
-        if snapshot.environment_id == current_env_id && shown.insert(snapshot.feature_id) {
-            features::show_by_id(snapshot.feature_id, session)?;
-        }
-    }
+        // The feature name is captured in the snapshot's own state, so no extra lookup is
+        // needed for it - falls back to the id only if the state somehow fails to parse.
+        let feature_name = snapshot
+            .parsed_state()
+            .map(|s| s.name)
+            .unwrap_or_else(|_| format!("#{}", snapshot.feature_id));
 
-    for snapshot in &result.snapshots {
-        if snapshot.environment_id == current_env_id {
-            println!("Snapshot v{} recorded.", snapshot.version);
+        let env_name = if snapshot.environment_id == current_env_id {
+            Cow::Borrowed(current_env_name.as_str())
         } else {
-            println!(
-                "Snapshot v{} recorded for feature #{} (environment #{}).",
-                snapshot.version, snapshot.feature_id, snapshot.environment_id
-            );
-        }
+            Cow::Owned(environment_name(session, snapshot.environment_id))
+        };
+        println!(
+            "Snapshot v{} recorded for '{feature_name}' (environment '{env_name}').",
+            snapshot.version
+        );
     }
 
     Ok(())
+}
+
+/// Resolves an environment id to its display name via the API, falling back to `#{id}` if
+/// the lookup fails - only needed for the rare cross-environment snapshot notice (a
+/// structural segment change cascades to every environment of the project, not just the
+/// one in context - see `commit::apply`), where the name isn't otherwise available.
+fn environment_name(session: &Session<Connection>, environment_id: i32) -> String {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.project_resource();
+
+    ctx.client
+        .get::<Environment>(res.subpath(format!("/envs/{environment_id}")))
+        .map(|e| e.name)
+        .unwrap_or_else(|_| format!("#{environment_id}"))
 }
 
 /// Resets both feature and identity contexts, clearing all state.

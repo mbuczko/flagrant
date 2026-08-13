@@ -115,7 +115,7 @@ pub async fn fetch_by_id_or_name(
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = match feature_id {
         FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
-        FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, name).await?,
+        FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, &name).await?,
     };
     Ok(Json(feature))
 }

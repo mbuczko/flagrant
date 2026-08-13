@@ -1,6 +1,6 @@
 use common::{create_context, create_environment, create_environment_from, create_feature};
 use flagrant::models::{feature, variant};
-use flagrant_types::FeatureValue;
+use flagrant_types::VariantValue;
 use sqlx::{Sqlite, pool::PoolConnection};
 
 mod common;
@@ -12,7 +12,7 @@ async fn create_environment_inherits_from_sole_existing_env(mut conn: PoolConnec
     let (project, env1) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &env1, "foo").await;
 
-    variant::create(&mut conn, &env1, &feature, FeatureValue::build("bar"), 30)
+    variant::create(&mut conn, &env1, &feature, VariantValue::build("bar"), 30)
         .await
         .unwrap();
 
@@ -25,7 +25,7 @@ async fn create_environment_inherits_from_sole_existing_env(mut conn: PoolConnec
 
     assert_eq!(
         feature_env2.get_default_value(),
-        &FeatureValue::build("foo")
+        &VariantValue::build("foo")
     );
 
     // Control weight should reflect the inherited non-control variant weight (100 - 30 = 70).
@@ -39,7 +39,7 @@ async fn create_environment_inherits_from_provided_base_env(mut conn: PoolConnec
     let (project, env1) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &env1, "foo").await;
 
-    variant::create(&mut conn, &env1, &feature, FeatureValue::build("bar"), 40)
+    variant::create(&mut conn, &env1, &feature, VariantValue::build("bar"), 40)
         .await
         .unwrap();
 
@@ -56,7 +56,7 @@ async fn create_environment_inherits_from_provided_base_env(mut conn: PoolConnec
     // env3 inherits value and weights from env1, not env2.
     assert_eq!(
         feature_env3.get_default_value(),
-        &FeatureValue::build("foo")
+        &VariantValue::build("foo")
     );
     assert_eq!(feature_env3.get_default_variant().weight, 60);
 

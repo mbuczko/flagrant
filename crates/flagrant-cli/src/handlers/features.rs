@@ -23,7 +23,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureOverride, FeatureValue,
+    Feature, FeatureOverride, VariantValue,
     payload::{NewFeaturePayload, SegmentPatchOp},
 };
 
@@ -72,7 +72,7 @@ fn split_use_target(name: &str) -> (&str, Option<&str>, Option<&str>) {
 ///
 /// Expected args: `<feature> [value] [description]`
 ///
-/// `value` is parsed as a typed [`FeatureValue`] (e.g. `json::{banner: true}`, `text::hi`);
+/// `value` is parsed as a typed [`VariantValue`] (e.g. `json::{banner: true}`, `text::hi`);
 /// if omitted, an editor is opened to enter the value interactively. The feature is
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -87,7 +87,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 None => open_in_editor("")?,
             };
 
-            let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
+            let parsed = val.parse().unwrap_or_else(|_| VariantValue::build(&val));
             ctx.client.post::<_, Feature>(
                 res.subpath("/features"),
                 NewFeaturePayload {
@@ -277,12 +277,15 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         }
 
         // ...or newly added overrides?
-        if ipatch
+        if let Some(o) = ipatch
             .overrides
             .iter()
-            .any(|o| o.feature_name == feature.name)
+            .find(|o| o.feature_name == feature.name)
         {
-            return Some(IdentityPending::Override(identity_value));
+            return Some(IdentityPending::Override {
+                identity: identity_value,
+                variant_value: o.variant_value.clone(),
+            });
         }
         None
     });
@@ -443,24 +446,6 @@ fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
     ops.sort_by(|(a, _), (b, _)| a.cmp(b));
     ops.dedup_by(|(a, _), (b, _)| a == b);
     ops
-}
-
-/// Re-fetches a feature by id (with its overrides) and prints its `describe()` view.
-///
-/// Used after a segment or identity commit that touched a feature's overrides: the feature
-/// itself has no pending patch of its own, so [`commit`] never runs for it, but its OVERRIDES
-/// section just changed and is worth showing. Refreshes the current feature context too,
-/// if it still refers to this feature.
-pub(crate) fn show_by_id(feature_id: i32, session: &Session<Connection>) -> anyhow::Result<()> {
-    let updated = fetch_feature(&feature_id.to_string(), session)?;
-    let overrides = fetch_overrides(updated.id, session);
-    updated.display(None, &OverridesContext::committed_only(overrides));
-
-    let mut ctx = session.context.write().unwrap();
-    if ctx.feature.as_ref().is_some_and(|f| f.id == updated.id) {
-        ctx.feature = Some(updated);
-    }
-    Ok(())
 }
 
 /// Drop all staged changes for the current feature.

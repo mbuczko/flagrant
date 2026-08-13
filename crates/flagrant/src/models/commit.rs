@@ -30,6 +30,7 @@ pub async fn apply(
     let updated_feature = if let Some(part) = payload.feature {
         let current = feature::get_by_id(&mut tx, environment, part.id).await?;
         let result = feature::patch(&mut tx, environment, &current, part.patch).await?;
+
         if result.is_some() {
             affected.insert((part.id, environment.id));
         }
@@ -49,20 +50,17 @@ pub async fn apply(
         if !part.patch.delete {
             for ovr in &part.patch.overrides {
                 if let Ok(feat) =
-                    feature::get_by_name(&mut tx, environment, ovr.feature_name.clone()).await
+                    feature::get_by_name(&mut tx, environment, &ovr.feature_name).await
                 {
                     affected.insert((feat.id, environment.id));
                 }
             }
             for feature_name in &part.patch.unpins {
-                if let Ok(feat) =
-                    feature::get_by_name(&mut tx, environment, feature_name.clone()).await
-                {
+                if let Ok(feat) = feature::get_by_name(&mut tx, environment, feature_name).await {
                     affected.insert((feat.id, environment.id));
                 }
             }
         }
-
         identity::patch(&mut tx, environment, current, part.patch).await?
     } else {
         None
@@ -110,18 +108,19 @@ pub async fn apply(
                 }
             }
         }
-
         segment::patch(&mut tx, project, current, part.patch).await?
     } else {
         None
     };
 
     let mut snapshots = Vec::with_capacity(affected.len());
+
     for (feature_id, environment_id) in affected {
         let env = environment::get_by_id(&mut tx, environment_id).await?;
         let feat = feature::get_by_id(&mut tx, &env, feature_id).await?;
         let snap =
             snapshot::capture(&mut tx, project, &env, &feat, payload.comment.clone()).await?;
+
         snapshots.push(snap);
     }
 

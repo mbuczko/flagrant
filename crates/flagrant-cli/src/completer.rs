@@ -35,15 +35,15 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let env_res = ctx.env_resource();
 
                 Ok(match op {
-                    "add" if arg_n >= 3 && !prefix.contains(':') => ctx
+                    "add" if arg_n >= 3 && !prefix.contains('=') => ctx
                         .client
                         .get::<Vec<Trait>>(project_res.subpath(format!("/traits?prefix={prefix}")))?
                         .into_iter()
-                        .map(|t| format!("{}:", t.name))
+                        .map(|t| format!("{}=", t.name))
                         .collect::<Vec<_>>(),
                     // Auto-complete trait names for `IDENTITY trait`. A `-` prefix means
-                    // removal, so it's carried through without appending `:` (no value needed).
-                    "trait" if arg_n >= 2 && !prefix.contains(':') => {
+                    // removal, so it's carried through without appending `=` (no value needed).
+                    "trait" if arg_n >= 2 && !prefix.contains('=') => {
                         let (modifier, val) = match prefix.strip_prefix('-') {
                             Some(rest) => (Some('-'), rest),
                             None => (None, prefix),
@@ -61,7 +61,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 }
                                 name.push_str(&t.name);
                                 if modifier.is_none() {
-                                    name.push(':');
+                                    name.push('=');
                                 }
                                 name
                             })

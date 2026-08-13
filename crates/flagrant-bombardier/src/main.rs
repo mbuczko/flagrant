@@ -10,7 +10,7 @@ use std::{
 
 use argh::FromArgs;
 use flagrant_client::{connection::Connection, http::Auth};
-use flagrant_types::{Feature, FeatureResponse, FeatureValue};
+use flagrant_types::{Feature, FeatureResponse, VariantValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::{Rng, rngs::ThreadRng};
 use ulid::Ulid;
@@ -54,7 +54,7 @@ struct Args {
 
 static IDX: AtomicUsize = AtomicUsize::new(0);
 
-fn feature_value(response: Vec<FeatureResponse>, feature_name: &str) -> Option<FeatureValue> {
+fn feature_value(response: Vec<FeatureResponse>, feature_name: &str) -> Option<VariantValue> {
     response
         .into_iter()
         .find(|r| r.name == feature_name)
@@ -126,13 +126,13 @@ pub fn main() -> anyhow::Result<()> {
                     // TODO: fetch idents_count idents from the pool and generate new ones if needed
                     if let Some(ident) = get_or_generate_ident(&idents, idents_count, &mut rng)
                         && let Some(response) = conn.get_features(&ident)
-                        && let Some(fv) = feature_value(response, feature_name)
+                        && let Some(vv) = feature_value(response, feature_name)
                     {
                         let mut guard = buckets.write().unwrap();
-                        let val = match fv {
-                            FeatureValue::Json(v) => v,
-                            FeatureValue::Toml(v) => v,
-                            FeatureValue::Text(v) => v,
+                        let val = match vv {
+                            VariantValue::Json(v) => v,
+                            VariantValue::Toml(v) => v,
+                            VariantValue::Text(v) => v,
                         };
                         // Evict ident from all buckets
                         evict_from_buckets(&mut guard, &ident);

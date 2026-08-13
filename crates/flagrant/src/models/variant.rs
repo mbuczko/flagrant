@@ -4,7 +4,7 @@ use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::errors::FlagrantError;
 use flagrant_types::{
-    Environment, Feature, FeatureValue, IdentityVariant, OverriddenVariant, Variant,
+    Environment, Feature, VariantValue, IdentityVariant, OverriddenVariant, Variant,
 };
 
 use super::identity;
@@ -19,7 +19,7 @@ struct OverriddenFeatureRow {
     feature_name: String,
     variant_id: i32,
     is_control: bool,
-    value: FeatureValue,
+    value: VariantValue,
     weight: u8,
 }
 
@@ -42,7 +42,7 @@ pub(crate) async fn create_control(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
-    value: FeatureValue,
+    value: VariantValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
     let variant_id = SQLVariants::upsert_control_variant(
@@ -69,7 +69,7 @@ pub async fn create(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature: &Feature,
-    value: FeatureValue,
+    value: VariantValue,
     weight: u8,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
@@ -122,7 +122,7 @@ async fn update(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
-    new_value: FeatureValue,
+    new_value: VariantValue,
     new_weight: u8,
 ) -> anyhow::Result<i32> {
     if variant.is_control() {
@@ -160,7 +160,7 @@ pub async fn update_one(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
-    new_value: FeatureValue,
+    new_value: VariantValue,
     new_weight: u8,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
@@ -207,7 +207,7 @@ pub async fn get_by_value(
     conn: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,
-    value: &FeatureValue,
+    value: &VariantValue,
     segment_id: Option<i32>,
 ) -> anyhow::Result<Option<Variant>> {
     let variant = SQLVariants::fetch_variant_by_value(

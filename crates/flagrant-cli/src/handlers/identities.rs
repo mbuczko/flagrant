@@ -7,7 +7,7 @@
 //! | `IDENTITY show`                  | [`show`]          | Print details of an identity with its traits.       |
 //! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
 //! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
-//! | `IDENTITY trait <name:value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
+//! | `IDENTITY trait <name=value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
 //! | `OVERRIDE add [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
 //! | `OVERRIDE delete`                | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
 
@@ -17,7 +17,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
+    Feature, VariantValue, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{
         FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
         VariantPatchOp,
@@ -73,9 +73,9 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Create or upsert an identity with optional traits, then switch into its context.
 ///
-/// Expected args: `<identity> [trait:value ...]`
+/// Expected args: `<identity> [trait=value ...]`
 ///
-/// Traits are separated by spaces; each in `name:value` form. Values are
+/// Traits are separated by spaces; each in `name=value` form. Values are
 /// auto-typed (bool → i32 → f32 → str).
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(identity_str) = args.get(1) {
@@ -83,7 +83,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         let trait_payloads: Vec<IdentityTraitPayload> = args[2..]
             .iter()
             .filter_map(|arg| {
-                let (name, value) = arg.split_once(':')?;
+                let (name, value) = arg.split_once('=')?;
                 Some(IdentityTraitPayload {
                     name: name.to_owned(),
                     value: Some(TraitValue::build(value)),
@@ -246,14 +246,14 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
 
 /// Stage adding/changing or removing one or more traits on the current identity.
 ///
-/// Expected args: `name:value [name2:value2 ...] [-name3 ...]`
+/// Expected args: `name=value [name2=value2 ...] [-name3 ...]`
 ///
-/// Traits are separated by whitespace, each given as `name:value`. Values are
+/// Traits are separated by whitespace, each given as `name=value`. Values are
 /// auto-typed (bool → i32 → f32 → str). Prefix a name with `-` to remove that trait
-/// instead of setting it (e.g. `IDENTITY trait country:pl -org`).
+/// instead of setting it (e.g. `IDENTITY trait country=pl -org`).
 pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if args.len() < 2 {
-        bail!("Usage: IDENTITY trait <name:value> [-name ...]");
+        bail!("Usage: IDENTITY trait <name=value> [-name ...]");
     }
 
     let mut sets: Vec<(String, TraitValue)> = Vec::new();
@@ -262,17 +262,17 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     for arg in &args[1..] {
         match arg.strip_prefix('-') {
             Some(name) => {
-                let name = name.split_once(':').map_or(name, |(n, _)| n);
+                let name = name.split_once('=').map_or(name, |(n, _)| n);
                 if name.is_empty() {
-                    bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset.");
+                    bail!("Invalid trait syntax: '{arg}'. Expected name=value or -name to unset.");
                 }
                 unsets.push(name.to_string());
             }
-            None => match arg.split_once(':') {
+            None => match arg.split_once('=') {
                 Some((name, value)) if !name.is_empty() => {
                     sets.push((name.to_string(), TraitValue::build(value)))
                 }
-                _ => bail!("Invalid trait syntax: '{arg}'. Expected name:value or -name to unset."),
+                _ => bail!("Invalid trait syntax: '{arg}'. Expected name=value or -name to unset."),
             },
         }
     }
@@ -348,7 +348,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     let (feature_name, identity_value) = (feature.name.clone(), identity.value.clone());
     drop(ctx);
 
-    let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
+    let parsed = raw.parse().unwrap_or_else(|_| VariantValue::build(&raw));
 
     // Check whether the value matches an existing (or pending) variant.
     let existing_value = {
@@ -357,7 +357,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         effective::effective_variants(feature, ctx.feature_patch.as_ref())
             .into_iter()
             .find(|v| !v.is_deleted && v.value == parsed)
-            .map(|v| v.value.to_string())
+            .map(|v| v.value)
     };
 
     let variant_value = match existing_value {
@@ -369,18 +369,17 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 parsed
             );
 
-            let value_str = parsed.to_string();
             let mut ctx = session.context.write().unwrap();
 
             ctx.get_or_init_feature_patch()
                 .variants
                 .push(VariantPatchOp::Add {
-                    value: parsed,
+                    value: parsed.clone(),
                     weight: 0,
                 });
 
             index::rebuild(&mut ctx);
-            value_str
+            parsed
         }
     };
 
@@ -389,14 +388,14 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     let pending = ctx.get_or_init_identity_patch();
 
     pending.overrides.retain(|o| o.feature_name != feature_name);
-    pending.overrides.push(IdentityOverridePatch {
-        feature_name: feature_name.clone(),
-        variant_value: variant_value.clone(),
-    });
     println!(
         "Staged: override '{}' → {} for feature '{}'",
         identity_value, variant_value, feature_name
     );
+    pending.overrides.push(IdentityOverridePatch {
+        feature_name,
+        variant_value,
+    });
     Ok(())
 }
 
@@ -502,7 +501,6 @@ fn build_override_editor_content(
     }
 
     for e in variants.iter().filter(|e| e.is_control && !e.is_deleted) {
-        let (_, bare) = e.value.decompose();
         let staged = if e.value_modified { " (staged)" } else { "" };
         let current = if e.id.is_some() && e.id == current_variant_id {
             " ← current"
@@ -511,7 +509,10 @@ fn build_override_editor_content(
         };
         content.push_str(&format!(
             "# default value ({}%){}{}\n{}",
-            e.weight, staged, current, bare
+            e.weight,
+            staged,
+            current,
+            e.value.bare()
         ));
     }
 

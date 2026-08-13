@@ -38,7 +38,7 @@ impl Tabular for Segment {
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(50), Align::Left)
-            .add_column_named_with_align("GROUPS".into(), Layout::Fixed(12), Align::Left)
+            .add_column_named_with_align("GROUPS".into(), Layout::Expandable(20), Align::Left)
             .width(Width::Percentage(100))
             .build()
             .render(rows);
@@ -52,11 +52,13 @@ impl Tabular for Segment {
             patch.is_some_and(|p| p.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)));
 
         let name_staged = is_deleted || eff.name_modified;
-        let name_str = legend::stage_color(eff.name, is_deleted, eff.name_modified).into_owned();
+        let name_str =
+            legend::stage_color(eff.name, is_deleted, false, eff.name_modified).into_owned();
         let desc_staged = is_deleted || eff.description_modified;
         let desc_str = legend::stage_color(
             eff.description.unwrap_or_default(),
             is_deleted,
+            false,
             eff.description_modified,
         )
         .into_owned();
@@ -132,7 +134,7 @@ impl Tabular for Segment {
         let has_staged = name_staged || desc_staged || groups_staged || overrides_staged;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
@@ -177,10 +179,12 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
     weights
         .iter()
         .map(|w| {
-            let (_, bare) = w.value.decompose();
-            let first_line = bare.lines().next().unwrap_or(bare);
             let marker = if w.is_control { "★" } else { "" };
-            format!("{marker}{first_line} → {}", format!("{}%", w.weight).bold())
+            format!(
+                "{marker}{} → {}",
+                w.value.bare_first_line(),
+                format!("{}%", w.weight).bold()
+            )
         })
         .collect()
 }
