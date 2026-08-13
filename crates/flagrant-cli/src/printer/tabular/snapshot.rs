@@ -64,7 +64,7 @@ impl Tabular for Snapshot {
                     .find(|v| v.id == p.variant_id)
                     .map(|v| v.value.bare_first_line().to_string())
                     .unwrap_or_else(|| format!("#{}", p.variant_id));
-                format!("{} → {value}", p.identity_value.white())
+                format!("{} → {value}", p.identity_value.dimmed())
             })
             .collect::<Vec<_>>()
             .join(", ");

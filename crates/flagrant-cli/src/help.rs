@@ -7,7 +7,9 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::session::Session;
 use termimad::MadSkin;
 
-pub const TOPICS: &[&str] = &["FEATURE", "SEGMENT", "IDENTITY", "VARIANT", "GROUP", "RULE"];
+pub const TOPICS: &[&str] = &[
+    "FEATURE", "SEGMENT", "IDENTITY", "VARIANT", "GROUP", "RULE", "SNAPSHOT",
+];
 
 const FEATURE: &str = include_str!("help/feature.md");
 const FEATURE_IN_CONTEXT: &str = include_str!("help/feature_in_context.md");
@@ -31,6 +33,9 @@ const GROUP_NO_CONTEXT: &str = include_str!("help/group_no_context.md");
 const RULE: &str = include_str!("help/rule.md");
 const RULE_NO_CONTEXT: &str = include_str!("help/rule_no_context.md");
 
+const SNAPSHOT: &str = include_str!("help/snapshot.md");
+const SNAPSHOT_NO_CONTEXT: &str = include_str!("help/snapshot_no_context.md");
+
 pub fn show(topic: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     let topic = topic.trim().to_uppercase();
     let ctx = session.context.read().unwrap();
@@ -43,6 +48,7 @@ pub fn show(topic: &str, session: &Session<Connection>) -> anyhow::Result<()> {
         "VARIANT" => variant_help(&ctx),
         "GROUP" => group_help(&ctx),
         "RULE" => rule_help(&ctx),
+        "SNAPSHOT" => snapshot_help(&ctx),
         _ => format!("No help for `{topic}`. Available topics: {}", topic_list()),
     };
 
@@ -145,6 +151,15 @@ fn rule_help(ctx: &Connection) -> String {
     if ctx.segment.is_none() {
         text.push('\n');
         text.push_str(RULE_NO_CONTEXT);
+    }
+    text
+}
+
+fn snapshot_help(ctx: &Connection) -> String {
+    let mut text = String::from(SNAPSHOT);
+    if ctx.feature.is_none() {
+        text.push('\n');
+        text.push_str(SNAPSHOT_NO_CONTEXT);
     }
     text
 }
