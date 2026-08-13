@@ -3,7 +3,7 @@ use flagrant::{
     models::{identity, segment, variant},
 };
 use flagrant_types::{
-    Comparator, FeatureValue, GroupConnector, Subject,
+    Comparator, VariantValue, GroupConnector, Subject,
     payload::{SegmentPatchOp, SegmentVariantWeight},
 };
 use sqlx::{Sqlite, pool::PoolConnection};
@@ -44,7 +44,7 @@ async fn matching_segment_returns_its_id(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -105,7 +105,7 @@ async fn segment_with_non_matching_rule_returns_none(mut conn: PoolConnection<Sq
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -175,7 +175,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -266,7 +266,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -360,7 +360,7 @@ async fn rules_within_a_group_are_or_ed(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -429,7 +429,7 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -507,7 +507,7 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -580,7 +580,7 @@ async fn segment_with_zero_groups_never_matches(mut conn: PoolConnection<Sqlite>
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -634,7 +634,7 @@ async fn trait_subject_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await

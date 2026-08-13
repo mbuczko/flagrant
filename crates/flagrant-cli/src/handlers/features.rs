@@ -23,7 +23,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureOverride, FeatureValue,
+    Feature, FeatureOverride, VariantValue,
     payload::{NewFeaturePayload, SegmentPatchOp},
 };
 
@@ -72,7 +72,7 @@ fn split_use_target(name: &str) -> (&str, Option<&str>, Option<&str>) {
 ///
 /// Expected args: `<feature> [value] [description]`
 ///
-/// `value` is parsed as a typed [`FeatureValue`] (e.g. `json::{banner: true}`, `text::hi`);
+/// `value` is parsed as a typed [`VariantValue`] (e.g. `json::{banner: true}`, `text::hi`);
 /// if omitted, an editor is opened to enter the value interactively. The feature is
 /// created inactive and in a disabled state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -87,7 +87,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
                 None => open_in_editor("")?,
             };
 
-            let parsed = val.parse().unwrap_or_else(|_| FeatureValue::build(&val));
+            let parsed = val.parse().unwrap_or_else(|_| VariantValue::build(&val));
             ctx.client.post::<_, Feature>(
                 res.subpath("/features"),
                 NewFeaturePayload {

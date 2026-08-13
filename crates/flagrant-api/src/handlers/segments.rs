@@ -291,6 +291,20 @@ pub async fn delete_rule(
 }
 
 /// Returns stored variant weight overrides for a segment+feature+environment.
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/segments/{segment_id}/features/{feature_id}/overrides/{environment_id}",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("segment_id" = String, Path, description = "Segment ID or name"),
+        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("environment_id" = i32, Path, description = "Environment ID")
+    ),
+    responses(
+        (status = 200, description = "Stored variant weight overrides", body = Vec<SegmentVariantWeight>)
+    ),
+    tag = "segments"
+)]
 pub async fn get_feature_override_weights(
     DbConnection(mut conn): DbConnection,
     Path((project_name, segment_id, feature_id, environment_id)): Path<(String, i32, i32, i32)>,
@@ -308,6 +322,19 @@ pub async fn get_feature_override_weights(
 
 /// Returns every feature a segment overrides within a given environment, each with its
 /// full weight breakdown (including the control variant's auto-balanced remainder).
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/segments/{segment_id}/overrides/{environment_id}",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("segment_id" = String, Path, description = "Segment ID or name"),
+        ("environment_id" = i32, Path, description = "Environment ID")
+    ),
+    responses(
+        (status = 200, description = "Features overridden by this segment, with full weight breakdowns", body = Vec<SegmentFeatureOverride>)
+    ),
+    tag = "segments"
+)]
 pub async fn get_overridden_features(
     DbConnection(mut conn): DbConnection,
     Path((project_name, segment_id, environment_id)): Path<(String, i32, i32)>,

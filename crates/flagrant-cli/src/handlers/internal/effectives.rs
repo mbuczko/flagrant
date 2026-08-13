@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use flagrant_types::{
-    Comparator, Feature, FeatureValue, GroupConnector, IdentityWithTraits, Segment, Subject,
+    Comparator, Feature, VariantValue, GroupConnector, IdentityWithTraits, Segment, Subject,
     TraitValue,
     payload::{
         FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TagPatchOp, TraitPatchOp,
@@ -19,7 +19,7 @@ use flagrant_types::{
 pub(crate) struct EffectiveVariant {
     /// `Some(id)` for committed variants, `None` for staged adds.
     pub id: Option<i32>,
-    pub value: FeatureValue,
+    pub value: VariantValue,
     pub weight: u8,
     pub is_control: bool,
     /// True when a staged `SetValue` op changed the committed value.
@@ -114,7 +114,7 @@ pub(crate) fn effective_variants(
         })
         .collect();
 
-    let value_overrides: std::collections::HashMap<i32, &FeatureValue> = ops
+    let value_overrides: std::collections::HashMap<i32, &VariantValue> = ops
         .iter()
         .filter_map(|op| match op {
             VariantPatchOp::SetValue { id, value } => Some((*id, value)),

@@ -1,6 +1,6 @@
 use flagrant::models::{commit, identity, segment, snapshot};
 use flagrant_types::{
-    Comparator, FeatureValue, Subject,
+    Comparator, VariantValue, Subject,
     payload::{
         CommitPayload, FeatureCommitPart, FeaturePatch, IdentityCommitPart, IdentityOverridePatch,
         IdentityPatch, SegmentCommitPart, SegmentPatch, SegmentPatchOp, SegmentVariantWeight,
@@ -79,7 +79,7 @@ async fn restore_reproduces_variants_and_weights(mut conn: PoolConnection<Sqlite
             id: feature.id,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
-                    value: FeatureValue::Text("variant-a".to_owned()),
+                    value: VariantValue::Text("variant-a".to_owned()),
                     weight: 40,
                 }],
                 ..Default::default()
@@ -138,7 +138,7 @@ async fn restore_reproduces_variants_and_weights(mut conn: PoolConnection<Sqlite
     assert_eq!(restored_variant.weight, 40);
     assert_eq!(
         restored_variant.value,
-        FeatureValue::Text("variant-a".to_owned())
+        VariantValue::Text("variant-a".to_owned())
     );
 
     // Restoring must itself be a new, third snapshot - never renumbering v1/v2.
@@ -166,7 +166,7 @@ async fn restore_recreates_deleted_variant_under_new_id(mut conn: PoolConnection
             id: feature.id,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
-                    value: FeatureValue::Text("variant-a".to_owned()),
+                    value: VariantValue::Text("variant-a".to_owned()),
                     weight: 50,
                 }],
                 ..Default::default()
@@ -227,7 +227,7 @@ async fn restore_recreates_deleted_variant_under_new_id(mut conn: PoolConnection
         recreated.id, old_variant_id,
         "recreated variant must get a fresh id, never reusing the deleted one"
     );
-    assert_eq!(recreated.value, FeatureValue::Text("variant-a".to_owned()));
+    assert_eq!(recreated.value, VariantValue::Text("variant-a".to_owned()));
     assert_eq!(recreated.weight, 50);
     assert!(restored_snapshot.version > v1);
 }
@@ -249,7 +249,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
             id: feature.id,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
-                    value: FeatureValue::Text("variant-a".to_owned()),
+                    value: VariantValue::Text("variant-a".to_owned()),
                     weight: 50,
                 }],
                 ..Default::default()
@@ -278,7 +278,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
             patch: IdentityPatch {
                 overrides: vec![IdentityOverridePatch {
                     feature_name: feature.name.clone(),
-                    variant_value: FeatureValue::Text("variant-a".to_owned()),
+                    variant_value: VariantValue::Text("variant-a".to_owned()),
                 }],
                 ..Default::default()
             },
@@ -307,7 +307,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
                 variants: vec![
                     VariantPatchOp::Delete { id: variant_a_id },
                     VariantPatchOp::Add {
-                        value: FeatureValue::Text("variant-b".to_owned()),
+                        value: VariantValue::Text("variant-b".to_owned()),
                         weight: 20,
                     },
                 ],
@@ -341,7 +341,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
     let recreated_variant_a = restored_feature
         .variants
         .iter()
-        .find(|v| v.value == FeatureValue::Text("variant-a".to_owned()))
+        .find(|v| v.value == VariantValue::Text("variant-a".to_owned()))
         .expect("variant-a should have been recreated by restore");
 
     let assigned = identity::get_variant_for_identity(&mut conn, &environment, feature.id, &ident)
@@ -369,7 +369,7 @@ async fn segment_weight_only_commit_cascades_snapshot_to_overridden_feature(
         &feature,
         FeaturePatch {
             variants: vec![VariantPatchOp::Add {
-                value: FeatureValue::Text("variant-a".to_owned()),
+                value: VariantValue::Text("variant-a".to_owned()),
                 weight: 50,
             }],
             ..Default::default()
@@ -445,7 +445,7 @@ async fn combined_feature_and_segment_commit_produces_one_snapshot(mut conn: Poo
         &feature,
         FeaturePatch {
             variants: vec![VariantPatchOp::Add {
-                value: FeatureValue::Text("variant-a".to_owned()),
+                value: VariantValue::Text("variant-a".to_owned()),
                 weight: 50,
             }],
             ..Default::default()
@@ -521,7 +521,7 @@ async fn restore_recreates_deleted_overriding_segment(mut conn: PoolConnection<S
         &feature,
         FeaturePatch {
             variants: vec![VariantPatchOp::Add {
-                value: FeatureValue::Text("variant-a".to_owned()),
+                value: VariantValue::Text("variant-a".to_owned()),
                 weight: 50,
             }],
             ..Default::default()
@@ -638,7 +638,7 @@ async fn restore_clears_segment_override_added_after_the_target_snapshot(
         &feature,
         FeaturePatch {
             variants: vec![VariantPatchOp::Add {
-                value: FeatureValue::Text("variant-a".to_owned()),
+                value: VariantValue::Text("variant-a".to_owned()),
                 weight: 50,
             }],
             ..Default::default()

@@ -4,7 +4,7 @@ use flagrant::models::{
     project, traits, variant,
 };
 use flagrant_types::{
-    Environment, Feature, FeatureValue, TraitValue, Variant,
+    Environment, Feature, VariantValue, TraitValue, Variant,
     payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp},
 };
 use hugsqlx::params;
@@ -91,7 +91,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         &environment,
         "featuriozzo".to_owned(),
         Some("descriptozzo".to_owned()),
-        FeatureValue::build("foo"),
+        VariantValue::build("foo"),
         true,
         false,
     )
@@ -119,7 +119,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bazz"),
+        VariantValue::build("bazz"),
         50,
     )
     .await
@@ -136,7 +136,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &variant,
-        FeatureValue::build("buzz"),
+        VariantValue::build("buzz"),
         80,
     )
     .await
@@ -157,7 +157,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &variant,
-        FeatureValue::build("bezz"),
+        VariantValue::build("bezz"),
         10,
     )
     .await
@@ -194,7 +194,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         &environment,
         "featuriozzo".to_owned(),
         None,
-        FeatureValue::build("foo"),
+        VariantValue::build("foo"),
         true,
         false,
     )
@@ -205,7 +205,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bazz"),
+        VariantValue::build("bazz"),
         50,
     )
     .await
@@ -220,7 +220,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &variant,
-        FeatureValue::build("buzz"),
+        VariantValue::build("buzz"),
         80,
     )
     .await
@@ -239,7 +239,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &variant,
-        FeatureValue::build("bezz"),
+        VariantValue::build("bezz"),
         10,
     )
     .await
@@ -358,7 +358,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
         &environment,
         "override_feature".to_owned(),
         None,
-        FeatureValue::build("control_value"),
+        VariantValue::build("control_value"),
         true,
         false,
     )
@@ -369,7 +369,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt_value"),
+        VariantValue::build("alt_value"),
         50,
     )
     .await
@@ -408,7 +408,7 @@ async fn override_variant_pins_identity_to_chosen_variant(mut conn: PoolConnecti
     let alice_variant = iv.iter().find(|iv| iv.feature_id == feature.id).unwrap();
     assert_eq!(
         alice_variant.feature_value,
-        Some(FeatureValue::build("alt_value")),
+        Some(VariantValue::build("alt_value")),
         "get_identity_variants should return the overridden value"
     );
 }
@@ -421,7 +421,7 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
         &environment,
         "override_feature2".to_owned(),
         None,
-        FeatureValue::build("default"),
+        VariantValue::build("default"),
         true,
         false,
     )
@@ -432,7 +432,7 @@ async fn override_variant_works_without_prior_distribution(mut conn: PoolConnect
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("special"),
+        VariantValue::build("special"),
         30,
     )
     .await
@@ -459,7 +459,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         &environment,
         "pinned_feature".to_owned(),
         None,
-        FeatureValue::build("control"),
+        VariantValue::build("control"),
         true,
         false,
     )
@@ -470,7 +470,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         50,
     )
     .await
@@ -505,7 +505,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
         &mut conn,
         &environment,
         &alt_variant,
-        FeatureValue::build("alter"),
+        VariantValue::build("alter"),
         0,
     )
     .await
@@ -652,7 +652,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         &environment,
         "feature_a".to_owned(),
         None,
-        FeatureValue::build("control"),
+        VariantValue::build("control"),
         true,
         false,
     )
@@ -662,7 +662,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         &mut conn,
         &environment,
         &feature_a,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         50,
     )
     .await
@@ -673,7 +673,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         &environment,
         "feature_b".to_owned(),
         None,
-        FeatureValue::build("control"),
+        VariantValue::build("control"),
         true,
         false,
     )
@@ -683,7 +683,7 @@ async fn clear_distribution_for_feature_removes_only_matching_assignments(
         &mut conn,
         &environment,
         &feature_b,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         50,
     )
     .await
@@ -909,7 +909,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
         &environment,
         "pin_display_feature".to_owned(),
         None,
-        FeatureValue::build("control_value"),
+        VariantValue::build("control_value"),
         true,
         false,
     )
@@ -920,7 +920,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("pinned_value"),
+        VariantValue::build("pinned_value"),
         0,
     )
     .await
@@ -962,7 +962,7 @@ async fn list_variant_assignments_returns_pinned_variant_value(mut conn: PoolCon
     );
     assert_eq!(
         feat_iv.feature_value,
-        Some(FeatureValue::build("pinned_value")),
+        Some(VariantValue::build("pinned_value")),
         "feature_value must reflect the pinned variant, not the control"
     );
     assert_eq!(

@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Feature, FeatureOverride, FeatureValue, Variant,
+    Feature, FeatureOverride, VariantValue, Variant,
     payload::{FeaturePatch, SegmentVariantWeight},
 };
 
@@ -15,7 +15,7 @@ pub enum IdentityPending {
     /// variant holding `variant_value`.
     Override {
         identity: String,
-        variant_value: FeatureValue,
+        variant_value: VariantValue,
     },
     /// The existing override was staged for removal (`OVERRIDE delete`).
     Unpin(String),

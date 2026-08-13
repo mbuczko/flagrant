@@ -7,7 +7,7 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Environment, FeatureValue, TraitValue,
+    Environment, VariantValue, TraitValue,
     payload::{
         CommitPayload, CommitResult, FeatureCommitPart, FeaturePatch, IdentityCommitPart,
         IdentityPatch, SegmentCommitPart, TagPatchOp, TraitPatchOp, VariantPatchOp,
@@ -32,7 +32,7 @@ pub(crate) fn ensure_no_pending(session: &Session<Connection>) -> anyhow::Result
 pub(crate) fn stage_value(
     pending: &mut FeaturePatch,
     variant_ref: &VariantRef,
-    value: FeatureValue,
+    value: VariantValue,
 ) -> anyhow::Result<()> {
     let ops = &mut pending.variants;
     match variant_ref {

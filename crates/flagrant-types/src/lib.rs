@@ -67,10 +67,18 @@ pub struct Feature {
 pub struct Variant {
     #[sqlx(rename = "variant_id")]
     pub id: i32,
-    pub value: FeatureValue,
+    pub value: VariantValue,
     pub weight: u8,
     pub accumulator: i32,
     pub environment_id: Option<i32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum VariantValue {
+    Text(String),
+    Json(String),
+    Toml(String),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -130,7 +138,7 @@ pub struct IdentityVariant {
     pub segment_id: Option<i32>,
     pub segment_dirty: bool,
     pub feature_name: String,
-    pub feature_value: Option<FeatureValue>,
+    pub feature_value: Option<VariantValue>,
     pub pinned_at: Option<NaiveDateTime>,
     pub is_srv: bool,
 }
@@ -324,7 +332,7 @@ pub struct Segment {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SnapshotVariant {
     pub id: i32,
-    pub value: FeatureValue,
+    pub value: VariantValue,
     pub weight: u8,
     pub is_control: bool,
 }
@@ -419,7 +427,7 @@ pub enum FeatureOverride {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OverriddenVariant {
     pub variant_id: i32,
-    pub value: FeatureValue,
+    pub value: VariantValue,
     pub is_control: bool,
     pub weight: u8,
 }
@@ -431,14 +439,6 @@ pub struct SegmentFeatureOverride {
     pub feature_id: i32,
     pub feature_name: String,
     pub weights: Vec<OverriddenVariant>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum FeatureValue {
-    Text(String),
-    Json(String),
-    Toml(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -454,7 +454,7 @@ pub struct Tag {
 pub struct FeatureResponse {
     pub feature_id: i32,
     pub name: String,
-    pub value: FeatureValue,
+    pub value: VariantValue,
 }
 
 impl Feature {
@@ -464,7 +464,7 @@ impl Feature {
             .find(|v| v.is_control())
             .expect("Feature has no default variant!")
     }
-    pub fn get_default_value(&self) -> &FeatureValue {
+    pub fn get_default_value(&self) -> &VariantValue {
         &self.get_default_variant().value
     }
     pub fn with_variants(mut self, variants: Vec<Variant>) -> Self {
@@ -474,7 +474,7 @@ impl Feature {
 }
 
 impl Variant {
-    pub fn build(id: i32, value: FeatureValue, weight: u8) -> Variant {
+    pub fn build(id: i32, value: VariantValue, weight: u8) -> Variant {
         Variant {
             id,
             value,
@@ -483,7 +483,7 @@ impl Variant {
             environment_id: None,
         }
     }
-    pub fn build_default(environment: &Environment, id: i32, value: FeatureValue) -> Variant {
+    pub fn build_default(environment: &Environment, id: i32, value: VariantValue) -> Variant {
         Variant {
             id,
             value,
@@ -503,7 +503,7 @@ impl sqlx::Type<sqlx::Sqlite> for TagList {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for FeatureValue {
+impl sqlx::Type<sqlx::Sqlite> for VariantValue {
     fn type_info() -> <sqlx::Sqlite as sqlx::Database>::TypeInfo {
         <String as Type<Sqlite>>::type_info()
     }
@@ -564,7 +564,7 @@ impl fmt::Display for TagList {
     }
 }
 
-impl Encode<'_, Sqlite> for FeatureValue {
+impl Encode<'_, Sqlite> for VariantValue {
     fn encode_by_ref(
         &self,
         buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
@@ -573,26 +573,26 @@ impl Encode<'_, Sqlite> for FeatureValue {
     }
 }
 
-impl<'r> Decode<'r, Sqlite> for FeatureValue {
+impl<'r> Decode<'r, Sqlite> for VariantValue {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let value = <&str as sqlx::Decode<Sqlite>>::decode(value)?;
         Self::from_str(value).map_err(Into::into)
     }
 }
 
-impl Default for FeatureValue {
+impl Default for VariantValue {
     fn default() -> Self {
         Self::Text(String::default())
     }
 }
 
-impl fmt::Display for FeatureValue {
+impl fmt::Display for VariantValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (typ, val) = self.decompose();
         write!(f, "{typ}::{}", val.trim())
     }
 }
-impl FeatureValue {
+impl VariantValue {
     fn new(typ: &str, value: &str) -> Result<Self, ParseTypeError> {
         let val = value.to_owned();
         match typ {
@@ -633,7 +633,7 @@ impl FeatureValue {
     }
 }
 
-impl FromStr for FeatureValue {
+impl FromStr for VariantValue {
     type Err = ParseTypeError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {

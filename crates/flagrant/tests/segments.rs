@@ -8,7 +8,7 @@ use flagrant::{
     },
 };
 use flagrant_types::{
-    Comparator, Environment, Feature, FeatureValue, Identity, Subject,
+    Comparator, Environment, Feature, VariantValue, Identity, Subject,
     payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
 use hugsqlx::params;
@@ -64,7 +64,7 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -146,7 +146,7 @@ async fn creating_a_variant_seeds_it_into_overriding_segments_at_zero_weight(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -175,7 +175,7 @@ async fn creating_a_variant_seeds_it_into_overriding_segments_at_zero_weight(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("beta"),
+        VariantValue::build("beta"),
         20,
     )
     .await
@@ -211,7 +211,7 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -220,7 +220,7 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("beta"),
+        VariantValue::build("beta"),
         20,
     )
     .await
@@ -286,7 +286,7 @@ async fn deleting_a_segment_releases_governed_identities(mut conn: PoolConnectio
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -354,7 +354,7 @@ async fn deleting_a_segment_leaves_pinned_identity_untouched(mut conn: PoolConne
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -415,7 +415,7 @@ async fn deleting_a_segment_does_not_affect_other_segments_overrides(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -508,7 +508,7 @@ async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sql
         &mut conn,
         &environment,
         &feature_a,
-        FeatureValue::build("alt-a"),
+        VariantValue::build("alt-a"),
         40,
     )
     .await
@@ -517,7 +517,7 @@ async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sql
         &mut conn,
         &environment,
         &feature_b,
-        FeatureValue::build("alt-b"),
+        VariantValue::build("alt-b"),
         40,
     )
     .await
@@ -575,7 +575,7 @@ async fn distributor_scopes_by_segment_id(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -664,7 +664,7 @@ async fn segment_override_migrates_already_distributed_matching_identity(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -727,7 +727,7 @@ async fn segment_override_leaves_non_matching_identity_untouched(mut conn: PoolC
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -786,7 +786,7 @@ async fn segment_override_leaves_pinned_identity_untouched(mut conn: PoolConnect
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -856,7 +856,7 @@ async fn adding_rule_to_already_overriding_segment_retroactively_migrates(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -929,7 +929,7 @@ async fn direct_rule_add_triggers_reconciliation_not_just_patch(mut conn: PoolCo
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -995,7 +995,7 @@ async fn deleting_a_rule_falls_the_identity_back_to_organic(mut conn: PoolConnec
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await
@@ -1061,7 +1061,7 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("alt"),
+        VariantValue::build("alt"),
         40,
     )
     .await

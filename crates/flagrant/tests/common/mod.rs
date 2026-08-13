@@ -1,6 +1,6 @@
 use flagrant::models::{environment, feature, project, segment};
 use flagrant_types::{
-    Comparator, Environment, Feature, FeatureValue, GroupConnector, Project, Segment, Subject,
+    Comparator, Environment, Feature, VariantValue, GroupConnector, Project, Segment, Subject,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use rand::Rng;
@@ -62,7 +62,7 @@ pub async fn create_feature(
         environment,
         format!("F_{}", random_string(10)),
         Some("sample feature".to_owned()),
-        FeatureValue::Text(value.to_owned()),
+        VariantValue::Text(value.to_owned()),
         true,
         false,
     )

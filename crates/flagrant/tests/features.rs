@@ -2,7 +2,7 @@ use common::{create_context, create_environment, random_string};
 use flagrant::errors::FlagrantError;
 use flagrant::models::{environment, feature, project, variant};
 use flagrant_types::{
-    FeatureValue,
+    VariantValue,
     payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
 };
 use smallvec::smallvec;
@@ -23,7 +23,7 @@ async fn create_project(mut conn: PoolConnection<Sqlite>) {
 #[sqlx::test]
 async fn create_feature_with_default_value(mut conn: PoolConnection<Sqlite>) {
     let (_, environment) = create_context(&mut conn).await;
-    let value = FeatureValue::Json("{\"foo\": 2}".to_owned());
+    let value = VariantValue::Json("{\"foo\": 2}".to_owned());
     let feature = feature::create(
         &mut conn,
         &environment,
@@ -51,7 +51,7 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
 ) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
-    let value = FeatureValue::build("foo");
+    let value = VariantValue::build("foo");
 
     let feature = feature::create(
         &mut conn,
@@ -77,7 +77,7 @@ async fn create_feature_propagates_default_variant_to_existing_envs(
 async fn same_control_value_is_allowed_across_environments(mut conn: PoolConnection<Sqlite>) {
     let (project, environment1) = create_context(&mut conn).await;
     let environment2 = create_environment(&mut conn, &project).await;
-    let value = FeatureValue::build("shared-default");
+    let value = VariantValue::build("shared-default");
 
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
@@ -122,7 +122,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(
         &mut conn,
         &environment1,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         40,
     )
     .await
@@ -137,7 +137,7 @@ async fn create_feature_with_missing_default_variant_in_other_env(
 
     // Updating the default value in environment2 does not affect environment1.
     feature::update_one(&mut conn, &environment2, &feature)
-        .value(FeatureValue::build("bazz"))
+        .value(VariantValue::build("bazz"))
         .update()
         .await
         .unwrap();
@@ -155,23 +155,23 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
     feature::update_one(&mut conn, &environment2, &feature)
-        .value(FeatureValue::build("bazz"))
+        .value(VariantValue::build("bazz"))
         .update()
         .await
         .unwrap();
 
-    let fv1 = FeatureValue::Text("foo".to_string());
-    let fv2 = FeatureValue::Text("bazz".to_string());
+    let vv1 = VariantValue::Text("foo".to_string());
+    let vv2 = VariantValue::Text("bazz".to_string());
 
     let feature = feature::get_by_id(&mut conn, &environment1, feature.id)
         .await
         .unwrap();
-    assert_eq!(feature.get_default_value(), &fv1);
+    assert_eq!(feature.get_default_value(), &vv1);
 
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
-    assert_eq!(feature.get_default_value(), &fv2);
+    assert_eq!(feature.get_default_value(), &vv2);
 }
 
 #[sqlx::test]
@@ -183,7 +183,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
             &environment,
             name.to_owned(),
             None,
-            FeatureValue::Text("foo".to_owned()),
+            VariantValue::Text("foo".to_owned()),
             false,
             false,
         )
@@ -197,7 +197,7 @@ async fn create_feature_with_invalid_name(mut conn: PoolConnection<Sqlite>) {
         &environment,
         format!("F_{}", random_string(1024)),
         None,
-        FeatureValue::Text("foo".to_owned()),
+        VariantValue::Text("foo".to_owned()),
         false,
         false,
     )
@@ -216,7 +216,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &environment,
         name.to_owned(),
         None,
-        FeatureValue::Text("foo".to_owned()),
+        VariantValue::Text("foo".to_owned()),
         false,
         false,
     )
@@ -228,7 +228,7 @@ async fn create_feature_with_non_unique_name(mut conn: PoolConnection<Sqlite>) {
         &environment,
         name.to_owned(),
         None,
-        FeatureValue::Text("foo".to_owned()),
+        VariantValue::Text("foo".to_owned()),
         false,
         false,
     )
@@ -262,7 +262,7 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -272,7 +272,7 @@ async fn delete_feature_with_variants(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         10,
     )
     .await
@@ -336,7 +336,7 @@ async fn create_valid_variant(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         10,
     )
     .await;
@@ -352,7 +352,7 @@ async fn create_variant_with_duplicate_value_is_rejected(mut conn: PoolConnectio
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         10,
     )
     .await
@@ -362,7 +362,7 @@ async fn create_variant_with_duplicate_value_is_rejected(mut conn: PoolConnectio
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         20,
     )
     .await
@@ -384,7 +384,7 @@ async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         10,
     )
     .await
@@ -394,14 +394,14 @@ async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("baz"),
+        VariantValue::build("baz"),
         20,
     )
     .await
     .unwrap();
 
     // Updating v1's value to "baz" conflicts with the second variant.
-    let err = variant::update_one(&mut conn, &environment, &v1, FeatureValue::build("baz"), 10)
+    let err = variant::update_one(&mut conn, &environment, &v1, VariantValue::build("baz"), 10)
         .await
         .unwrap_err();
 
@@ -421,7 +421,7 @@ async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -431,7 +431,7 @@ async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -441,7 +441,7 @@ async fn create_variants_with_valid_weights(mut conn: PoolConnection<Sqlite>) {
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-3"),
+        VariantValue::build("bar-3"),
         40,
     )
     .await
@@ -463,7 +463,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -473,7 +473,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -483,7 +483,7 @@ async fn create_variants_with_exceeding_weight(mut conn: PoolConnection<Sqlite>)
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-3"),
+        VariantValue::build("bar-3"),
         90,
     );
     assert!(exceeding_variant.await.is_err());
@@ -498,14 +498,14 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
         &mut conn,
         &environment1,
         &feature,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         40,
     )
     .await
     .unwrap();
 
     feature::update_one(&mut conn, &environment2, &feature)
-        .value(FeatureValue::build("bazz"))
+        .value(VariantValue::build("bazz"))
         .update()
         .await
         .unwrap();
@@ -514,7 +514,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
         &mut conn,
         &environment2,
         &variant,
-        FeatureValue::build("new-bar"),
+        VariantValue::build("new-bar"),
         99,
     )
     .await
@@ -547,7 +547,7 @@ async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite
         &mut conn,
         &environment,
         default_variant,
-        FeatureValue::build("bar"),
+        VariantValue::build("bar"),
         50,
     )
     .await
@@ -563,7 +563,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -573,7 +573,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -583,7 +583,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-3"),
+        VariantValue::build("bar-3"),
         40,
     )
     .await
@@ -593,7 +593,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &variant,
-        FeatureValue::build("new-bar-3"),
+        VariantValue::build("new-bar-3"),
         50,
     )
     .await
@@ -616,7 +616,7 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -626,7 +626,7 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -636,7 +636,7 @@ async fn recalculate_default_weight_for_variant_delete(mut conn: PoolConnection<
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-3"),
+        VariantValue::build("bar-3"),
         40,
     )
     .await
@@ -665,7 +665,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -675,7 +675,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -686,7 +686,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-3"),
+        VariantValue::build("bar-3"),
         40,
     )
     .await
@@ -697,7 +697,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
             &mut conn,
             &environment,
             &variant,
-            FeatureValue::build("new-bar-3"),
+            VariantValue::build("new-bar-3"),
             80
         )
         .await
@@ -724,7 +724,7 @@ async fn disallow_removing_default_variant_when_other_variants_exist(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-1"),
+        VariantValue::build("bar-1"),
         10,
     )
     .await
@@ -734,7 +734,7 @@ async fn disallow_removing_default_variant_when_other_variants_exist(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("bar-2"),
+        VariantValue::build("bar-2"),
         30,
     )
     .await
@@ -793,7 +793,7 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
     let patch = FeaturePatch {
         variants: vec![VariantPatchOp::SetValue {
             id: control_id,
-            value: flagrant_types::FeatureValue::build("bar"),
+            value: flagrant_types::VariantValue::build("bar"),
         }],
         ..Default::default()
     };
@@ -806,7 +806,7 @@ async fn patch_control_variant_value_is_accepted(mut conn: PoolConnection<Sqlite
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
         .unwrap();
-    assert_eq!(feature.get_default_value(), &FeatureValue::build("bar"));
+    assert_eq!(feature.get_default_value(), &VariantValue::build("bar"));
 }
 
 #[sqlx::test]
@@ -889,7 +889,7 @@ async fn control_variant_weight_is_zero_when_others_sum_to_hundred(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("v1"),
+        VariantValue::build("v1"),
         60,
     )
     .await
@@ -899,7 +899,7 @@ async fn control_variant_weight_is_zero_when_others_sum_to_hundred(
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("v2"),
+        VariantValue::build("v2"),
         40,
     )
     .await
@@ -921,7 +921,7 @@ async fn control_variant_weight_cannot_go_negative(mut conn: PoolConnection<Sqli
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("v1"),
+        VariantValue::build("v1"),
         60,
     )
     .await
@@ -931,7 +931,7 @@ async fn control_variant_weight_cannot_go_negative(mut conn: PoolConnection<Sqli
         &mut conn,
         &environment,
         &feature,
-        FeatureValue::build("v2"),
+        VariantValue::build("v2"),
         40,
     )
     .await
@@ -943,7 +943,7 @@ async fn control_variant_weight_cannot_go_negative(mut conn: PoolConnection<Sqli
             &mut conn,
             &environment,
             &feature,
-            FeatureValue::build("v3"),
+            VariantValue::build("v3"),
             1,
         )
         .await
@@ -1022,7 +1022,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
 
     // Give env2 a distinct control value.
     feature::update_one(&mut conn, &environment2, &feature)
-        .value(FeatureValue::build("control-env2"))
+        .value(VariantValue::build("control-env2"))
         .update()
         .await
         .unwrap();
@@ -1032,7 +1032,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment1,
         &feature,
-        FeatureValue::build("shared"),
+        VariantValue::build("shared"),
         40,
     )
     .await
@@ -1043,7 +1043,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment1,
         feature.id,
-        &FeatureValue::build("control-env1"),
+        &VariantValue::build("control-env1"),
         None,
     )
     .await
@@ -1055,7 +1055,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment2,
         feature.id,
-        &FeatureValue::build("control-env2"),
+        &VariantValue::build("control-env2"),
         None,
     )
     .await
@@ -1067,7 +1067,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment1,
         feature.id,
-        &FeatureValue::build("control-env2"),
+        &VariantValue::build("control-env2"),
         None,
     )
     .await
@@ -1079,7 +1079,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment2,
         feature.id,
-        &FeatureValue::build("control-env1"),
+        &VariantValue::build("control-env1"),
         None,
     )
     .await
@@ -1091,7 +1091,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment1,
         feature.id,
-        &FeatureValue::build("shared"),
+        &VariantValue::build("shared"),
         None,
     )
     .await
@@ -1100,7 +1100,7 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
         &mut conn,
         &environment2,
         feature.id,
-        &FeatureValue::build("shared"),
+        &VariantValue::build("shared"),
         None,
     )
     .await
@@ -1285,7 +1285,10 @@ fn tag_patch_validation_rejects_bad_names_and_accepts_good_ones() {
         tags: vec![TagPatchOp::Add("Foo".to_owned())],
         ..Default::default()
     };
-    assert!(uppercase.validate().is_err(), "uppercase should be rejected");
+    assert!(
+        uppercase.validate().is_err(),
+        "uppercase should be rejected"
+    );
 
     let good = FeaturePatch {
         tags: vec![TagPatchOp::Add("foo_bar+1.0".to_owned())],

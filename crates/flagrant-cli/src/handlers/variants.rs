@@ -17,7 +17,7 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue, Variant,
+    Feature, Variant, VariantValue,
     payload::{FeaturePatch, VariantPatchOp},
 };
 
@@ -66,16 +66,16 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Total weight of non-control variants would be {total}%, exceeding 100%.");
     }
 
-    let fv: FeatureValue = value
+    let vv: VariantValue = value
         .parse()
-        .unwrap_or_else(|_| FeatureValue::build(&value));
+        .unwrap_or_else(|_| VariantValue::build(&value));
 
     let feature = ctx.feature.as_ref().unwrap();
-    if feature.variants.iter().any(|v| v.value == fv)
+    if feature.variants.iter().any(|v| v.value == vv)
         || ctx.feature_patch.as_ref().is_some_and(|p| {
             p.variants
                 .iter()
-                .any(|op| matches!(op, VariantPatchOp::Add { value, .. } if *value == fv))
+                .any(|op| matches!(op, VariantPatchOp::Add { value, .. } if *value == vv))
         })
     {
         bail!("A variant with this value already exists for this feature.");
@@ -85,7 +85,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     ctx.get_or_init_feature_patch()
         .variants
-        .push(VariantPatchOp::Add { value: fv, weight });
+        .push(VariantPatchOp::Add { value: vv, weight });
 
     index::rebuild(&mut ctx);
     Ok(())
@@ -159,24 +159,24 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         None => open_in_editor(current_variant_value(&variant_ref, &ctx).decompose().1)?,
     };
     let current = current_variant_value(&variant_ref, &ctx);
-    let fv = raw
-        .parse::<FeatureValue>()
+    let vv = raw
+        .parse::<VariantValue>()
         .unwrap_or_else(|_| current.clone_with(raw.trim()));
 
-    if fv == current {
+    if vv == current {
         return Ok(());
     }
 
     let feature = ctx.feature.as_ref().unwrap();
     let duplicate = feature.variants.iter().any(|v| {
-        v.value == fv && !matches!(&variant_ref, VariantRef::Committed(id) if *id == v.id)
+        v.value == vv && !matches!(&variant_ref, VariantRef::Committed(id) if *id == v.id)
     }) || ctx.feature_patch.as_ref().is_some_and(|p| {
         p.variants.iter().enumerate().any(|(i, op)| match op {
             VariantPatchOp::Add { value, .. } => {
-                *value == fv && !matches!(&variant_ref, VariantRef::Staged(pos) if *pos == i)
+                *value == vv && !matches!(&variant_ref, VariantRef::Staged(pos) if *pos == i)
             }
             VariantPatchOp::SetValue { id, value } => {
-                *value == fv && !matches!(&variant_ref, VariantRef::Committed(vid) if *vid == *id)
+                *value == vv && !matches!(&variant_ref, VariantRef::Committed(vid) if *vid == *id)
             }
             _ => false,
         })
@@ -187,19 +187,19 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     }
 
     // Keep any staged identity override in sync: if it was pointing at the old value,
-    // update it to the new value so it doesn't become stale after commit. `fv != current`
-    // is already guaranteed by the early return above.
+    // update it to the new value so it doesn't become stale after commit.
     let feature_name = ctx.feature.as_ref().unwrap().name.clone();
+
     if let Some(patch) = ctx.identity_patch.as_mut() {
         for o in patch.overrides.iter_mut() {
             if o.feature_name == feature_name && o.variant_value == current {
-                o.variant_value = fv.clone();
-                println!("Updated staged override value: '{current}' → '{fv}'");
+                o.variant_value = vv.clone();
+                println!("Updated staged override value: '{current}' → '{vv}'");
             }
         }
     }
 
-    stage::stage_value(ctx.get_or_init_feature_patch(), &variant_ref, fv)?;
+    stage::stage_value(ctx.get_or_init_feature_patch(), &variant_ref, vv)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -477,10 +477,10 @@ fn current_variant_weight(variant_ref: &VariantRef, ctx: &Connection) -> i16 {
     )
 }
 
-/// Returns the current [`FeatureValue`] for a variant, used as a type fallback when staging
+/// Returns the current [`VariantValue`] for a variant, used as a type fallback when staging
 /// a value change. For committed variants, prefers any already-staged `SetValue` op; for
 /// staged (Add) variants, returns the value from the pending `Add` op.
-fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> FeatureValue {
+fn current_variant_value(variant_ref: &VariantRef, ctx: &Connection) -> VariantValue {
     current_variant_field(
         variant_ref,
         ctx,

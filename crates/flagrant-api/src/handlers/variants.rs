@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use axum::{Json, extract::Path};
 use flagrant::models::{environment, feature, identity, project, variant};
-use flagrant_types::{FeatureValue, Variant, payload::NewVariantPayload};
+use flagrant_types::{VariantValue, Variant, payload::NewVariantPayload};
 
 use crate::{errors::ServiceError, extractors::DbConnection};
 
@@ -33,7 +33,7 @@ pub async fn create(
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-    let value = FeatureValue::from_str(&payload.value)?;
+    let value = VariantValue::from_str(&payload.value)?;
     let variant = variant::create(&mut conn, &env, &feature, value, payload.weight).await?;
 
     Ok(Json(variant))
@@ -62,7 +62,7 @@ pub async fn update(
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
-    let value = FeatureValue::from_str(&payload.value)?;
+    let value = VariantValue::from_str(&payload.value)?;
 
     variant::update_one(&mut conn, &env, &var, value, payload.weight).await?;
     Ok(Json(()))

@@ -17,7 +17,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureValue, IdentityVariant, IdentityWithTraits, TraitValue,
+    Feature, VariantValue, IdentityVariant, IdentityWithTraits, TraitValue,
     payload::{
         FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
         VariantPatchOp,
@@ -348,7 +348,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     let (feature_name, identity_value) = (feature.name.clone(), identity.value.clone());
     drop(ctx);
 
-    let parsed = raw.parse().unwrap_or_else(|_| FeatureValue::build(&raw));
+    let parsed = raw.parse().unwrap_or_else(|_| VariantValue::build(&raw));
 
     // Check whether the value matches an existing (or pending) variant.
     let existing_value = {
