@@ -1,8 +1,8 @@
 use chrono::{NaiveDateTime, Utc};
 use flagrant_types::payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp};
 use flagrant_types::{
-    Environment, FeatureOverride, FeatureValue, Identity, IdentityTrait, IdentityVariant,
-    IdentityWithTraits, TraitValue,
+    Environment, FeatureOverride, Identity, IdentityTrait, IdentityVariant, IdentityWithTraits,
+    TraitValue,
 };
 
 use super::feature;
@@ -341,12 +341,7 @@ pub async fn patch(
 
     for ovr in patch.overrides {
         let feat = feature::get_by_name(&mut tx, environment, &ovr.feature_name).await?;
-        let fv: FeatureValue = ovr
-            .variant_value
-            .parse()
-            .unwrap_or_else(|_| FeatureValue::build(&ovr.variant_value));
-
-        let variant = variant::get_by_value(&mut tx, environment, feat.id, &fv, None)
+        let variant = variant::get_by_value(&mut tx, environment, feat.id, &ovr.variant_value, None)
             .await?
             .ok_or(FlagrantError::BadRequest(
                 "No variant with given value found for this feature",
@@ -684,7 +679,7 @@ pub async fn list_overrides(
     environment_id: i32,
     feature_id: i32,
 ) -> anyhow::Result<Vec<FeatureOverride>> {
-    let rows = SQLIdentities::fetch_overrides_for_feature::<_, (String,)>(
+    let rows = SQLIdentities::fetch_overrides_for_feature::<_, (String, i32)>(
         conn,
         params![environment_id, feature_id],
     )
@@ -693,7 +688,7 @@ pub async fn list_overrides(
 
     Ok(rows
         .into_iter()
-        .map(|(s,)| FeatureOverride::Identity(s))
+        .map(|(value, variant_id)| FeatureOverride::Identity { value, variant_id })
         .collect())
 }
 

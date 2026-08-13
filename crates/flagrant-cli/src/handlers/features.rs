@@ -277,12 +277,15 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         }
 
         // ...or newly added overrides?
-        if ipatch
+        if let Some(o) = ipatch
             .overrides
             .iter()
-            .any(|o| o.feature_name == feature.name)
+            .find(|o| o.feature_name == feature.name)
         {
-            return Some(IdentityPending::Override(identity_value));
+            return Some(IdentityPending::Override {
+                identity: identity_value,
+                variant_value: o.variant_value.clone(),
+            });
         }
         None
     });

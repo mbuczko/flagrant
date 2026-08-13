@@ -589,21 +589,18 @@ fn build_segment_override_editor_content(
         } else {
             ""
         };
-        let (_, bare) = ev.value.decompose();
-        let first_line = bare.lines().next().unwrap_or(bare);
         content.push_str(&format!(
-            "# variant {idx}: {first_line} (currently at {}%){}\n{weight}\n\n",
-            ev.weight, staged
+            "# variant {idx}: {} (currently at {}%){}\n{weight}\n\n",
+            ev.value.bare_first_line(),
+            ev.weight,
+            staged
         ));
     }
 
     let default_value = variants
         .iter()
         .find(|v| v.is_control && !v.is_deleted)
-        .map(|v| {
-            let (_, bare) = v.value.decompose();
-            bare.lines().next().unwrap_or(bare).to_string()
-        })
+        .map(|v| v.value.bare_first_line().to_string())
         .unwrap_or_default();
 
     content.push_str(&format!(

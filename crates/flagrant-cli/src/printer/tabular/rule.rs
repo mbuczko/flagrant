@@ -58,7 +58,7 @@ impl Tabular for EffectiveRule {
             || rule.value_modified;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(100),

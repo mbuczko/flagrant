@@ -4,6 +4,7 @@ mod group;
 mod identity;
 mod rule;
 pub mod segment;
+mod snapshot;
 mod variant;
 
 pub trait Tabular {

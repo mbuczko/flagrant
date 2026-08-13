@@ -404,7 +404,10 @@ impl Snapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum FeatureOverride {
-    Identity(String),
+    Identity {
+        value: String,
+        variant_id: i32,
+    },
     Segment {
         name: String,
         weights: Vec<payload::SegmentVariantWeight>,
@@ -605,6 +608,16 @@ impl FeatureValue {
             Self::Toml(v) => ("toml", v),
             Self::Text(v) => ("text", v),
         }
+    }
+    /// The value without its `type::` prefix (may be multi-line).
+    pub fn bare(&self) -> &str {
+        self.decompose().1
+    }
+    /// The value's first line only, without its `type::` prefix - the compact,
+    /// single-line form used almost everywhere a value is displayed inline.
+    pub fn bare_first_line(&self) -> &str {
+        let bare = self.bare();
+        bare.lines().next().unwrap_or(bare)
     }
     pub fn build(value: &str) -> Self {
         let val = value.trim();

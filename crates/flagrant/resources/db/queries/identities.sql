@@ -144,8 +144,9 @@ FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE iv.environment_id = $1 AND iv.feature_id = $2
 
 -- :name fetch_overrides_for_feature :<> :*
--- :doc Returns identity values that have an explicit override (pinned_at IS NOT NULL) for given feature
-SELECT i.identity
+-- :doc Returns (identity value, variant_id) for every explicit override
+-- (pinned_at IS NOT NULL) for given feature
+SELECT i.identity, iv.variant_id
 FROM identity_variants iv JOIN identities i USING(identity_id)
 WHERE iv.environment_id = $1 AND iv.feature_id = $2 AND iv.pinned_at IS NOT NULL
 ORDER BY i.identity

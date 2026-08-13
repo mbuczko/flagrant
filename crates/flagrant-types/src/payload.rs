@@ -151,7 +151,7 @@ impl FeaturePatch {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IdentityOverridePatch {
     pub feature_name: String,
-    pub variant_value: String,
+    pub variant_value: FeatureValue,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]

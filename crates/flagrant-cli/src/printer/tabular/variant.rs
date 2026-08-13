@@ -18,10 +18,8 @@ impl Tabular for EffectiveVariant {
         let (index, identities) = ctx;
         let title = format!("VARIANT #{index}").bold().to_string();
 
-        let (_, bare) = variant.value.decompose();
-
         let value_s = legend::stage_color(
-            bare,
+            variant.value.bare(),
             variant.is_deleted,
             variant.is_staged_add,
             variant.value_modified,
@@ -55,7 +53,7 @@ impl Tabular for EffectiveVariant {
             || variant.weight_modified;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(100),
@@ -64,7 +62,7 @@ impl Tabular for EffectiveVariant {
                 VALUE_MAX_LINES,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(3))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(7))
             .width(Width::Percentage(100))
             .build();
 
@@ -72,7 +70,7 @@ impl Tabular for EffectiveVariant {
             vec!["weight".to_string(), weight_s],
             vec!["value".to_string(), value_s],
             vec!["control".to_string(), control_s],
-            vec!["pinned".to_string(), identities_s],
+            vec!["pinned identities".to_string(), identities_s],
         ]);
 
         legend::print_footer("", has_staged);

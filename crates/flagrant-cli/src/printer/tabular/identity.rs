@@ -24,7 +24,7 @@ impl Tabular for IdentityWithTraits {
                 let traits = id
                     .traits
                     .iter()
-                    .map(|t| format_trait_value(&t.name, &t.value, false))
+                    .map(|t| trait_name_value(&t.name, &t.value).white().to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 [id.value.clone(), traits]
@@ -43,7 +43,8 @@ impl Tabular for IdentityWithTraits {
         let title = "IDENTITY".bold().to_string();
         let is_deleted = patch.is_some_and(|p| p.delete);
         let id_staged = is_deleted;
-        let id_str = legend::stage_color(self.value.as_str(), is_deleted, false, false).into_owned();
+        let id_str =
+            legend::stage_color(self.value.as_str(), is_deleted, false, false).into_owned();
 
         let eff_traits = effective::effective_identity_traits(self, patch);
 
@@ -51,28 +52,23 @@ impl Tabular for IdentityWithTraits {
         let mut traits_staged = false;
 
         for t in &eff_traits {
-            let name = t.name.bright_blue().to_string();
+            let name_value = trait_name_value(&t.name, &t.value);
+            let type_label = trait_type_label(&t.value);
 
-            if is_deleted || t.is_deleted {
-                trait_lines.push(format_trait_value(&name, &t.value, true).red().to_string());
+            let colored = if is_deleted || t.is_deleted {
                 traits_staged = true;
+                name_value.red().to_string()
             } else if t.value_modified {
-                trait_lines.push(
-                    format_trait_value(&name, &t.value, true)
-                        .yellow()
-                        .to_string(),
-                );
                 traits_staged = true;
+                name_value.yellow().to_string()
             } else if t.is_staged_add {
-                trait_lines.push(
-                    format_trait_value(&name, &t.value, true)
-                        .green()
-                        .to_string(),
-                );
                 traits_staged = true;
+                name_value.green().to_string()
             } else {
-                trait_lines.push(format_trait_value(&name, &t.value, true));
-            }
+                name_value.white().to_string()
+            };
+
+            trait_lines.push(format!("{colored} {type_label}"));
         }
 
         let traits_str = if trait_lines.is_empty() {
@@ -96,7 +92,7 @@ impl Tabular for IdentityWithTraits {
                 let value = iv
                     .feature_value
                     .as_ref()
-                    .map(|v| v.to_string())
+                    .map(|v| v.bare_first_line().to_string())
                     .unwrap_or_else(|| "(no variant assigned)".to_string());
 
                 variant_lines.push(format!("{feature} → {}", value.red()));
@@ -107,10 +103,11 @@ impl Tabular for IdentityWithTraits {
             {
                 // Staged override: green for a brand-new pin, yellow when replacing an
                 // already-pinned variant.
+                let value = pin.variant_value.bare_first_line();
                 let colored_value = if iv.pinned_at.is_some() {
-                    pin.variant_value.yellow()
+                    value.yellow()
                 } else {
-                    pin.variant_value.green()
+                    value.green()
                 };
                 variant_lines.push(format!("{feature} → {colored_value}"));
                 variants_staged = true;
@@ -119,7 +116,7 @@ impl Tabular for IdentityWithTraits {
                 let value = iv
                     .feature_value
                     .as_ref()
-                    .map(|v| v.to_string())
+                    .map(|v| v.bare_first_line().to_string())
                     .unwrap_or_else(|| "(no variant assigned)".to_string());
                 variant_lines.push(format!("{feature} → {}", value.red()));
                 variants_staged = true;
@@ -133,7 +130,7 @@ impl Tabular for IdentityWithTraits {
                     "{feature} → {}{}",
                     iv.feature_value
                         .as_ref()
-                        .map(|v| v.to_string())
+                        .map(|v| v.bare_first_line().to_string())
                         .unwrap_or_default(),
                     pin_marker
                 ));
@@ -145,14 +142,11 @@ impl Tabular for IdentityWithTraits {
         // Staged pins for features not yet in committed state
         for o in staged_pins {
             if !ctx.iter().any(|iv| iv.feature_name == o.feature_name) {
+                let value = o.variant_value.bare_first_line();
                 variant_lines.push(format!(
                     "{} → {}",
                     o.feature_name.bright_blue(),
-                    if is_deleted {
-                        o.variant_value.red()
-                    } else {
-                        o.variant_value.green()
-                    }
+                    if is_deleted { value.red() } else { value.green() }
                 ));
                 variants_staged = true;
             }
@@ -163,7 +157,7 @@ impl Tabular for IdentityWithTraits {
         let has_staged = id_staged || traits_staged || variants_staged;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
@@ -171,7 +165,7 @@ impl Tabular for IdentityWithTraits {
                 Overflow::Truncate,
                 10,
             )
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(9))
             .width(Width::Percentage(100))
             .build();
 
@@ -180,7 +174,7 @@ impl Tabular for IdentityWithTraits {
             vec!["traits".to_string(), traits_str],
         ];
         if has_variants {
-            rows.push(vec!["variants".to_string(), variants_str]);
+            rows.push(vec!["features overrides".to_string(), variants_str]);
         }
         table.render(rows);
 
@@ -196,17 +190,30 @@ impl Tabular for IdentityWithTraits {
     }
 }
 
-fn format_trait_value(trait_name: &str, value: &Option<TraitValue>, with_type: bool) -> String {
-    let (type_label, val) = match value {
-        Some(TraitValue::Str(v)) => ("string", v.to_string()),
-        Some(TraitValue::Int(v)) => ("int", v.to_string()),
-        Some(TraitValue::Float(v)) => ("float", v.to_string()),
-        Some(TraitValue::Bool(v)) => ("bool", v.to_string()),
-        None => ("unset", String::new()),
+/// Plain, uncolored `name=value` text - kept as a single unadorned unit so callers can wrap
+/// it in exactly one color (white by default, or red/yellow/green when staged) without any
+/// color/reset codes already embedded inside it fighting that wrapping.
+fn trait_name_value(trait_name: &str, value: &Option<TraitValue>) -> String {
+    let val = match value {
+        Some(TraitValue::Str(v)) => v.to_string(),
+        Some(TraitValue::Int(v)) => v.to_string(),
+        Some(TraitValue::Float(v)) => v.to_string(),
+        Some(TraitValue::Bool(v)) => v.to_string(),
+        None => String::new(),
     };
-    if with_type {
-        format!("{trait_name}={val} {}", type_label.dimmed())
-    } else {
-        format!("{}={val}", trait_name.bright_blue())
+    format!("{trait_name}={val}")
+}
+
+/// The trait value's type label (`string`/`int`/`float`/`bool`/`unset`), always dimmed -
+/// built and colored independently of `trait_name_value` so a staged-change color applied
+/// to the name=value part never bleeds into (or gets cut short by) this label.
+fn trait_type_label(value: &Option<TraitValue>) -> colored::ColoredString {
+    match value {
+        Some(TraitValue::Str(_)) => "string",
+        Some(TraitValue::Int(_)) => "int",
+        Some(TraitValue::Float(_)) => "float",
+        Some(TraitValue::Bool(_)) => "bool",
+        None => "unset",
     }
+    .dimmed()
 }

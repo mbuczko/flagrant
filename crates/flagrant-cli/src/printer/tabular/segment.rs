@@ -134,7 +134,7 @@ impl Tabular for Segment {
         let has_staged = name_staged || desc_staged || groups_staged || overrides_staged;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
@@ -179,10 +179,12 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
     weights
         .iter()
         .map(|w| {
-            let (_, bare) = w.value.decompose();
-            let first_line = bare.lines().next().unwrap_or(bare);
             let marker = if w.is_control { "★" } else { "" };
-            format!("{marker}{first_line} → {}", format!("{}%", w.weight).bold())
+            format!(
+                "{marker}{} → {}",
+                w.value.bare_first_line(),
+                format!("{}%", w.weight).bold()
+            )
         })
         .collect()
 }

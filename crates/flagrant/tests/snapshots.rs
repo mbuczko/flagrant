@@ -278,7 +278,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
             patch: IdentityPatch {
                 overrides: vec![IdentityOverridePatch {
                     feature_name: feature.name.clone(),
-                    variant_value: "variant-a".to_owned(),
+                    variant_value: FeatureValue::Text("variant-a".to_owned()),
                 }],
                 ..Default::default()
             },

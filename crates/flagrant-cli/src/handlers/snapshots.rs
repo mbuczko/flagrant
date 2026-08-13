@@ -7,7 +7,6 @@
 //! | `SNAPSHOT describe`    | [`describe`]| Change a snapshot's comment.                                 |
 //! | `SNAPSHOT restore`     | [`restore`] | Restore the current feature to an earlier snapshot version. |
 
-use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Width};
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
@@ -16,7 +15,10 @@ use flagrant_types::{
     payload::{RestoreRequest, UpdateSnapshotCommentPayload},
 };
 
-use crate::handlers::{internal::stage, open_in_editor};
+use crate::{
+    handlers::{internal::stage, open_in_editor},
+    printer::tabular::Tabular,
+};
 
 fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
     session
@@ -91,47 +93,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     drop(ctx);
 
     let state = snapshot.parsed_state()?;
-
-    println!("{} v{}", "SNAPSHOT".bold(), snapshot.version);
-    if let Some(comment) = &snapshot.comment {
-        println!("  comment: {comment}");
-    }
-    println!("  created: {}", snapshot.created_at);
-    println!("  name: {}", state.name);
-    if !state.description.is_empty() {
-        println!("  description: {}", state.description);
-    }
-    println!(
-        "  enabled: {} · server-side: {} · archived: {}",
-        state.is_enabled, state.is_srv, state.is_archived
-    );
-    if !state.tags.is_empty() {
-        println!("  tags: {}", state.tags.join(", "));
-    }
-
-    println!("  variants:");
-    for v in &state.variants {
-        let marker = if v.is_control { " (control)" } else { "" };
-        println!("    #{} {} weight={}%{marker}", v.id, v.value, v.weight);
-    }
-
-    if !state.segment_overrides.is_empty() {
-        println!("  segment overrides:");
-        for ov in &state.segment_overrides {
-            println!("    {} (#{})", ov.segment_name, ov.segment_id);
-            for w in &ov.weights {
-                println!("      variant #{} weight={}%", w.variant_id, w.weight);
-            }
-        }
-    }
-
-    if !state.identity_overrides.is_empty() {
-        println!("  pinned identities:");
-        for pin in &state.identity_overrides {
-            println!("    {} -> variant #{}", pin.identity_value, pin.variant_id);
-        }
-    }
-
+    snapshot.display(None, &state);
     Ok(())
 }
 

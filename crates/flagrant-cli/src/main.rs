@@ -200,7 +200,7 @@ fn main() -> anyhow::Result<()> {
         // Identities
         Command::Identity.op(
             "add",
-            "identity [trait:value ...]",
+            "identity [trait=value ...]",
             handlers::identities::add,
         ),
         Command::Identity.op("list", "trait|[pattern]", handlers::identities::list),
@@ -210,7 +210,7 @@ fn main() -> anyhow::Result<()> {
         Command::Identity.op("use", "identity", handlers::identities::r#use),
         Command::Identity.op_in_context(
             "trait",
-            "name:value|-name [...]",
+            "name=value|-name [...]",
             handlers::identities::r#trait,
             in_context!(identity_ctx),
         ),

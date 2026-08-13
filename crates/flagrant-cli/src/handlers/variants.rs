@@ -186,25 +186,20 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         bail!("A variant with this value already exists for this feature.");
     }
 
-    let old_value = current.to_string();
-    let new_value = fv.to_string();
-
-    stage::stage_value(ctx.get_or_init_feature_patch(), &variant_ref, fv)?;
-
     // Keep any staged identity override in sync: if it was pointing at the old value,
-    // update it to the new value so it doesn't become stale after commit.
-    if old_value != new_value {
-        let feature_name = ctx.feature.as_ref().unwrap().name.clone();
-        if let Some(patch) = ctx.identity_patch.as_mut() {
-            for o in patch.overrides.iter_mut() {
-                if o.feature_name == feature_name && o.variant_value == old_value {
-                    o.variant_value = new_value.clone();
-                    println!("Updated staged override value: '{old_value}' → '{new_value}'");
-                }
+    // update it to the new value so it doesn't become stale after commit. `fv != current`
+    // is already guaranteed by the early return above.
+    let feature_name = ctx.feature.as_ref().unwrap().name.clone();
+    if let Some(patch) = ctx.identity_patch.as_mut() {
+        for o in patch.overrides.iter_mut() {
+            if o.feature_name == feature_name && o.variant_value == current {
+                o.variant_value = fv.clone();
+                println!("Updated staged override value: '{current}' → '{fv}'");
             }
         }
     }
 
+    stage::stage_value(ctx.get_or_init_feature_patch(), &variant_ref, fv)?;
     index::rebuild(&mut ctx);
     Ok(())
 }
@@ -319,12 +314,12 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     };
 
     // Find the variant's value before staging deletion, so we can clean up any
-    // staged identity override that references it (overrides are keyed by value string).
+    // staged identity override that references it (overrides are keyed by value).
     let deleted_variant_value = ctx
         .feature
         .as_ref()
         .and_then(|f| f.variants.iter().find(|v| v.id == variant_id))
-        .map(|v| v.value.to_string());
+        .map(|v| v.value.clone());
 
     let ops = &mut ctx.get_or_init_feature_patch().variants;
     ops.retain(|op| {

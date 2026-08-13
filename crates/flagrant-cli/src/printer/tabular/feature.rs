@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Feature, FeatureOverride, Variant,
+    Feature, FeatureOverride, FeatureValue, Variant,
     payload::{FeaturePatch, SegmentVariantWeight},
 };
 
@@ -9,22 +9,16 @@ use crate::{handlers::internal::effectives as effective, printer::legend};
 
 use super::Tabular;
 
-const SHOW_OVERRIDES: usize = 3;
-
 /// A staged change to the in-context identity's override for this feature.
 pub enum IdentityPending {
-    /// A new or updated override was staged (`OVERRIDE add`).
-    Override(String),
+    /// A new or updated override was staged (`OVERRIDE add`), pinning the identity to the
+    /// variant holding `variant_value`.
+    Override {
+        identity: String,
+        variant_value: FeatureValue,
+    },
     /// The existing override was staged for removal (`OVERRIDE delete`).
     Unpin(String),
-}
-
-impl IdentityPending {
-    fn identity_value(&self) -> &str {
-        match self {
-            IdentityPending::Override(v) | IdentityPending::Unpin(v) => v,
-        }
-    }
 }
 
 /// Context passed to `Feature::display` to show both committed and pending overrides.
@@ -254,9 +248,12 @@ impl Tabular for Feature {
 
         let variants = variant_lines.join("\n");
 
-        let (overrides_lines, overrides_has_staged) =
-            override_lines(&self.variants, ctx, is_deleted);
-        let overrides_str = overrides_lines.join("\n");
+        let (identity_str, identity_staged) =
+            identity_override_line(&self.variants, ctx, is_deleted);
+
+        let (segment_lines, segment_staged) =
+            segment_override_lines(&self.variants, ctx, is_deleted);
+        let segment_str = segment_lines.join("\n");
 
         let has_staged = is_deleted
             || name_modified
@@ -265,15 +262,16 @@ impl Tabular for Feature {
             || desc_modified
             || has_tag_ops
             || variants_staged
-            || overrides_has_staged;
+            || identity_staged
+            || segment_staged;
 
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(16), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
                 Align::Left,
-                Overflow::Truncate,
+                Overflow::Wrap,
                 10,
             )
             .width(Width::Percentage(100))
@@ -285,8 +283,11 @@ impl Tabular for Feature {
             vec!["status".to_string(), status],
             vec!["variants".to_string(), variants],
         ];
-        if !overrides_str.is_empty() {
-            rows.push(vec!["overridden-by".to_string(), overrides_str]);
+        if !segment_str.is_empty() {
+            rows.push(vec!["segment overrides".to_string(), segment_str]);
+        }
+        if !identity_str.is_empty() {
+            rows.push(vec!["identity overrides".to_string(), identity_str]);
         }
         rows.push(vec!["tags".to_string(), tags_str]);
         rows.push(vec!["description".to_string(), desc_str]);
@@ -297,94 +298,85 @@ impl Tabular for Feature {
     }
 }
 
-/// Builds the "overrides" row content: one line per identity-overrides group (if any) and
-/// one line per segment override, plus whether *any* of those lines is currently staged.
-fn override_lines(
+/// Builds the identity overrides line - every committed identity, comma-joined, each
+/// showing which variant it's pinned to - paired with whether any of it is currently
+/// staged. No limit: unlike segment overrides (typically few), identity overrides can be
+/// numerous, but a single comma-joined line stays compact regardless of count.
+fn identity_override_line(
     variants: &[Variant],
     ctx: &OverridesContext,
     is_deleted: bool,
-) -> (Vec<String>, bool) {
-    let mut overrides_lines: Vec<String> = Vec::new();
-    let mut overrides_staged = false;
-
-    if let Some((content, staged)) = identity_override_line(ctx, is_deleted) {
-        overrides_lines.push(content);
-        overrides_staged |= staged;
-    }
-
-    let (segment_lines, segment_staged) = segment_override_lines(variants, ctx, is_deleted);
-    overrides_lines.extend(segment_lines);
-    overrides_staged |= segment_staged;
-
-    (overrides_lines, overrides_staged)
-}
-
-/// Builds the single grouped "identity" overrides line - up to [`SHOW_OVERRIDES`] committed
-/// identities plus a "(+N more)" suffix, with the identity carrying a pending change (if any)
-/// colored to stand out from the rest - paired with whether it's currently staged. Returns
-/// `None` when there's nothing to show (no committed identities and no pending change).
-fn identity_override_line(ctx: &OverridesContext, is_deleted: bool) -> Option<(String, bool)> {
-    let committed_identities: Vec<&str> = ctx
+) -> (String, bool) {
+    let committed: Vec<(&str, i32)> = ctx
         .committed
         .iter()
-        .filter_map(|o| {
-            if let FeatureOverride::Identity(v) = o {
-                Some(v.as_str())
-            } else {
-                None
-            }
+        .filter_map(|o| match o {
+            FeatureOverride::Identity { value, variant_id } => Some((value.as_str(), *variant_id)),
+            _ => None,
         })
         .collect();
 
-    if committed_identities.is_empty() && (is_deleted || ctx.identity_pending.is_none()) {
-        return None;
+    if committed.is_empty() && (is_deleted || ctx.identity_pending.is_none()) {
+        return (String::new(), false);
     }
-
-    let mut identities = committed_identities
-        .iter()
-        .take(SHOW_OVERRIDES)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if !is_deleted
-        && let Some(pending) = ctx.identity_pending.as_ref()
-        && !committed_identities.contains(&pending.identity_value())
-    {
-        identities.push(pending.identity_value())
-    }
-
-    let rest = identities.len().saturating_sub(SHOW_OVERRIDES);
-    // Only the identity with a pending change is colored - dimmed if it's being
-    // unpinned, green if it's a new/updated override - the rest keep their
-    // default style so the pending one stands out.
-    let pending_value = ctx.identity_pending.as_ref().map(|p| p.identity_value());
-    let line = identities
-        .iter()
-        .map(|id| match &ctx.identity_pending {
-            Some(IdentityPending::Unpin(_)) if pending_value == Some(*id) => {
-                id.red().dimmed().to_string()
-            }
-            Some(IdentityPending::Override(_)) if pending_value == Some(*id) => {
-                id.green().to_string()
-            }
-            _ => id.dimmed().to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let mut content = if rest > 0 {
-        format!("{} › {} (+{} more)", "identity".bright_blue(), line, rest)
-    } else {
-        format!("{} › {}", "identity".bright_blue(), line)
-    };
 
     if is_deleted {
-        content = content.red().to_string()
+        let parts: Vec<String> = committed
+            .iter()
+            .map(|(id, variant_id)| format!("{id} → {}", variant_label(*variant_id, variants)))
+            .collect();
+        return (parts.join(", ").red().to_string(), true);
     }
 
-    let staged = is_deleted || ctx.identity_pending.is_some();
+    // The identity carrying a pending change (if any) is colored to stand out and shows
+    // the variant it's changing to/from; the rest show their current committed variant.
+    let mut parts: Vec<String> = committed
+        .iter()
+        .map(|(id, variant_id)| match &ctx.identity_pending {
+            Some(IdentityPending::Unpin(pending_id)) if pending_id == id => {
+                format!("{id} → {}", variant_label(*variant_id, variants))
+                    .red()
+                    .dimmed()
+                    .to_string()
+            }
+            Some(IdentityPending::Override {
+                identity,
+                variant_value,
+            }) if identity == id => format!("{id} → {}", variant_value.bare_first_line())
+                .yellow()
+                .to_string(),
+            _ => format!("{} → {}", id.dimmed(), variant_label(*variant_id, variants)),
+        })
+        .collect();
 
-    Some((content, staged))
+    // A brand-new pending override not among the committed ones gets its own entry so it's
+    // never silently hidden.
+    if let Some(IdentityPending::Override {
+        identity,
+        variant_value,
+    }) = &ctx.identity_pending
+        && !committed.iter().any(|(id, _)| id == identity)
+    {
+        parts.push(
+            format!("{identity} → {}", variant_value.bare_first_line())
+                .green()
+                .to_string(),
+        );
+    }
+
+    let staged = ctx.identity_pending.is_some();
+
+    (parts.join(", "), staged)
+}
+
+/// Resolves a variant id to its bare display value (first line only, no `type::` prefix),
+/// falling back to `#{id}` if the variant can't be found (e.g. already deleted).
+fn variant_label(variant_id: i32, variants: &[Variant]) -> String {
+    variants
+        .iter()
+        .find(|v| v.id == variant_id)
+        .map(|v| v.value.bare_first_line().to_string())
+        .unwrap_or_else(|| format!("#{variant_id}"))
 }
 
 /// Builds one line per segment override - every committed segment, plus (if not already
@@ -410,14 +402,9 @@ fn segment_override_lines(
 
             if is_deleted {
                 let parts = segment_weights(weights, variants);
-                let line = format!(
-                    "{}  › {} {}",
-                    "segment".bright_blue(),
-                    name.dimmed(),
-                    parts.join(", ")
-                )
-                .red()
-                .to_string();
+                let line = format!("{} {}", name.dimmed(), parts.join(", "))
+                    .red()
+                    .to_string();
 
                 lines.push(line);
                 staged = true;
@@ -427,25 +414,15 @@ fn segment_override_lines(
                     Some((_, Some(pending_weights))) => {
                         let parts =
                             segment_weights_with_control_remainder(pending_weights, variants);
-                        format!(
-                            "{}  › {} {}",
-                            "segment".bright_blue(),
-                            name.dimmed(),
-                            parts.join(", ")
-                        )
-                        .yellow()
-                        .to_string()
+                        format!("{} {}", name.dimmed(), parts.join(", "))
+                            .yellow()
+                            .to_string()
                     }
                     Some((_, None)) => {
                         let parts = segment_weights(weights, variants);
-                        format!(
-                            "{}  › {} {}",
-                            "segment".bright_blue(),
-                            name.dimmed(),
-                            parts.join(", ")
-                        )
-                        .red()
-                        .to_string()
+                        format!("{} {}", name.dimmed(), parts.join(", "))
+                            .red()
+                            .to_string()
                     }
                     None => unreachable!(),
                 };
@@ -453,12 +430,7 @@ fn segment_override_lines(
                 staged = true;
             } else {
                 let parts = segment_weights(weights, variants);
-                lines.push(format!(
-                    "{}  › {} {}",
-                    "segment".bright_blue(),
-                    name.dimmed(),
-                    parts.join(", ")
-                ));
+                lines.push(format!("{} {}", name.dimmed(), parts.join(", ")));
             }
         }
     }
@@ -469,14 +441,9 @@ fn segment_override_lines(
         && let Some((seg_name, Some(pending_weights))) = &ctx.segment_pending
     {
         let parts = segment_weights_with_control_remainder(pending_weights, variants);
-        let line = format!(
-            "{}  › {} {}",
-            "segment".bright_blue(),
-            seg_name.dimmed(),
-            parts.join(", ")
-        )
-        .green()
-        .to_string();
+        let line = format!("{} {}", seg_name.dimmed(), parts.join(", "))
+            .green()
+            .to_string();
 
         lines.push(line);
         staged = true;
@@ -518,10 +485,7 @@ fn segment_weights_with_control_remainder(
 
 fn format_weight_percent(w: &SegmentVariantWeight, variants: &[Variant]) -> Option<String> {
     let v = variants.iter().find(|v| v.id == w.variant_id)?;
-    let (_, bare) = v.value.decompose();
-    let first_line = bare.lines().next().unwrap_or(bare);
-
-    Some(format!("{} → {}%", first_line, w.weight))
+    Some(format!("{} → {}%", v.value.bare_first_line(), w.weight))
 }
 
 fn format_weight_bar(weight: u8, width: u16) -> String {
