@@ -3,8 +3,8 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, GroupConnector, IdentityWithTraits, Project, Segment,
-    Snapshot, Subject, TraitValue, VariantValue,
+    Comparator, Environment, Feature, GroupConnector, IdentityWithTraits, Project, RolloutConfig,
+    Segment, Snapshot, Subject, TraitValue, VariantValue,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -89,6 +89,12 @@ pub struct IdentityTraitPayload {
     pub value: Option<TraitValue>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum RolloutPatchOp {
+    Set(RolloutConfig),
+    Unset,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct FeaturePatch {
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
@@ -101,6 +107,9 @@ pub struct FeaturePatch {
     #[validate]
     pub tags: Vec<TagPatchOp>,
     pub variants: Vec<VariantPatchOp>,
+    /// `None` means no change. Mirrors `is_enabled: Option<bool>`'s convention, just one
+    /// level deeper since "change to what" itself needs a Set/Unset choice.
+    pub rollout: Option<RolloutPatchOp>,
     /// Stages deletion of the entire feature. When set, every other field/op in the same
     /// patch is ignored - the feature is deleted and nothing else is applied.
     pub delete: bool,
@@ -132,6 +141,7 @@ impl FeaturePatch {
             && self.description.is_none()
             && self.tags.is_empty()
             && self.variants.is_empty()
+            && self.rollout.is_none()
             && !self.delete
     }
 }

@@ -860,6 +860,7 @@ version = "0.0.15"
 dependencies = [
  "anyhow",
  "argh",
+ "chrono",
  "colored",
  "fancy-table",
  "flagrant-client",

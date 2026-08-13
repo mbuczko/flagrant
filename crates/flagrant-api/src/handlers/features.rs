@@ -2,8 +2,8 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{environment, feature, identity, project, segment};
-use flagrant_types::{Feature, FeatureOverride, payload::NewFeaturePayload};
+use flagrant::models::{environment, feature, identity, project, rollout, segment};
+use flagrant_types::{Feature, FeatureOverride, RolloutStatus, payload::NewFeaturePayload};
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -222,6 +222,34 @@ pub async fn get_overrides(
             .map(|(_, name, weights)| FeatureOverride::Segment { name, weights }),
     );
     Ok(Json(overrides))
+}
+
+/// Returns the live progression status of a feature's progressive rollout - its schedule,
+/// current step, when it last changed, and the current distributed-identity sample size.
+/// `None` if the feature has no rollout configured. Read-only: never advances the
+/// schedule (a `GET` must not mutate) - the schedule only actually advances lazily, the
+/// next time an identity read touches this feature.
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/envs/{environment}/features/{feature_id}/rollout",
+    params(
+        ("project" = String, Path, description = "Project name"),
+        ("environment" = String, Path, description = "Environment name"),
+        ("feature_id" = i32, Path, description = "Feature ID")
+    ),
+    responses(
+        (status = 200, description = "Live progressive-rollout status, or null if none configured", body = Option<RolloutStatus>)
+    ),
+    tag = "features"
+)]
+pub async fn get_rollout_status(
+    DbConnection(mut conn): DbConnection,
+    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+) -> Result<Json<Option<RolloutStatus>>, ServiceError> {
+    let project = project::get_by_name(&mut conn, project_name).await?;
+    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let status = rollout::get_status(&mut conn, &env, feature_id).await?;
+    Ok(Json(status))
 }
 
 #[derive(Debug, Deserialize, IntoParams)]

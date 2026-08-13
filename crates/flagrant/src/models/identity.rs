@@ -10,8 +10,11 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, SqliteConnection};
+use std::collections::HashSet;
 
 use crate::{distributor, errors::FlagrantError, evaluator};
+
+use super::rollout;
 
 use super::traits::upsert;
 use super::variant;
@@ -502,8 +505,26 @@ pub async fn get_identity_variants(
     environment: &Environment,
     identity: &Identity,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
+    let mut variants = variant::get_by_identity(&mut *conn, environment, &identity.value).await?;
+
+    // Advance any progressive rollouts due for the features touched here, before the
+    // resolution transaction below opens - each advance is its own self-contained commit
+    // (see `rollout::maybe_advance`). Re-fetch afterward: an advance rewrites `migrated_id`
+    // via `identity::migrate_identities` on this identity's own `identity_variants` row,
+    // which the `variants` snapshot taken above would otherwise miss until the *next* read.
+    let mut checked_features: HashSet<i32> = HashSet::new();
+    let mut any_advanced = false;
+
+    for var in &variants {
+        if checked_features.insert(var.feature_id) {
+            any_advanced |= rollout::maybe_advance(conn, environment, var.feature_id).await?;
+        }
+    }
+    if any_advanced {
+        variants = variant::get_by_identity(&mut *conn, environment, &identity.value).await?;
+    }
+
     let mut tx = conn.begin().await?;
-    let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
     // Only needed to evaluate segment rules; loaded at most once (on first use) and reused
     // across every feature in this call. Kept as just the traits (not a full

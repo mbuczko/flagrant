@@ -2,6 +2,7 @@ mod environment;
 pub mod feature;
 mod group;
 mod identity;
+mod rollout;
 mod rule;
 pub mod segment;
 mod snapshot;

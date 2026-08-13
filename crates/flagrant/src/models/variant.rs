@@ -4,7 +4,7 @@ use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::errors::FlagrantError;
 use flagrant_types::{
-    Environment, Feature, VariantValue, IdentityVariant, OverriddenVariant, Variant,
+    Environment, Feature, IdentityVariant, OverriddenVariant, Variant, VariantValue,
 };
 
 use super::identity;
@@ -115,48 +115,40 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
-/// Updates a variant's value (shared across environments) and weight (environment-specific).
-/// Rejects updates to control variants - use `feature::update` to change the control value.
-/// Returns the variant's `feature_id` for use in post-update weight balancing.
-async fn update(
+/// Updates a variant's value (shared across environments).
+///
+/// Rejects updates to control variants - use `feature::update` to change the control
+/// value. Returns the variant's `feature_id` for use in post-update weight balancing.
+async fn update_value(
     conn: &mut SqliteConnection,
-    environment: &Environment,
     variant: &Variant,
     new_value: VariantValue,
-    new_weight: u8,
 ) -> anyhow::Result<i32> {
     if variant.is_control() {
         bail!("Control variant is immutable. Use feature::update to adjust its value.");
     }
-    let feature_id: i32 =
-        SQLVariants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
-            v.get("feature_id")
-        })
-        .await
-        .map_err(|e| -> anyhow::Error {
-            if let sqlx::Error::Database(db_err) = &e
-                && db_err.is_unique_violation()
-            {
-                return FlagrantError::BadRequest(
-                    "A variant with this value already exists for this feature",
-                )
-                .into();
-            }
-            FlagrantError::QueryFailed("Could not update variant value", e).into()
-        })?;
-
-    SQLVariants::upsert_variant_weight(&mut *conn, params![environment.id, variant.id, new_weight])
-        .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not set a variant's weight", e))?;
-
-    Ok(feature_id)
+    SQLVariants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
+        v.get("feature_id")
+    })
+    .await
+    .map_err(|e| -> anyhow::Error {
+        if let sqlx::Error::Database(db_err) = &e
+            && db_err.is_unique_violation()
+        {
+            return FlagrantError::BadRequest(
+                "A variant with this value already exists for this feature",
+            )
+            .into();
+        }
+        FlagrantError::QueryFailed("Could not update variant value", e).into()
+    })
 }
 
 /// Updates a single variant with `new_value` and `new_weight`.
 ///
 /// Rejects modifications to the control variant, whose weight is auto-adjusted and
 /// whose value can only be changed via `feature::update`.
-pub async fn update_one(
+pub async fn update(
     conn: &mut SqliteConnection,
     environment: &Environment,
     variant: &Variant,
@@ -164,16 +156,8 @@ pub async fn update_one(
     new_weight: u8,
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
-    let feature_id = update(&mut tx, environment, variant, new_value, new_weight).await?;
-
-    balance_control_weight(
-        &mut tx,
-        environment,
-        feature_id,
-        variant.id,
-        new_weight as i8 - variant.weight as i8,
-    )
-    .await?;
+    let feature_id = update_value(&mut tx, variant, new_value).await?;
+    set_weight_and_rebalance(&mut tx, environment, feature_id, variant, new_weight).await?;
 
     tx.commit().await?;
     Ok(())
@@ -342,6 +326,33 @@ pub(crate) async fn set_weight(
         .await
         .map_err(|e| FlagrantError::QueryFailed("Could not set variant weight", e))?;
 
+    Ok(())
+}
+
+/// Sets a non-control variant's weight and rebalances the control variant's remainder,
+/// without touching its value. Shared by [`update`] (whose weight-change half is exactly
+/// this) and by progressive-rollout step advancement (`rollout::maybe_advance`), which
+/// only ever needs to shift weight, never value.
+pub(crate) async fn set_weight_and_rebalance(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    variant: &Variant,
+    new_weight: u8,
+) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+    set_weight(&mut tx, environment, variant.id, new_weight).await?;
+
+    balance_control_weight(
+        &mut tx,
+        environment,
+        feature_id,
+        variant.id,
+        new_weight as i8 - variant.weight as i8,
+    )
+    .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -517,7 +528,7 @@ pub(crate) async fn recalculate_control_weight(
 /// are marked as detached starting from the earliest ones, so the distributor can reassign them.
 ///
 /// Returns the new control variant weight.
-async fn balance_control_weight(
+pub(crate) async fn balance_control_weight(
     tx: &mut SqliteConnection,
     environment: &Environment,
     feature_id: i32,

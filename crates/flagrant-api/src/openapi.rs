@@ -15,6 +15,7 @@ use utoipa::OpenApi;
         crate::handlers::features::create,
         crate::handlers::features::delete,
         crate::handlers::features::clear_distribution,
+        crate::handlers::features::get_rollout_status,
         crate::handlers::commit::apply,
         crate::handlers::snapshots::list,
         crate::handlers::snapshots::fetch,
@@ -93,6 +94,10 @@ use utoipa::OpenApi;
             flagrant_types::SnapshotSegmentOverride,
             flagrant_types::SnapshotSegmentGroup,
             flagrant_types::SnapshotIdentityOverride,
+            flagrant_types::RolloutConfig,
+            flagrant_types::RolloutStep,
+            flagrant_types::RolloutStatus,
+            flagrant_types::payload::RolloutPatchOp,
         )
     ),
     tags(

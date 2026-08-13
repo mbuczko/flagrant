@@ -9,7 +9,7 @@ use flagrant_types::{
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
-use super::{feature, identity, rule, segment, variant};
+use super::{feature, identity, rollout, rule, segment, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -152,6 +152,12 @@ async fn build_state(
         )
         .collect();
 
+    let rollout_step = if feature.rollout.is_some() {
+        rollout::current_step(conn, feature.id, environment.id).await?
+    } else {
+        None
+    };
+
     Ok(SnapshotState {
         name: feature.name.clone(),
         description: feature.description.clone(),
@@ -162,6 +168,7 @@ async fn build_state(
         variants,
         segment_overrides,
         identity_overrides,
+        rollout_step,
     })
 }
 
@@ -362,6 +369,7 @@ pub async fn restore(
         description: (feature.description != state.description).then(|| state.description.clone()),
         tags: diff_tags(&feature.tags, &state.tags),
         variants: recon.patch_ops,
+        rollout: None,
         delete: false,
     };
 
@@ -467,6 +475,14 @@ pub async fn restore(
             )
             .await?;
         }
+    }
+
+    // Restore progression alongside weight, if the feature still has a rollout active -
+    // the schedule/rules themselves are feature-level config and untouched by restore,
+    // only the step pointer moves. If the rollout was disabled since this snapshot was
+    // taken, there's no `feature_rollout_state` row to restore into.
+    if let (Some(_), Some(step)) = (&updated.rollout, state.rollout_step) {
+        rollout::set_step(&mut tx, environment.id, updated.id, step).await?;
     }
 
     let default_comment = format!("restored from v{version}");

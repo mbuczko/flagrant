@@ -401,7 +401,7 @@ async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<
     .unwrap();
 
     // Updating v1's value to "baz" conflicts with the second variant.
-    let err = variant::update_one(&mut conn, &environment, &v1, VariantValue::build("baz"), 10)
+    let err = variant::update(&mut conn, &environment, &v1, VariantValue::build("baz"), 10)
         .await
         .unwrap_err();
 
@@ -510,7 +510,7 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
         .await
         .unwrap();
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment2,
         &variant,
@@ -543,7 +543,7 @@ async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite
     let feature = create_feature(&mut conn, &environment, "foo").await;
     let default_variant = feature.get_default_variant();
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         default_variant,
@@ -589,7 +589,7 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
     .await
     .unwrap();
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &variant,
@@ -693,7 +693,7 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .unwrap();
 
     assert!(
-        variant::update_one(
+        variant::update(
             &mut conn,
             &environment,
             &variant,

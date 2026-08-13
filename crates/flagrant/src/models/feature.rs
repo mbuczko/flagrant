@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use chrono::Utc;
 use flagrant_types::{
     Environment, Feature, VariantValue, Project, TagList, Variant,
-    payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
+    payload::{FeaturePatch, RolloutPatchOp, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
-use super::{into_json_string, variant};
+use super::{into_json_string, rollout, variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
@@ -395,7 +395,7 @@ pub async fn patch(
                 .update()
                 .await?;
         } else {
-            variant::update_one(&mut tx, environment, &var, value, weight).await?;
+            variant::update(&mut tx, environment, &var, value, weight).await?;
         }
     }
 
@@ -404,6 +404,55 @@ pub async fn patch(
         if let VariantPatchOp::Add { value, weight } = op {
             variant::create(&mut tx, environment, feature, value, weight).await?;
         }
+    }
+
+    // Progressive rollout. Checked against the *post*-patch variant count (deletes/
+    // updates/adds above have already settled), so this also rejects e.g. adding a 2nd
+    // variant to an already-progressive feature, not just enabling on a bad count.
+    let effective_rollout = match &patch.rollout {
+        Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
+        Some(RolloutPatchOp::Unset) => None,
+        None => feature.rollout.clone(),
+    };
+
+    if let Some(cfg) = &effective_rollout {
+        if let Some(RolloutPatchOp::Set(_)) = &patch.rollout {
+            cfg.validate_steps().map_err(FlagrantError::BadRequest)?;
+        }
+
+        let live = variant::get_for_feature(&mut tx, environment, feature.id, None).await?;
+        let non_control: Vec<_> = live.iter().filter(|v| !v.is_control()).collect();
+        if non_control.len() != 1 {
+            return Err(FlagrantError::BadRequest(
+                "Progressive rollout requires exactly one non-control variant",
+            )
+            .into());
+        }
+
+        if let Some(RolloutPatchOp::Set(new_cfg)) = &patch.rollout {
+            let rollout_json = serde_json::to_string(new_cfg)?;
+            SQLFeatures::update_feature_rollout(&mut *tx, params![feature.id, rollout_json])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not set progressive rollout", e))?;
+
+            variant::set_weight_and_rebalance(
+                &mut tx,
+                environment,
+                feature.id,
+                non_control[0],
+                new_cfg.steps[0].weight,
+            )
+            .await?;
+
+            rollout::activate(&mut tx, environment.id, feature.id).await?;
+        }
+    }
+
+    if let Some(RolloutPatchOp::Unset) = &patch.rollout {
+        SQLFeatures::clear_feature_rollout(&mut *tx, params![feature.id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not clear progressive rollout", e))?;
+        rollout::deactivate(&mut tx, feature.id).await?;
     }
 
     tx.commit().await?;
@@ -465,5 +514,10 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
             .is_ok_and(|v| v.is_some()),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
+        rollout: row
+            .try_get::<Option<String>, _>("rollout")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok()),
     }
 }

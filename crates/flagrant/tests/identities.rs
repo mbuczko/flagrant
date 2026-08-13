@@ -132,7 +132,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         5
     );
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &variant,
@@ -153,7 +153,7 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &variant,
@@ -216,7 +216,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         5
     );
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &variant,
@@ -235,7 +235,7 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &variant,
@@ -501,7 +501,7 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
     let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id, None)
         .await
         .unwrap();
-    variant::update_one(
+    variant::update(
         &mut conn,
         &environment,
         &alt_variant,

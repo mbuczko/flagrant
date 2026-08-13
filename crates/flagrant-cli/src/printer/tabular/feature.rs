@@ -2,7 +2,7 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
     Feature, FeatureOverride, Variant, VariantValue,
-    payload::{FeaturePatch, SegmentVariantWeight},
+    payload::{FeaturePatch, RolloutPatchOp, SegmentVariantWeight},
 };
 
 use crate::{handlers::internal::effectives as effective, printer::legend};
@@ -248,6 +248,28 @@ impl Tabular for Feature {
             segment_override_lines(&self.variants, ctx, is_deleted);
         let segment_str = segment_lines.join("\n");
 
+        let staged_rollout = (!is_deleted)
+            .then(|| patch.and_then(|p| p.rollout.as_ref()))
+            .flatten();
+        let rollout_modified = staged_rollout.is_some();
+        let effective_rollout = match staged_rollout {
+            Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
+            Some(RolloutPatchOp::Unset) => None,
+            None => self.rollout.clone(),
+        };
+        let rollout_str = effective_rollout.as_ref().map(|cfg| {
+            let schedule = cfg
+                .steps
+                .iter()
+                .map(|s| match s.hold_for_secs {
+                    Some(secs) => format!("{}% for {secs}s", s.weight),
+                    None => format!("{}%", s.weight),
+                })
+                .collect::<Vec<_>>()
+                .join(" -> ");
+            legend::stage_color(schedule, is_deleted, false, rollout_modified).into_owned()
+        });
+
         let has_staged = is_deleted
             || name_modified
             || status_modified
@@ -256,7 +278,8 @@ impl Tabular for Feature {
             || has_tag_ops
             || variants_staged
             || identity_staged
-            || segment_staged;
+            || segment_staged
+            || rollout_modified;
 
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
@@ -281,6 +304,9 @@ impl Tabular for Feature {
         }
         if !identity_str.is_empty() {
             rows.push(vec!["identity overrides".to_string(), identity_str]);
+        }
+        if let Some(rollout_str) = rollout_str {
+            rows.push(vec!["progressive".to_string(), rollout_str]);
         }
         rows.push(vec!["tags".to_string(), tags_str]);
         rows.push(vec!["description".to_string(), desc_str]);

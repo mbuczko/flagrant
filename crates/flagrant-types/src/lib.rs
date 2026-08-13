@@ -61,6 +61,86 @@ pub struct Feature {
     pub is_enabled: bool,
     pub is_archived: bool,
     pub is_srv: bool,
+    /// `Some` marks this feature as a progressive rollout - a single alternative
+    /// variant's weight ramping up over a defined schedule of steps. Feature-level
+    /// (shared across environments) by design; only the live progression state (see
+    /// `flagrant::models::rollout`) and the weight it drives are per-environment.
+    /// `#[sqlx(skip)]`: like `variants`, this is never populated by the derive - only
+    /// by the manual `row_to_feature` mapping in `flagrant::models::feature`.
+    #[sqlx(skip)]
+    pub rollout: Option<RolloutConfig>,
+}
+
+/// One step of a progressive rollout's schedule: hold the alternative variant at
+/// `weight` for `hold_for_secs` before advancing to the next step. `hold_for_secs` is
+/// `None` only on the last (terminal) step - nothing follows a terminal step to hold
+/// for. See [`RolloutConfig::validate_steps`] for the invariants this must satisfy.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RolloutStep {
+    pub weight: u8,
+    pub hold_for_secs: Option<u32>,
+}
+
+/// A feature's progressive-rollout definition, stored as raw JSON on the `features` row
+/// (see [`Feature::rollout`]) so its mere presence tells you whether the feature is
+/// "progressive" without a separate flag.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RolloutConfig {
+    /// Minimum number of organically-distributed identities required before the
+    /// schedule may advance past its first step. Checked once, before the very first
+    /// timed advance - never re-checked on later steps, so a rollout won't stall
+    /// mid-schedule if traffic later drops.
+    #[serde(default = "RolloutConfig::default_min_sample_size")]
+    pub min_sample_size: u32,
+    pub steps: Vec<RolloutStep>,
+}
+
+impl RolloutConfig {
+    pub fn default_min_sample_size() -> u32 {
+        100
+    }
+
+    /// Cross-step invariants that a single field's shape can't express on its own:
+    /// at least one step, weights non-decreasing, and exactly one step - the last -
+    /// with no hold duration. Called explicitly from both the CLI and `feature::patch`
+    /// so the rule can't be bypassed by going through one path but not the other -
+    /// mirrors [`Comparator::validate_value`].
+    pub fn validate_steps(&self) -> Result<(), &'static str> {
+        let n = self.steps.len();
+        if n == 0 {
+            return Err("A progressive rollout requires at least one step.");
+        }
+        for step in &self.steps {
+            if step.weight > 100 {
+                return Err("Rollout step weights must be between 0 and 100.");
+            }
+        }
+        for (i, step) in self.steps.iter().enumerate() {
+            let is_last = i + 1 == n;
+            if is_last && step.hold_for_secs.is_some() {
+                return Err(
+                    "The last rollout step is terminal and must not carry a hold duration.",
+                );
+            }
+            if !is_last && step.hold_for_secs.is_none() {
+                return Err("Every rollout step but the last must carry a hold duration.");
+            }
+        }
+        if self.steps.windows(2).any(|w| w[1].weight < w[0].weight) {
+            return Err("Rollout step weights must be non-decreasing.");
+        }
+        Ok(())
+    }
+}
+
+/// Live view of a feature's progressive rollout in one environment - the schedule plus
+/// where it currently stands. Returned by the read-only rollout-status endpoint.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RolloutStatus {
+    pub config: RolloutConfig,
+    pub current_step: i32,
+    pub last_change_at: NaiveDateTime,
+    pub distributed_identities: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
@@ -385,6 +465,10 @@ pub struct SnapshotState {
     pub variants: Vec<SnapshotVariant>,
     pub segment_overrides: Vec<SnapshotSegmentOverride>,
     pub identity_overrides: Vec<SnapshotIdentityOverride>,
+    /// The progressive rollout's step index at capture time, if the feature had one
+    /// active. Lets `snapshot::restore` roll back progression alongside weight - the
+    /// schedule/rules themselves are feature-level config, not part of this snapshot.
+    pub rollout_step: Option<i32>,
 }
 
 /// A numbered, commented, point-in-time snapshot of a feature's state within one

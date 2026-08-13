@@ -23,8 +23,8 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, FeatureOverride, VariantValue,
-    payload::{NewFeaturePayload, SegmentPatchOp},
+    Feature, FeatureOverride, RolloutConfig, RolloutStatus, RolloutStep, VariantValue,
+    payload::{NewFeaturePayload, RolloutPatchOp, SegmentPatchOp},
 };
 
 use crate::{
@@ -562,4 +562,207 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
         return Ok(());
     }
     bail!("No pattern provided.")
+}
+
+/// Manages the current feature's progressive rollout - a single alternative variant's
+/// weight ramping up over a defined schedule of steps.
+///
+/// Expected args:
+/// - `rules <w1>:<dur1> [<w2>:<dur2> ...] <100>` - stage a new schedule, e.g.
+///   `10:6h 50:2d 80:30m 100`. Each duration accepts an `s`/`m`/`h`/`d` suffix; the last
+///   token is the terminal step and must be a bare weight with no duration.
+/// - `sample <n>` - stage a new minimum-sample-size gate for the currently staged (or
+///   already committed) schedule.
+/// - `off` - stage disabling the rollout.
+/// - `status` - print the live progression status. Not staged: fetched immediately, since
+///   progression itself only ever advances lazily on the server, on the next read.
+pub fn progressive(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    match args.get(1).map(|a| a.to_lowercase()).as_deref() {
+        Some("rules") => progressive_rules(&args[2..], session),
+        Some("sample") => progressive_sample(args.get(2), session),
+        Some("off") => progressive_off(session),
+        Some("status") => progressive_status(session),
+        _ => bail!("Expected one of: rules, sample, off, status"),
+    }
+}
+
+/// The rollout config that a new `rules`/`sample` op would apply on top of - the staged
+/// one if present, otherwise whatever is already committed.
+fn effective_rollout(ctx: &Connection) -> Option<RolloutConfig> {
+    match ctx.feature_patch.as_ref().and_then(|p| p.rollout.as_ref()) {
+        Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
+        Some(RolloutPatchOp::Unset) => None,
+        None => ctx.feature.as_ref().and_then(|f| f.rollout.clone()),
+    }
+}
+
+fn progressive_rules(tokens: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+    if tokens.is_empty() {
+        bail!("Usage: FEATURE progressive rules <w1>:<dur1> [<w2>:<dur2> ...] <100>");
+    }
+
+    let min_sample_size = effective_rollout(&ctx)
+        .map(|c| c.min_sample_size)
+        .unwrap_or_else(RolloutConfig::default_min_sample_size);
+
+    let n = tokens.len();
+    let mut steps = Vec::with_capacity(n);
+
+    for (i, tok) in tokens.iter().enumerate() {
+        let is_last = i + 1 == n;
+        let tok_str: &str = tok;
+
+        match tok_str.split_once(':') {
+            Some((w, dur)) => {
+                if is_last {
+                    bail!(
+                        "The last step ('{tok_str}') must be a bare weight (e.g. 100), with no duration - it's terminal."
+                    );
+                }
+                let weight: u8 = w
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("Invalid weight '{w}' in step '{tok_str}'."))?;
+                steps.push(RolloutStep {
+                    weight,
+                    hold_for_secs: Some(parse_duration(dur)?),
+                });
+            }
+            None => {
+                if !is_last {
+                    bail!(
+                        "Step '{tok_str}' is missing a duration (e.g. {tok_str}:6h) - only the last step is terminal."
+                    );
+                }
+                let weight: u8 = tok_str
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("Invalid weight '{tok_str}'."))?;
+                steps.push(RolloutStep {
+                    weight,
+                    hold_for_secs: None,
+                });
+            }
+        }
+    }
+
+    let cfg = RolloutConfig {
+        min_sample_size,
+        steps,
+    };
+    cfg.validate_steps().map_err(|e| anyhow::anyhow!(e))?;
+
+    let schedule = cfg
+        .steps
+        .iter()
+        .map(|s| match s.hold_for_secs {
+            Some(secs) => format!("{}% for {}", s.weight, format_duration_str(secs)),
+            None => format!("{}%", s.weight),
+        })
+        .collect::<Vec<_>>()
+        .join(" -> ");
+
+    ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Set(cfg));
+    println!("Staged: progressive rollout = {schedule}");
+    Ok(())
+}
+
+fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+    let n: u32 = arg
+        .ok_or_else(|| anyhow::anyhow!("Usage: FEATURE progressive sample <n>"))?
+        .to_string()
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Sample size must be a non-negative number."))?;
+
+    let Some(mut cfg) = effective_rollout(&ctx) else {
+        bail!(
+            "No progressive rollout configured yet. Use \"FEATURE progressive rules ...\" first."
+        );
+    };
+    cfg.min_sample_size = n;
+
+    ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Set(cfg));
+    println!("Staged: progressive rollout minimum sample size = {n}");
+    Ok(())
+}
+
+fn progressive_off(session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if ctx.feature.is_none() {
+        bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
+    }
+    ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Unset);
+    println!("Staged: progressive rollout disabled");
+    Ok(())
+}
+
+fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let feature = ctx.feature.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+    })?;
+    let path = ctx
+        .env_resource()
+        .subpath(format!("/features/{}/rollout", feature.id));
+    let status: Option<RolloutStatus> = ctx.client.get(path)?;
+    drop(ctx);
+
+    match status {
+        Some(status) => status.display(None, &()),
+        None => println!("No progressive rollout configured for this feature."),
+    }
+    Ok(())
+}
+
+/// Parses a duration like `6h`, `2d`, `30m`, `45s` into seconds - a single numeric value
+/// followed by one of `s`/`m`/`h`/`d` (seconds/minutes/hours/days).
+fn parse_duration(s: &str) -> anyhow::Result<u32> {
+    let s = s.trim();
+    if s.len() < 2 {
+        bail!("Invalid duration '{s}'. Expected e.g. 6h, 2d, 30m, 45s.");
+    }
+    let (num, unit) = s.split_at(s.len() - 1);
+    let n: u32 = num
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid duration '{s}'. Expected e.g. 6h, 2d, 30m, 45s."))?;
+    let multiplier = match unit {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3600,
+        "d" => 86400,
+        _ => bail!("Invalid duration unit in '{s}'. Expected one of: s, m, h, d."),
+    };
+    Ok(n * multiplier)
+}
+
+/// Formats a duration in seconds back into a compact human string, e.g. `1d 2h`. The
+/// inverse of [`parse_duration`], used to echo back a just-staged schedule.
+fn format_duration_str(mut secs: u32) -> String {
+    let days = secs / 86400;
+    secs %= 86400;
+    let hours = secs / 3600;
+    secs %= 3600;
+    let minutes = secs / 60;
+    secs %= 60;
+
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if minutes > 0 {
+        parts.push(format!("{minutes}m"));
+    }
+    if secs > 0 || parts.is_empty() {
+        parts.push(format!("{secs}s"));
+    }
+    parts.join(" ")
 }

@@ -13,6 +13,7 @@ flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
 serde = {workspace = true}
 serde_json = {workspace = true}
 anyhow = {workspace = true}
+chrono = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = { workspace = true }
 fancy-table = "0.4.3"

@@ -62,6 +62,10 @@ pub fn init_router() -> Router<AppState> {
             delete(features::clear_distribution),
         )
         .route(
+            "/envs/:environment/features/:feature_id/rollout",
+            get(features::get_rollout_status),
+        )
+        .route(
             "/envs/:environment/features/:feature_id/variants",
             get(variants::list),
         )
