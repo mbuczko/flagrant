@@ -33,7 +33,7 @@ pub enum TraitPatchOp {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub enum TagPatchOp {
     Add(
-        #[validate(pattern = r"^[a-z0-9+_.]+$")]
+        #[validate(pattern = r"^[A-Za-z0-9][A-Za-z0-9+_.-]*$")]
         #[validate(max_length = 32)]
         String,
     ),

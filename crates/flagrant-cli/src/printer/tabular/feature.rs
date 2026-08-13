@@ -129,16 +129,9 @@ impl Tabular for Feature {
             } else {
                 eff_tags
                     .iter()
-                    // Staged-removed tags are kept visible (not dropped) so they still show
-                    // up in the list, colored red, instead of silently vanishing.
                     .map(|t| {
-                        if t.is_deleted {
-                            t.name.red().to_string()
-                        } else if t.is_staged_add {
-                            t.name.green().to_string()
-                        } else {
-                            t.name.clone()
-                        }
+                        legend::stage_color(t.name.as_str(), t.is_deleted, t.is_staged_add, false)
+                            .into_owned()
                     })
                     .collect::<Vec<_>>()
                     .join(", ")

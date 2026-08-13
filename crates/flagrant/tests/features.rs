@@ -1281,13 +1281,28 @@ fn tag_patch_validation_rejects_bad_names_and_accepts_good_ones() {
     };
     assert!(comma.validate().is_err(), "comma should be rejected");
 
+    let leading_hyphen = FeaturePatch {
+        tags: vec![TagPatchOp::Add("-foo".to_owned())],
+        ..Default::default()
+    };
+    assert!(
+        leading_hyphen.validate().is_err(),
+        "leading hyphen should be rejected - it would collide with `FEATURE tag -name`'s remove syntax"
+    );
+
     let uppercase = FeaturePatch {
         tags: vec![TagPatchOp::Add("Foo".to_owned())],
         ..Default::default()
     };
+    assert!(uppercase.validate().is_ok(), "uppercase should be allowed");
+
+    let mid_hyphen = FeaturePatch {
+        tags: vec![TagPatchOp::Add("front-end".to_owned())],
+        ..Default::default()
+    };
     assert!(
-        uppercase.validate().is_err(),
-        "uppercase should be rejected"
+        mid_hyphen.validate().is_ok(),
+        "hyphen not in leading position should be allowed"
     );
 
     let good = FeaturePatch {
