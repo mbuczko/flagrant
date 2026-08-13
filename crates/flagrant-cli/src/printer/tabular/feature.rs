@@ -18,7 +18,7 @@ pub enum IdentityPending {
         variant_value: VariantValue,
     },
     /// The existing override was staged for removal (`OVERRIDE delete`).
-    Unpin(String),
+    UnsetOverride(String),
 }
 
 /// Context passed to `Feature::display` to show both committed and pending overrides.
@@ -333,7 +333,7 @@ fn identity_override_line(
     let mut parts: Vec<String> = committed
         .iter()
         .map(|(id, variant_id)| match &ctx.identity_pending {
-            Some(IdentityPending::Unpin(pending_id)) if pending_id == id => {
+            Some(IdentityPending::UnsetOverride(pending_id)) if pending_id == id => {
                 format!("{id} → {}", variant_label(*variant_id, variants))
                     .red()
                     .dimmed()

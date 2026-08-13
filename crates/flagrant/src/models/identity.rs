@@ -362,7 +362,7 @@ pub async fn patch(
         .map_err(|e| FlagrantError::QueryFailed("Could not set variant override", e))?;
     }
 
-    for feature_name in patch.unpins {
+    for feature_name in patch.unset_overrides {
         let feat = feature::get_by_name(&mut tx, environment, &feature_name).await?;
         SQLIdentities::delete_identity_variant_for_feature(
             &mut *tx,

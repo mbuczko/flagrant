@@ -271,9 +271,9 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let identity_pending = ctx.identity_patch.as_ref().and_then(|ipatch| {
         let identity_value = ctx.identity.as_ref()?.value.clone();
 
-        // Any recent unpins (discarded overrides)?
-        if ipatch.unpins.contains(&feature.name) {
-            return Some(IdentityPending::Unpin(identity_value));
+        // Any recent unset overrides (discarded overrides)?
+        if ipatch.unset_overrides.contains(&feature.name) {
+            return Some(IdentityPending::UnsetOverride(identity_value));
         }
 
         // ...or newly added overrides?

@@ -3,8 +3,8 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, VariantValue, GroupConnector, IdentityWithTraits, Project,
-    Segment, Snapshot, Subject, TraitValue,
+    Comparator, Environment, Feature, GroupConnector, IdentityWithTraits, Project, Segment,
+    Snapshot, Subject, TraitValue, VariantValue,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -152,8 +152,8 @@ pub struct IdentityOverridePatch {
 pub struct IdentityPatch {
     pub traits: Vec<TraitPatchOp>,
     pub overrides: Vec<IdentityOverridePatch>,
-    /// Feature names whose variant assignment should be deleted (identity freed for distribution).
-    pub unpins: Vec<String>,
+    /// Feature names whose override should be unset (identity freed for distribution).
+    pub unset_overrides: Vec<String>,
     /// Stages deletion of the entire identity. When set, every other field/op in the same
     /// patch is ignored - the identity is deleted and nothing else is applied.
     pub delete: bool,
@@ -163,7 +163,7 @@ impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
         self.traits.is_empty()
             && self.overrides.is_empty()
-            && self.unpins.is_empty()
+            && self.unset_overrides.is_empty()
             && !self.delete
     }
 }

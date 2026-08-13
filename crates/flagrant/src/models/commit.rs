@@ -42,11 +42,12 @@ pub async fn apply(
     let updated_identity = if let Some(part) = payload.identity {
         let current = identity::get_by_value(&mut tx, environment, part.value.clone()).await?;
 
-        // Overrides/unpins name features by value, not id - resolve to ids up front so we
-        // can record affected pairs regardless of what identity::patch does internally.
-        // Skipped entirely when the patch stages a delete: identity::patch ignores
-        // overrides/unpins in that case (the identity - and its pins - are just gone), so
-        // resolving them here would record pairs that were never actually applied.
+        // Overrides/unset_overrides name features by value, not id - resolve to ids up
+        // front so we can record affected pairs regardless of what identity::patch does
+        // internally. Skipped entirely when the patch stages a delete: identity::patch
+        // ignores overrides/unset_overrides in that case (the identity - and its
+        // overrides - are just gone), so resolving them here would record pairs that
+        // were never actually applied.
         if !part.patch.delete {
             for ovr in &part.patch.overrides {
                 if let Ok(feat) =
@@ -55,7 +56,7 @@ pub async fn apply(
                     affected.insert((feat.id, environment.id));
                 }
             }
-            for feature_name in &part.patch.unpins {
+            for feature_name in &part.patch.unset_overrides {
                 if let Ok(feat) = feature::get_by_name(&mut tx, environment, feature_name).await {
                     affected.insert((feat.id, environment.id));
                 }
