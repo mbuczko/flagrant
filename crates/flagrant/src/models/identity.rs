@@ -13,7 +13,6 @@ use sqlx::{Connection, SqliteConnection};
 
 use crate::{distributor, errors::FlagrantError, evaluator};
 
-use super::surround_string;
 use super::traits::upsert;
 use super::variant;
 
@@ -70,27 +69,16 @@ impl<'a> TraitCondition<'a> {
 }
 
 /// Encodes trait conditions as a JSON array of `[name, [value, ...] | null]` entries,
-/// suitable for SQLite's `json_each()`. Returns `None` when `conditions` is `None`.
+/// suitable for SQLite's `json_each()`. Goes through real JSON serialization since a
+/// name or value containing a `"` or `,` would otherwise corrupt the array's structure
+/// once embedded in the query. Returns `None` when `conditions` is `None`.
 fn conditions_into_json_string(
     conditions: Option<SmallVec<[TraitCondition<'_>; 3]>>,
 ) -> Option<String> {
     conditions.map(|conds| {
-        let items: Vec<String> = conds
-            .iter()
-            .map(|c| {
-                let values = match &c.values {
-                    Some(vals) => {
-                        let quoted: Vec<String> =
-                            vals.iter().map(|v| surround_string(v, '"', '"')).collect();
-                        surround_string(&quoted.join(","), '[', ']')
-                    }
-                    None => "null".to_owned(),
-                };
-                format!("[{},{values}]", surround_string(c.name, '"', '"'))
-            })
-            .collect();
-
-        surround_string(&items.join(","), '[', ']')
+        let items: Vec<(&str, Option<&Vec<String>>)> =
+            conds.iter().map(|c| (c.name, c.values.as_ref())).collect();
+        serde_json::to_string(&items).expect("condition array serialization cannot fail")
     })
 }
 
@@ -341,11 +329,12 @@ pub async fn patch(
 
     for ovr in patch.overrides {
         let feat = feature::get_by_name(&mut tx, environment, &ovr.feature_name).await?;
-        let variant = variant::get_by_value(&mut tx, environment, feat.id, &ovr.variant_value, None)
-            .await?
-            .ok_or(FlagrantError::BadRequest(
-                "No variant with given value found for this feature",
-            ))?;
+        let variant =
+            variant::get_by_value(&mut tx, environment, feat.id, &ovr.variant_value, None)
+                .await?
+                .ok_or(FlagrantError::BadRequest(
+                    "No variant with given value found for this feature",
+                ))?;
 
         SQLIdentities::upsert_identity_variant(
             &mut *tx,
@@ -705,7 +694,9 @@ pub async fn list_pinned_overrides(
         params![environment_id, feature_id],
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into())
+    .map_err(|e| {
+        FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into()
+    })
 }
 
 /// Returns identity values explicitly pinned (`pinned_at IS NOT NULL`) to a specific variant
@@ -724,8 +715,8 @@ pub async fn list_identities_pinned_to_variant(
     .await
     .map(|rows| rows.into_iter().map(|(s,)| s).collect())
     .map_err(|e| {
-            FlagrantError::QueryFailed("Could not fetch identities pinned to variant", e).into()
-        })
+        FlagrantError::QueryFailed("Could not fetch identities pinned to variant", e).into()
+    })
 }
 
 /// Removes every variant assignment (pinned and organic alike) for a feature within a

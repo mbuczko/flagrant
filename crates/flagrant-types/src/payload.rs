@@ -37,11 +37,7 @@ pub enum TagPatchOp {
         #[validate(max_length = 32)]
         String,
     ),
-    Remove(
-        #[validate(pattern = r"^[a-z0-9+_.]+$")]
-        #[validate(max_length = 32)]
-        String,
-    ),
+    Remove(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
