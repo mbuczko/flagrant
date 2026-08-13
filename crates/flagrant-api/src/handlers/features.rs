@@ -120,42 +120,6 @@ pub async fn fetch_by_id_or_name(
     Ok(Json(feature))
 }
 
-/// Updates an existing feature's name, value, and enabled state.
-///
-/// All updates are performed within a transaction. The feature value update
-/// affects the environment's control variant.
-#[utoipa::path(
-    put,
-    path = "/projects/{project}/envs/{environment}/features/{feature_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
-    ),
-    request_body = NewFeaturePayload,
-    responses(
-        (status = 200, description = "Feature updated successfully")
-    ),
-    tag = "features"
-)]
-pub async fn update(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
-    Json(payload): Json<NewFeaturePayload>,
-) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-
-    feature::update_one(&mut conn, &env, &feature)
-        .name(payload.name)
-        .value(payload.value)
-        .enabled(payload.is_enabled)
-        .update()
-        .await?;
-
-    Ok(Json(()))
-}
 
 /// Lists features optionally pre-filtered by name.
 /// Each feature includes obligatory control variant and optional non-control ones.

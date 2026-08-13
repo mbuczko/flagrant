@@ -1,12 +1,11 @@
 use axum::{
     Json,
     extract::{Path, Query},
-    http::StatusCode,
 };
-use flagrant::models::{project, rule, segment};
+use flagrant::models::{project, segment};
 use flagrant_types::{
-    Project, Segment, SegmentFeatureOverride, SegmentGroup, SegmentRule,
-    payload::{NewGroupPayload, NewRulePayload, NewSegmentPayload, SegmentVariantWeight},
+    Project, Segment, SegmentFeatureOverride,
+    payload::{NewSegmentPayload, SegmentVariantWeight},
 };
 use serde::Deserialize;
 use sqlx::SqliteConnection;
@@ -121,173 +120,6 @@ pub async fn fetch_by_id_or_name(
     let project = project::get_by_name(&mut conn, project_name).await?;
     let seg = resolve_segment(&mut conn, &project, segment_id).await?;
     Ok(Json(seg))
-}
-
-/// Updates a segment's name and description.
-#[utoipa::path(
-    put,
-    path = "/projects/{project}/segments/{segment_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name")
-    ),
-    request_body = NewSegmentPayload,
-    responses(
-        (status = 200, description = "Segment updated")
-    ),
-    tag = "segments"
-)]
-pub async fn update(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, SegmentId)>,
-    Json(payload): Json<NewSegmentPayload>,
-) -> Result<Json<()>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    segment::update(
-        &mut conn,
-        &seg,
-        &payload.name,
-        payload.description.as_deref(),
-    )
-    .await?;
-    Ok(Json(()))
-}
-
-/// Deletes a segment and all its groups and rules.
-#[utoipa::path(
-    delete,
-    path = "/projects/{project}/segments/{segment_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name")
-    ),
-    responses(
-        (status = 200, description = "Segment deleted")
-    ),
-    tag = "segments"
-)]
-pub async fn delete(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, SegmentId)>,
-) -> Result<StatusCode, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    segment::delete(&mut conn, &seg).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Adds a group to a segment.
-///
-/// The first group added is the head (connector must be omitted or null).
-/// Subsequent groups require a connector (`and` or `and_not`).
-#[utoipa::path(
-    post,
-    path = "/projects/{project}/segments/{segment_id}/groups",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name")
-    ),
-    request_body = NewGroupPayload,
-    responses(
-        (status = 200, description = "Added group", body = SegmentGroup)
-    ),
-    tag = "segments"
-)]
-pub async fn add_group(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id)): Path<(String, SegmentId)>,
-    Json(payload): Json<NewGroupPayload>,
-) -> Result<Json<SegmentGroup>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    let group = segment::add_group(&mut conn, &seg, payload.description, payload.connector).await?;
-    Ok(Json(group))
-}
-
-/// Removes a group and all its rules from a segment.
-#[utoipa::path(
-    delete,
-    path = "/projects/{project}/segments/{segment_id}/groups/{group_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name"),
-        ("group_id" = i32, Path, description = "Group ID")
-    ),
-    responses(
-        (status = 200, description = "Group deleted")
-    ),
-    tag = "segments"
-)]
-pub async fn delete_group(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id, group_id)): Path<(String, SegmentId, i32)>,
-) -> Result<StatusCode, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let seg = resolve_segment(&mut conn, &project, segment_id).await?;
-    segment::delete_group(&mut conn, &seg, group_id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Adds a rule to a group.
-#[utoipa::path(
-    post,
-    path = "/projects/{project}/segments/{segment_id}/groups/{group_id}/rules",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name"),
-        ("group_id" = i32, Path, description = "Group ID")
-    ),
-    request_body = NewRulePayload,
-    responses(
-        (status = 200, description = "Added rule", body = SegmentRule)
-    ),
-    tag = "segments"
-)]
-pub async fn add_rule(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id, group_id)): Path<(String, SegmentId, i32)>,
-    Json(payload): Json<NewRulePayload>,
-) -> Result<Json<SegmentRule>, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let segment = resolve_segment(&mut conn, &project, segment_id).await?;
-    let rule = rule::add(
-        &mut conn,
-        segment.id,
-        group_id,
-        payload.subject,
-        payload.comparator,
-        payload.value,
-    )
-    .await?;
-
-    Ok(Json(rule))
-}
-
-/// Removes a rule from a group.
-#[utoipa::path(
-    delete,
-    path = "/projects/{project}/segments/{segment_id}/groups/{group_id}/rules/{rule_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("segment_id" = String, Path, description = "Segment ID or name"),
-        ("group_id" = i32, Path, description = "Group ID"),
-        ("rule_id" = i32, Path, description = "Rule ID")
-    ),
-    responses(
-        (status = 200, description = "Rule deleted")
-    ),
-    tag = "segments"
-)]
-pub async fn delete_rule(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, segment_id, _group_id, rule_id)): Path<(String, SegmentId, i32, i32)>,
-) -> Result<StatusCode, ServiceError> {
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let segment = resolve_segment(&mut conn, &project, segment_id).await?;
-
-    rule::delete(&mut conn, segment.id, rule_id).await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Returns stored variant weight overrides for a segment+feature+environment.

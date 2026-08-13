@@ -77,12 +77,6 @@ pub struct NewFeaturePayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewVariantPayload {
-    pub value: String,
-    pub weight: u8,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewIdentityPayload {
     pub identity: String,
     pub traits: Option<Vec<IdentityTraitPayload>>,
@@ -178,20 +172,6 @@ impl IdentityPatch {
 pub struct NewSegmentPayload {
     pub name: String,
     pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewGroupPayload {
-    pub description: Option<String>,
-    /// Required for all groups except the first (head) group of a segment.
-    pub connector: Option<GroupConnector>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewRulePayload {
-    pub subject: Subject,
-    pub comparator: Comparator,
-    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
