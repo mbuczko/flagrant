@@ -13,7 +13,7 @@ An **identity** is a caller recognized across requests, identified by an arbitra
 - `IDENTITY delete <identity>` - delete identities matching a pattern (`*` wildcard)
 - `IDENTITY use <identity>` - switch into an identity context
 
-### Example scenarios
+### Use-cases
 
 - **Sticky assignment**: no overrides at all, just weights. An identity lands on a variant the first time it's seen, and keeps seeing that same one on every later request.
 - **VIP pinning**: `FEATURE use theme@alice` then `OVERRIDE add dark` forces `alice` onto the `dark` variant regardless of the feature's normal weights.

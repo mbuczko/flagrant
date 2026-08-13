@@ -19,7 +19,7 @@ A **feature** is a named flag scoped to a project + environment (e.g. `prod`, `s
 - `FEATURE list status:on` - only enabled features (`on`, `off`, or `archived`)
 - `FEATURE list status:on tag:beta` - filters combine, narrowing to enabled features tagged `beta`
 
-### Example scenarios
+### Use-cases
 
 - **Kill switch**: a feature with only the control variant. `FEATURE status off` disables it for everyone instantly, no variants needed.
 - **A/B test**: two variants, `dark` and `light`, each weighted 50. Roughly half of identities land on one, half on the other, and each identity keeps seeing the same one.

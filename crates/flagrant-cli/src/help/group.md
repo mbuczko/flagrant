@@ -18,7 +18,7 @@ A **group** is a set of OR-ed rules: it matches if *any* of its rules matches. A
 - `GROUP describe group-1 "power users"` - stage a description for `group-1`
 - `GROUP delete group-2` - stage removal of `group-2`
 
-### Example scenarios
+### Use-cases
 
 - **Single condition**: one group with one rule, e.g. `trait:plan exactly_matches pro`. The simplest segment: match on that condition alone.
 - **Alternatives within a condition (OR)**: one group with several rules, e.g. `identity exactly_matches alice` and `identity exactly_matches bob`. The group matches if either holds, useful for an explicit allowlist of test accounts.

@@ -1,7 +1,7 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Feature, FeatureOverride, VariantValue, Variant,
+    Feature, FeatureOverride, Variant, VariantValue,
     payload::{FeaturePatch, SegmentVariantWeight},
 };
 
@@ -275,7 +275,7 @@ impl Tabular for Feature {
                 10,
             )
             .width(Width::Percentage(100))
-            .add_title_with_align(&title, TitleAlign::LeftOffset(6))
+            .add_title_with_align(&title, TitleAlign::LeftOffset(10))
             .build();
 
         let mut rows = vec![

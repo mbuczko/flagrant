@@ -67,7 +67,7 @@ impl Tabular for EffectiveRule {
                 10,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(10))
             .width(Width::Percentage(100))
             .build();
 

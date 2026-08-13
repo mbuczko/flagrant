@@ -95,12 +95,7 @@ impl Tabular for Segment {
 
         for o in &ctx.overrides {
             let parts = overridden_variant_parts(&o.weights);
-            let plain_line = format!(
-                "{} › {} {}",
-                "feature".bright_blue(),
-                o.feature_name.dimmed(),
-                parts.join(", ")
-            );
+            let plain_line = format!("{} {}", o.feature_name.dimmed(), parts.join(", "));
 
             if is_deleted {
                 overrides_lines.push(plain_line.red().to_string());
@@ -143,7 +138,7 @@ impl Tabular for Segment {
                 20,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(10))
             .width(Width::Percentage(100))
             .build();
 
@@ -154,7 +149,7 @@ impl Tabular for Segment {
         let overrides_str = overrides_lines.join("\n");
 
         if !overrides_str.is_empty() {
-            rows.push(vec!["overrides".to_string(), overrides_str]);
+            rows.push(vec!["feature overrides".to_string(), overrides_str]);
         }
         rows.push(vec!["description".to_string(), desc_str]);
         table.render(rows);
@@ -183,7 +178,7 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
             format!(
                 "{marker}{} → {}",
                 w.value.bare_first_line(),
-                format!("{}%", w.weight).bold()
+                format!("{}%", w.weight)
             )
         })
         .collect()

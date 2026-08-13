@@ -55,7 +55,7 @@ impl Tabular for EffectiveGroup {
                 nlines,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(5))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(9))
             .width(Width::Percentage(100))
             .build();
         table.render(vec![
