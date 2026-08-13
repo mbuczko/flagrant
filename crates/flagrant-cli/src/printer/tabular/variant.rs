@@ -18,13 +18,17 @@ impl Tabular for EffectiveVariant {
         let (index, identities) = ctx;
         let title = format!("VARIANT #{index}").bold().to_string();
 
+        let (type_str, bare_value) = variant.value.decompose();
+
         let value_s = legend::stage_color(
-            variant.value.bare(),
+            bare_value,
             variant.is_deleted,
             variant.is_staged_add,
             variant.value_modified,
         )
         .into_owned();
+
+        let type_s = type_str.dimmed().to_string();
 
         let weight_str = format!("{}%", variant.weight);
         let weight_s = legend::stage_color(
@@ -68,8 +72,9 @@ impl Tabular for EffectiveVariant {
 
         table.render(vec![
             vec!["weight".to_string(), weight_s],
-            vec!["value".to_string(), value_s],
             vec!["control".to_string(), control_s],
+            vec!["value".to_string(), value_s],
+            vec!["value type".to_string(), type_s],
             vec!["pinned identities".to_string(), identities_s],
         ]);
 
