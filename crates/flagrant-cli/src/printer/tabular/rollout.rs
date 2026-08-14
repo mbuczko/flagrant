@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::Local;
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::RolloutStatus;
@@ -36,6 +36,13 @@ impl Tabular for RolloutStatus {
         let is_terminal = idx + 1 >= step_count;
         let sample_ok = self.distributed_identities >= self.config.min_sample_size as i64;
 
+        // `last_change_at` is a naive UTC timestamp (the server records it via
+        // `Utc::now().naive_utc()`) - anchor it to `Utc` explicitly, then convert to the
+        // system's local timezone, so both the elapsed-time math and the displayed
+        // timestamp below reflect the user's actual clock/timezone settings rather than
+        // silently showing UTC as if it were local.
+        let last_change_local = self.last_change_at.and_utc().with_timezone(&Local);
+
         let next_str = if is_terminal {
             "rollout complete".dimmed().to_string()
         } else if idx == 0 && !sample_ok {
@@ -48,9 +55,7 @@ impl Tabular for RolloutStatus {
         } else {
             match current.and_then(|s| s.hold_for_secs) {
                 Some(hold) => {
-                    let elapsed = Utc::now()
-                        .naive_utc()
-                        .signed_duration_since(self.last_change_at);
+                    let elapsed = Local::now().signed_duration_since(last_change_local);
                     let remaining = hold as i64 - elapsed.num_seconds();
                     if remaining <= 0 {
                         "due - will advance on next read".green().to_string()
@@ -70,7 +75,10 @@ impl Tabular for RolloutStatus {
         let rows = vec![
             vec!["step".to_string(), step_str],
             vec!["schedule".to_string(), schedule_str],
-            vec!["last change".to_string(), self.last_change_at.to_string()],
+            vec![
+                "last change".to_string(),
+                last_change_local.format("%Y-%m-%d %H:%M:%S").to_string(),
+            ],
             vec!["next step".to_string(), next_str],
             vec!["sample".to_string(), sample_str],
         ];

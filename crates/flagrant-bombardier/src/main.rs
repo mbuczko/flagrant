@@ -9,6 +9,7 @@ use std::{
 };
 
 use argh::FromArgs;
+use colored::Colorize;
 use flagrant_client::{connection::Connection, http::Auth};
 use flagrant_types::{Feature, FeatureResponse, VariantValue};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -44,7 +45,7 @@ struct Args {
 
     /// number of additional named identities (tester-1, tester-2, ...) seeded and printed
     /// up front, for manually testing segment/identity overrides via the CLI (default: 10)
-    #[argh(option, short = 'm', default = "10")]
+    #[argh(option, short = 'm', default = "0")]
     named_idents: usize,
 
     /// number of worker threads polling the API concurrently (default: 1)
@@ -83,9 +84,9 @@ pub fn main() -> anyhow::Result<()> {
     IDX.store(args.named_idents, Ordering::SeqCst);
 
     println!(
-        "Seeded {} named identities for manual testing: {}",
+        "Seeded {} {} named identities for manual testing.",
         named.len(),
-        named.join(", ")
+        "tester-n".green(),
     );
     println!();
 

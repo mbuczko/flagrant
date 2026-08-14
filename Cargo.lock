@@ -844,6 +844,7 @@ version = "0.0.15"
 dependencies = [
  "anyhow",
  "argh",
+ "colored",
  "flagrant-client",
  "flagrant-types",
  "indicatif",

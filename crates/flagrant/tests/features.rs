@@ -82,17 +82,30 @@ async fn same_control_value_is_allowed_across_environments(mut conn: PoolConnect
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
     // Both environments set the same control value - this must not violate the unique constraint.
-    feature::update_one(&mut conn, &environment1, &feature)
-        .value(value.clone())
-        .update()
-        .await
-        .unwrap();
+    variant::update(
+        &mut conn,
+        &environment1,
+        feature.id,
+        feature.get_default_variant(),
+    )
+    .value(value.clone())
+    .update()
+    .await
+    .unwrap();
 
-    feature::update_one(&mut conn, &environment2, &feature)
-        .value(value.clone())
-        .update()
+    let feature2 = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
+    variant::update(
+        &mut conn,
+        &environment2,
+        feature.id,
+        feature2.get_default_variant(),
+    )
+    .value(value.clone())
+    .update()
+    .await
+    .unwrap();
 
     assert_eq!(
         feature::get_by_id(&mut conn, &environment1, feature.id)
@@ -136,11 +149,16 @@ async fn create_feature_with_missing_default_variant_in_other_env(
     assert_eq!(feature.variants.len(), 2);
 
     // Updating the default value in environment2 does not affect environment1.
-    feature::update_one(&mut conn, &environment2, &feature)
-        .value(VariantValue::build("bazz"))
-        .update()
-        .await
-        .unwrap();
+    variant::update(
+        &mut conn,
+        &environment2,
+        feature.id,
+        feature.get_default_variant(),
+    )
+    .value(VariantValue::build("bazz"))
+    .update()
+    .await
+    .unwrap();
 
     let feature = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
@@ -154,11 +172,19 @@ async fn create_feature_with_different_values_in_envs(mut conn: PoolConnection<S
     let environment2 = create_environment(&mut conn, &project).await;
     let feature = create_feature(&mut conn, &environment1, "foo").await;
 
-    feature::update_one(&mut conn, &environment2, &feature)
-        .value(VariantValue::build("bazz"))
-        .update()
+    let feature2 = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
+    variant::update(
+        &mut conn,
+        &environment2,
+        feature.id,
+        feature2.get_default_variant(),
+    )
+    .value(VariantValue::build("bazz"))
+    .update()
+    .await
+    .unwrap();
 
     let vv1 = VariantValue::Text("foo".to_string());
     let vv2 = VariantValue::Text("bazz".to_string());
@@ -401,7 +427,10 @@ async fn update_variant_to_duplicate_value_is_rejected(mut conn: PoolConnection<
     .unwrap();
 
     // Updating v1's value to "baz" conflicts with the second variant.
-    let err = variant::update(&mut conn, &environment, &v1, VariantValue::build("baz"), 10)
+    let err = variant::update(&mut conn, &environment, feature.id, &v1)
+        .value(VariantValue::build("baz"))
+        .weight(10)
+        .update()
         .await
         .unwrap_err();
 
@@ -504,21 +533,26 @@ async fn create_variants_with_different_weights_in_envs(mut conn: PoolConnection
     .await
     .unwrap();
 
-    feature::update_one(&mut conn, &environment2, &feature)
-        .value(VariantValue::build("bazz"))
-        .update()
+    let feature2 = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
-
     variant::update(
         &mut conn,
         &environment2,
-        &variant,
-        VariantValue::build("new-bar"),
-        99,
+        feature.id,
+        feature2.get_default_variant(),
     )
+    .value(VariantValue::build("bazz"))
+    .update()
     .await
     .unwrap();
+
+    variant::update(&mut conn, &environment2, feature.id, &variant)
+        .value(VariantValue::build("new-bar"))
+        .weight(99)
+        .update()
+        .await
+        .unwrap();
 
     let variant_env1 = variant::get_by_id(&mut conn, &environment1, variant.id, None)
         .await
@@ -543,15 +577,12 @@ async fn disallow_default_variant_manual_updates(mut conn: PoolConnection<Sqlite
     let feature = create_feature(&mut conn, &environment, "foo").await;
     let default_variant = feature.get_default_variant();
 
-    variant::update(
-        &mut conn,
-        &environment,
-        default_variant,
-        VariantValue::build("bar"),
-        50,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, default_variant)
+        .value(VariantValue::build("bar"))
+        .weight(50)
+        .update()
+        .await
+        .unwrap();
 }
 
 #[sqlx::test]
@@ -589,15 +620,12 @@ async fn recalculate_default_weight_for_variant_update(mut conn: PoolConnection<
     .await
     .unwrap();
 
-    variant::update(
-        &mut conn,
-        &environment,
-        &variant,
-        VariantValue::build("new-bar-3"),
-        50,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &variant)
+        .value(VariantValue::build("new-bar-3"))
+        .weight(50)
+        .update()
+        .await
+        .unwrap();
 
     let feature = feature::get_by_id(&mut conn, &environment, feature.id)
         .await
@@ -693,15 +721,12 @@ async fn ignore_default_weight_recalculation_for_exceeding_weight_update(
     .unwrap();
 
     assert!(
-        variant::update(
-            &mut conn,
-            &environment,
-            &variant,
-            VariantValue::build("new-bar-3"),
-            80
-        )
-        .await
-        .is_err()
+        variant::update(&mut conn, &environment, feature.id, &variant)
+            .value(VariantValue::build("new-bar-3"))
+            .weight(80)
+            .update()
+            .await
+            .is_err()
     );
 
     // Default weight should retain old value
@@ -1021,11 +1046,19 @@ async fn get_variant_by_value_respects_environment_scope(mut conn: PoolConnectio
     let feature = create_feature(&mut conn, &environment1, "control-env1").await;
 
     // Give env2 a distinct control value.
-    feature::update_one(&mut conn, &environment2, &feature)
-        .value(VariantValue::build("control-env2"))
-        .update()
+    let feature2 = feature::get_by_id(&mut conn, &environment2, feature.id)
         .await
         .unwrap();
+    variant::update(
+        &mut conn,
+        &environment2,
+        feature.id,
+        feature2.get_default_variant(),
+    )
+    .value(VariantValue::build("control-env2"))
+    .update()
+    .await
+    .unwrap();
 
     // Add a shared (non-control, NULL env_id) variant visible in both environments.
     variant::create(

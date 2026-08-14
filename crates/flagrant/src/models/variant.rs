@@ -23,6 +23,15 @@ struct OverriddenFeatureRow {
     weight: u8,
 }
 
+pub struct VariantUpdate<'a> {
+    conn: &'a mut SqliteConnection,
+    environment: &'a Environment,
+    feature_id: i32,
+    variant: &'a Variant,
+    new_value: Option<VariantValue>,
+    new_weight: Option<u8>,
+}
+
 /// Creates or updates the control variant of the given feature.
 ///
 /// The control variant represents the environment-specific feature value returned when either
@@ -41,19 +50,19 @@ struct OverriddenFeatureRow {
 pub(crate) async fn create_control(
     conn: &mut SqliteConnection,
     environment: &Environment,
-    feature: &Feature,
+    feature_id: i32,
     value: VariantValue,
 ) -> anyhow::Result<Variant> {
     let mut tx = conn.begin().await?;
     let variant_id = SQLVariants::upsert_control_variant(
         &mut *tx,
-        params![environment.id, feature.id, &value],
+        params![environment.id, feature_id, &value],
         |v| v.get("variant_id"),
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not upsert default variant", e))?;
 
-    balance_control_weight(&mut tx, environment, feature.id, variant_id, 0).await?;
+    balance_control_weight(&mut tx, environment, feature_id, variant_id, 0).await?;
     tx.commit().await?;
 
     Ok(Variant::build_default(environment, variant_id, value))
@@ -115,52 +124,103 @@ pub async fn create(
     Ok(Variant::build(variant_id, value, weight))
 }
 
-/// Updates a variant's value (shared across environments).
+/// Builder for updating a single variant's value and/or weight. Only the fields
+/// actually staged via [`Self::value`]/[`Self::weight`] are applied - unstaged
+/// fields keep their current value.
 ///
-/// Rejects updates to control variants - use `feature::update` to change the control
-/// value. Returns the variant's `feature_id` for use in post-update weight balancing.
-async fn update_value(
-    conn: &mut SqliteConnection,
-    variant: &Variant,
-    new_value: VariantValue,
-) -> anyhow::Result<i32> {
-    if variant.is_control() {
-        bail!("Control variant is immutable. Use feature::update to adjust its value.");
-    }
-    SQLVariants::update_variant_value(&mut *conn, params![variant.id, new_value], |v| {
-        v.get("feature_id")
-    })
-    .await
-    .map_err(|e| -> anyhow::Error {
-        if let sqlx::Error::Database(db_err) = &e
-            && db_err.is_unique_violation()
-        {
-            return FlagrantError::BadRequest(
-                "A variant with this value already exists for this feature",
-            )
-            .into();
+/// Weight is meaningless for the control variant (it's always the auto-computed
+/// remainder, never user-settable), so [`Self::update`] rejects outright if
+/// [`Self::weight`] was called on a control variant - the builder shape lets that be
+/// caught before touching the database, rather than silently ignored or accepted and
+/// immediately overwritten by the next rebalance.
+impl<'a> VariantUpdate<'a> {
+    fn new(
+        conn: &'a mut SqliteConnection,
+        environment: &'a Environment,
+        feature_id: i32,
+        variant: &'a Variant,
+    ) -> Self {
+        Self {
+            conn,
+            environment,
+            feature_id,
+            variant,
+            new_value: None,
+            new_weight: None,
         }
-        FlagrantError::QueryFailed("Could not update variant value", e).into()
-    })
+    }
+    pub fn value(mut self, value: VariantValue) -> Self {
+        self.new_value = Some(value);
+        self
+    }
+    pub fn weight(mut self, weight: u8) -> Self {
+        self.new_weight = Some(weight);
+        self
+    }
+    pub async fn update(self) -> anyhow::Result<()> {
+        if self.variant.is_control() {
+            if self.new_weight.is_some() {
+                bail!(FlagrantError::InvalidOperation(
+                    "Setting weight on control variant is not allowed. Weight is auto-adjusted.",
+                ));
+            }
+            // No-op if neither value nor weight was staged - control's weight is always
+            // rejected above, so reaching here with `new_value: None` means nothing was
+            // actually requested.
+            let Some(value) = self.new_value else {
+                return Ok(());
+            };
+            create_control(self.conn, self.environment, self.feature_id, value).await?;
+            return Ok(());
+        }
+
+        if self.new_value.is_none() && self.new_weight.is_none() {
+            return Ok(());
+        }
+
+        let weight = self.new_weight.unwrap_or(self.variant.weight);
+        let mut tx = self.conn.begin().await?;
+
+        if let Some(value) = self.new_value {
+            SQLVariants::update_variant_value(&mut *tx, params![self.variant.id, value])
+                .await
+                .map_err(|e| -> anyhow::Error {
+                    if let sqlx::Error::Database(db_err) = &e
+                        && db_err.is_unique_violation()
+                    {
+                        return FlagrantError::BadRequest(
+                            "A variant with this value already exists for this feature",
+                        )
+                        .into();
+                    }
+                    FlagrantError::QueryFailed("Could not update variant value", e).into()
+                })?;
+        }
+        set_weight_and_rebalance(
+            &mut tx,
+            self.environment,
+            self.feature_id,
+            self.variant,
+            weight,
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
 }
 
-/// Updates a single variant with `new_value` and `new_weight`.
-///
-/// Rejects modifications to the control variant, whose weight is auto-adjusted and
-/// whose value can only be changed via `feature::update`.
-pub async fn update(
-    conn: &mut SqliteConnection,
-    environment: &Environment,
-    variant: &Variant,
-    new_value: VariantValue,
-    new_weight: u8,
-) -> anyhow::Result<()> {
-    let mut tx = conn.begin().await?;
-    let feature_id = update_value(&mut tx, variant, new_value).await?;
-    set_weight_and_rebalance(&mut tx, environment, feature_id, variant, new_weight).await?;
-
-    tx.commit().await?;
-    Ok(())
+/// Starts a [`VariantUpdate`] for `variant` - stage changes via `.value(...)`/`.weight(...)`
+/// and apply them with `.update().await`. Transparently routes to the right underlying
+/// mechanism (a plain value/weight update, or the control variant's per-environment
+/// upsert) depending on whether `variant` is the control variant.
+pub fn update<'a>(
+    conn: &'a mut SqliteConnection,
+    environment: &'a Environment,
+    feature_id: i32,
+    variant: &'a Variant,
+) -> VariantUpdate<'a> {
+    VariantUpdate::new(conn, environment, feature_id, variant)
 }
 
 /// Returns variant of given id.
