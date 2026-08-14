@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use flagrant_types::{
-    Environment, Feature, Project, TagList, Variant, VariantValue,
+    Environment, Feature, Project, RolloutConfig, TagList, Variant, VariantValue,
     payload::{FeaturePatch, RolloutPatchOp, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
@@ -380,6 +380,31 @@ pub async fn patch(
 
     tx.commit().await?;
     get_by_id(conn, environment, feature.id).await.map(Some)
+}
+
+/// Force-sets (or clears) a feature's progressive-rollout config directly, bypassing the
+/// validation/step-reset machinery in [`patch`] - used only by `snapshot::restore`, which
+/// needs to restore a config and a specific historical step together, atomically, rather
+/// than going through `RolloutPatchOp::Set`'s normal "always reset to step 0" behavior.
+pub(crate) async fn restore_rollout_config(
+    conn: &mut SqliteConnection,
+    feature_id: i32,
+    config: Option<&RolloutConfig>,
+) -> anyhow::Result<()> {
+    match config {
+        Some(cfg) => {
+            let rollout_json = serde_json::to_string(cfg)?;
+            SQLFeatures::update_feature_rollout(conn, params![feature_id, rollout_json])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not restore progressive rollout", e))?;
+        }
+        None => {
+            SQLFeatures::clear_feature_rollout(conn, params![feature_id])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not clear progressive rollout", e))?;
+        }
+    }
+    Ok(())
 }
 
 /// Permanently deletes a feature and all of its variants within a single transaction.

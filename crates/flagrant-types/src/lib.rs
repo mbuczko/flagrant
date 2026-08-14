@@ -465,9 +465,13 @@ pub struct SnapshotState {
     pub variants: Vec<SnapshotVariant>,
     pub segment_overrides: Vec<SnapshotSegmentOverride>,
     pub identity_overrides: Vec<SnapshotIdentityOverride>,
-    /// The progressive rollout's step index at capture time, if the feature had one
-    /// active. Lets `snapshot::restore` roll back progression alongside weight - the
-    /// schedule/rules themselves are feature-level config, not part of this snapshot.
+    /// The progressive rollout's config and step index at capture time, if the feature
+    /// had one active - `None`/`None` otherwise. Captured together (not just the step)
+    /// so a restore is self-contained: a step index only means something relative to
+    /// the exact schedule it was recorded against, which may have since been replaced by
+    /// a different one (a rule change resets progression to step 0 going forward, but
+    /// that offers no protection for an *older* snapshot predating the change).
+    pub rollout_config: Option<RolloutConfig>,
     pub rollout_step: Option<i32>,
 }
 

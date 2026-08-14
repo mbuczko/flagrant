@@ -702,3 +702,106 @@ async fn restoring_a_snapshot_rolls_back_rollout_progression(mut conn: PoolConne
         "restoring to v1 should roll back progression, not just weight"
     );
 }
+
+/// Regression test: a snapshot taken mid-progression under one schedule, restored *after*
+/// the rules have since been replaced by a different schedule, must bring back the
+/// original schedule too - not just re-apply a step index that's now meaningless against
+/// whatever schedule happens to be live.
+#[sqlx::test]
+async fn restoring_a_snapshot_after_rules_changed_restores_matching_config(
+    mut conn: PoolConnection<Sqlite>,
+) {
+    let (project, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "prog").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        VariantValue::build("alt"),
+        0,
+    )
+    .await
+    .unwrap();
+
+    let v1_cfg = rollout_cfg(0, &[(10, Some(60)), (50, Some(60)), (100, None)]);
+    let feature = set_rollout(&mut conn, &environment, &feature, v1_cfg.clone())
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Catch up straight to the terminal step (100%) under v1 - this is a lazy advance, so
+    // it captures its own snapshot automatically (see `rollout::maybe_advance`).
+    backdate(&mut conn, feature.id, environment.id, 1000).await;
+    touch(&mut conn, &environment, "advance-trigger").await;
+
+    let status = rollout::get_status(&mut conn, &environment, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.current_step, 2, "sanity: should have caught up to v1's terminal step");
+
+    let snapshots = snapshot::list(&mut conn, feature.id, environment.id)
+        .await
+        .unwrap();
+    let mid_progression_version = snapshots
+        .iter()
+        .map(|s| s.version)
+        .max()
+        .expect("the catch-up advance should have recorded a snapshot");
+
+    // Now change the rules entirely - a shorter, differently-weighted schedule. This
+    // resets progression to step 0 under v2, exactly as designed.
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    let v2_cfg = rollout_cfg(0, &[(20, Some(30)), (80, None)]);
+    set_rollout(&mut conn, &environment, &feature, v2_cfg)
+        .await
+        .unwrap();
+
+    let status = rollout::get_status(&mut conn, &environment, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.current_step, 0, "sanity: changing rules resets to step 0");
+    assert_eq!(status.config.steps.len(), 2, "sanity: v2 is now live");
+
+    // Restore the snapshot captured mid-progression under v1, while v2 is live.
+    let feature = feature::get_by_id(&mut conn, &environment, feature.id)
+        .await
+        .unwrap();
+    snapshot::restore(
+        &mut conn,
+        &project,
+        &environment,
+        &feature,
+        mid_progression_version,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // The restored status must reflect v1's schedule again, not v2's - otherwise
+    // `current_step: 2` would dangle against a 2-step (indices 0..1) v2 schedule.
+    let status = rollout::get_status(&mut conn, &environment, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        status.config.steps.len(),
+        3,
+        "restore must bring back v1's schedule, not leave v2 live"
+    );
+    assert_eq!(
+        status.current_step, 2,
+        "restored step must be valid against the restored (v1) schedule"
+    );
+
+    let alt = variant::get_by_id(&mut conn, &environment, alt.id, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        alt.weight, 100,
+        "restored weight should match v1's step 2 (100%), as captured in the snapshot"
+    );
+}
