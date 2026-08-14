@@ -262,11 +262,11 @@ impl Tabular for Feature {
                 .steps
                 .iter()
                 .map(|s| match s.hold_for_secs {
-                    Some(secs) => format!("{}% for {secs}s", s.weight),
-                    None => format!("{}%", s.weight),
+                    Some(secs) => format!("{}% for {secs}s", s.weight).white().to_string(),
+                    None => format!("{}%", s.weight).white().to_string(),
                 })
                 .collect::<Vec<_>>()
-                .join(" -> ");
+                .join(" => ");
             legend::stage_color(schedule, is_deleted, false, rollout_modified).into_owned()
         });
 

@@ -12,7 +12,7 @@ impl Tabular for RolloutStatus {
     fn list(_: &[Self]) {}
 
     fn display(&self, _patch: Option<&()>, _ctx: &()) {
-        let title = "PROGRESSIVE ROLLOUT".bold().to_string();
+        let title = "PROG. ROLLOUT".bold().to_string();
         let step_count = self.config.steps.len();
         let idx = self.current_step as usize;
         let current = self.config.steps.get(idx);
@@ -27,11 +27,13 @@ impl Tabular for RolloutStatus {
             .steps
             .iter()
             .map(|s| match s.hold_for_secs {
-                Some(secs) => format!("{}% for {}", s.weight, format_duration(secs)),
-                None => format!("{}%", s.weight),
+                Some(secs) => format!("{}% for {}", s.weight, format_duration(secs))
+                    .white()
+                    .to_string(),
+                None => format!("{}%", s.weight).white().to_string(),
             })
             .collect::<Vec<_>>()
-            .join(" -> ");
+            .join(" => ");
 
         let is_terminal = idx + 1 >= step_count;
         let sample_ok = self.distributed_identities >= self.config.min_sample_size as i64;
@@ -93,7 +95,7 @@ impl Tabular for RolloutStatus {
                 5,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(9))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(4))
             .width(Width::Percentage(100))
             .build();
 
