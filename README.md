@@ -136,10 +136,10 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 
 ## What's next
 
-- [x] **Backend only flags** - allow to reach for certain flags only from the backend
+- [x] **Backend only flags** - allow to reach for certain flags only within backend-to-backend communication
 - [x] **Snapshots** - capture and restore the full state of a feature definition and its overrides at a point in time
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
-- [ ] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
+- [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 
