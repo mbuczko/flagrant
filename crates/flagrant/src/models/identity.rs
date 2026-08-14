@@ -10,10 +10,12 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, SqliteConnection};
+use std::collections::HashSet;
 
 use crate::{distributor, errors::FlagrantError, evaluator};
 
-use super::surround_string;
+use super::rollout;
+
 use super::traits::upsert;
 use super::variant;
 
@@ -70,27 +72,16 @@ impl<'a> TraitCondition<'a> {
 }
 
 /// Encodes trait conditions as a JSON array of `[name, [value, ...] | null]` entries,
-/// suitable for SQLite's `json_each()`. Returns `None` when `conditions` is `None`.
+/// suitable for SQLite's `json_each()`. Goes through real JSON serialization since a
+/// name or value containing a `"` or `,` would otherwise corrupt the array's structure
+/// once embedded in the query. Returns `None` when `conditions` is `None`.
 fn conditions_into_json_string(
     conditions: Option<SmallVec<[TraitCondition<'_>; 3]>>,
 ) -> Option<String> {
     conditions.map(|conds| {
-        let items: Vec<String> = conds
-            .iter()
-            .map(|c| {
-                let values = match &c.values {
-                    Some(vals) => {
-                        let quoted: Vec<String> =
-                            vals.iter().map(|v| surround_string(v, '"', '"')).collect();
-                        surround_string(&quoted.join(","), '[', ']')
-                    }
-                    None => "null".to_owned(),
-                };
-                format!("[{},{values}]", surround_string(c.name, '"', '"'))
-            })
-            .collect();
-
-        surround_string(&items.join(","), '[', ']')
+        let items: Vec<(&str, Option<&Vec<String>>)> =
+            conds.iter().map(|c| (c.name, c.values.as_ref())).collect();
+        serde_json::to_string(&items).expect("condition array serialization cannot fail")
     })
 }
 
@@ -341,11 +332,12 @@ pub async fn patch(
 
     for ovr in patch.overrides {
         let feat = feature::get_by_name(&mut tx, environment, &ovr.feature_name).await?;
-        let variant = variant::get_by_value(&mut tx, environment, feat.id, &ovr.variant_value, None)
-            .await?
-            .ok_or(FlagrantError::BadRequest(
-                "No variant with given value found for this feature",
-            ))?;
+        let variant =
+            variant::get_by_value(&mut tx, environment, feat.id, &ovr.variant_value, None)
+                .await?
+                .ok_or(FlagrantError::BadRequest(
+                    "No variant with given value found for this feature",
+                ))?;
 
         SQLIdentities::upsert_identity_variant(
             &mut *tx,
@@ -362,7 +354,7 @@ pub async fn patch(
         .map_err(|e| FlagrantError::QueryFailed("Could not set variant override", e))?;
     }
 
-    for feature_name in patch.unpins {
+    for feature_name in patch.unset_overrides {
         let feat = feature::get_by_name(&mut tx, environment, &feature_name).await?;
         SQLIdentities::delete_identity_variant_for_feature(
             &mut *tx,
@@ -513,8 +505,26 @@ pub async fn get_identity_variants(
     environment: &Environment,
     identity: &Identity,
 ) -> anyhow::Result<Vec<IdentityVariant>> {
+    let mut variants = variant::get_by_identity(&mut *conn, environment, &identity.value).await?;
+
+    // Advance any progressive rollouts due for the features touched here, before the
+    // resolution transaction below opens - each advance is its own self-contained commit
+    // (see `rollout::maybe_advance`). Re-fetch afterward: an advance rewrites `migrated_id`
+    // via `identity::migrate_identities` on this identity's own `identity_variants` row,
+    // which the `variants` snapshot taken above would otherwise miss until the *next* read.
+    let mut checked_features: HashSet<i32> = HashSet::new();
+    let mut any_advanced = false;
+
+    for var in &variants {
+        if checked_features.insert(var.feature_id) {
+            any_advanced |= rollout::maybe_advance(conn, environment, var.feature_id).await?;
+        }
+    }
+    if any_advanced {
+        variants = variant::get_by_identity(&mut *conn, environment, &identity.value).await?;
+    }
+
     let mut tx = conn.begin().await?;
-    let mut variants = variant::get_by_identity(&mut tx, environment, &identity.value).await?;
 
     // Only needed to evaluate segment rules; loaded at most once (on first use) and reused
     // across every feature in this call. Kept as just the traits (not a full
@@ -705,7 +715,9 @@ pub async fn list_pinned_overrides(
         params![environment_id, feature_id],
     )
     .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into())
+    .map_err(|e| {
+        FlagrantError::QueryFailed("Could not fetch pinned overrides for feature", e).into()
+    })
 }
 
 /// Returns identity values explicitly pinned (`pinned_at IS NOT NULL`) to a specific variant
@@ -724,8 +736,8 @@ pub async fn list_identities_pinned_to_variant(
     .await
     .map(|rows| rows.into_iter().map(|(s,)| s).collect())
     .map_err(|e| {
-            FlagrantError::QueryFailed("Could not fetch identities pinned to variant", e).into()
-        })
+        FlagrantError::QueryFailed("Could not fetch identities pinned to variant", e).into()
+    })
 }
 
 /// Removes every variant assignment (pinned and organic alike) for a feature within a

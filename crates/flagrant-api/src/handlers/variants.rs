@@ -1,72 +1,8 @@
-use std::str::FromStr;
-
 use axum::{Json, extract::Path};
 use flagrant::models::{environment, feature, identity, project, variant};
-use flagrant_types::{VariantValue, Variant, payload::NewVariantPayload};
+use flagrant_types::Variant;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
-
-/// Creates a new feature variant.
-///
-/// A few pre-conditions must be met:
-/// - there is enough free weight to create a variant with the given weight
-/// - the variant should be created for all environments (with the same value by default)
-#[utoipa::path(
-    post,
-    path = "/projects/{project}/envs/{environment}/features/{feature_id}/variants",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
-    ),
-    request_body = NewVariantPayload,
-    responses(
-        (status = 200, description = "Created variant", body = Variant)
-    ),
-    tag = "variants"
-)]
-pub async fn create(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
-    Json(payload): Json<NewVariantPayload>,
-) -> Result<Json<Variant>, ServiceError> {
-    let proj = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
-    let value = VariantValue::from_str(&payload.value)?;
-    let variant = variant::create(&mut conn, &env, &feature, value, payload.weight).await?;
-
-    Ok(Json(variant))
-}
-
-/// Updates existing variant with provided value/weight.
-#[utoipa::path(
-    put,
-    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("variant_id" = i32, Path, description = "Variant ID")
-    ),
-    request_body = NewVariantPayload,
-    responses(
-        (status = 200, description = "Variant updated successfully")
-    ),
-    tag = "variants"
-)]
-pub async fn update(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
-    Json(payload): Json<NewVariantPayload>,
-) -> Result<Json<()>, ServiceError> {
-    let proj = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
-    let value = VariantValue::from_str(&payload.value)?;
-
-    variant::update_one(&mut conn, &env, &var, value, payload.weight).await?;
-    Ok(Json(()))
-}
 
 /// Fetches a variant by ID.
 #[utoipa::path(
@@ -144,29 +80,4 @@ pub async fn get_pinned_identities(
         identity::list_identities_pinned_to_variant(&mut conn, env.id, var.id).await?;
 
     Ok(Json(identities))
-}
-
-/// Deletes a variant.
-#[utoipa::path(
-    delete,
-    path = "/projects/{project}/envs/{environment}/variants/{variant_id}",
-    params(
-        ("project" = String, Path, description = "Project name"),
-        ("environment" = String, Path, description = "Environment name"),
-        ("variant_id" = i32, Path, description = "Variant ID")
-    ),
-    responses(
-        (status = 200, description = "Variant deleted successfully")
-    ),
-    tag = "variants"
-)]
-pub async fn delete(
-    DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, variant_id)): Path<(String, String, i32)>,
-) -> Result<Json<()>, ServiceError> {
-    let proj = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
-    let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
-
-    Ok(Json(variant::delete(&mut conn, &env, &var).await?))
 }

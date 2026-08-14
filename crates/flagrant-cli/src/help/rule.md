@@ -28,7 +28,7 @@ Available comparators:
 - `RULE value group-1 1 pro` - change rule 1 in `group-1` to match value `pro`
 - `RULE comparator group-1 1 contains` - change rule 1 in `group-1` to use the `contains` comparator
 
-### Example scenarios
+### Use-cases
 
 - **Plan tiers in one go**: `RULE add group-1 trait:plan in ["pro","enterprise"]` matches either plan with a single rule, instead of one rule per tier OR-ed together.
 - **Named exceptions**: several rules in the same group, e.g. `identity exactly_matches bob` and `identity exactly_matches carol`, OR-ed together to explicitly include a handful of test accounts.

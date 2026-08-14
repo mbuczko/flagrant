@@ -11,13 +11,14 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.15"}
-flagrant-client = {path = "../flagrant-client", version = "0.0.15", features = ["blocking"]}
+flagrant-types = {path = "../flagrant-types", version = "0.0.16"}
+flagrant-client = {path = "../flagrant-client", version = "0.0.16", features = ["blocking"]}
 
 anyhow = {workspace = true}
 serde = {workspace = true}
 serde_json = {workspace = true}
 thiserror = {workspace = true}
+colored = {workspace = true}
 ulid = "1.1.2"
 indicatif = "0.17.8"
 rand = "0.8.5"

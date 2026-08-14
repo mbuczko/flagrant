@@ -3,88 +3,19 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use flagrant_types::{
-    Environment, Feature, VariantValue, Project, TagList, Variant,
-    payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
+    Environment, Feature, Project, RolloutConfig, TagList, Variant, VariantValue,
+    payload::{FeaturePatch, RolloutPatchOp, TagPatchOp, VariantPatchOp},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteRow};
 
-use super::{into_json_string, variant};
+use super::{into_json_string, rollout, variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/features.sql"]
 struct SQLFeatures {}
-
-pub struct FeatureUpdate<'a> {
-    conn: &'a mut SqliteConnection,
-    environment: &'a Environment,
-    feature: &'a Feature,
-    new_name: Option<String>,
-    new_value: Option<VariantValue>,
-    is_enabled: Option<bool>,
-    is_srv: Option<bool>,
-}
-
-impl<'a> FeatureUpdate<'a> {
-    fn new(
-        conn: &'a mut SqliteConnection,
-        environment: &'a Environment,
-        feature: &'a Feature,
-    ) -> Self {
-        Self {
-            conn,
-            environment,
-            feature,
-            new_name: None,
-            new_value: None,
-            is_enabled: None,
-            is_srv: None,
-        }
-    }
-    pub fn name(mut self, name: String) -> Self {
-        self.new_name = Some(name);
-        self
-    }
-    pub fn value(mut self, value: VariantValue) -> Self {
-        self.new_value = Some(value);
-        self
-    }
-    pub fn enabled(mut self, is_enabled: bool) -> Self {
-        self.is_enabled = Some(is_enabled);
-        self
-    }
-    pub fn srv(mut self, is_srv: bool) -> Self {
-        self.is_srv = Some(is_srv);
-        self
-    }
-    pub async fn update(self) -> anyhow::Result<()> {
-        let name = self.new_name.as_ref().unwrap_or(&self.feature.name);
-        let value = self
-            .new_value
-            .unwrap_or_else(|| self.feature.get_default_value().clone());
-        let is_enabled = self.is_enabled.unwrap_or(self.feature.is_enabled);
-        let is_srv = self.is_srv.unwrap_or(self.feature.is_srv);
-        let mut tx = self.conn.begin().await?;
-
-        // In transaction, update feature properties first
-        SQLFeatures::update_feature(&mut *tx, params![self.feature.id, name, is_enabled, is_srv])
-            .await
-            .map_err(|e| FlagrantError::QueryFailed("Could not update a feature", e))?;
-
-        // Then update the feature value, which is stored as the default variant
-        variant::create_control(&mut tx, self.environment, self.feature, value)
-            .await
-            .map_err(|e| match e.downcast::<sqlx::Error>() {
-                Ok(db_err) => FlagrantError::QueryFailed("Could not update a feature", db_err),
-                Err(e) => FlagrantError::UnexpectedFailure("Error while updating a feature", e),
-            })?;
-
-        tx.commit().await?;
-        Ok(())
-    }
-}
 
 /// Creates a new feature with given `name` and `value`.
 ///
@@ -104,7 +35,13 @@ pub async fn create(
     let mut tx = conn.begin().await?;
     let mut feature = SQLFeatures::create_feature(
         &mut *tx,
-        params![environment.project_id, name, description, is_enabled, is_srv],
+        params![
+            environment.project_id,
+            name,
+            description,
+            is_enabled,
+            is_srv
+        ],
         |row| row_to_feature(row, environment),
     )
     .await
@@ -117,7 +54,7 @@ pub async fn create(
 
     // Default value gets turned into a control variant for all existing environments.
     for env in &super::environment::get_by_project(&mut tx, &project).await? {
-        let variant = variant::create_control(&mut tx, env, &feature, value.clone()).await?;
+        let variant = variant::create_control(&mut tx, env, feature.id, value.clone()).await?;
         if env.id == environment.id {
             feature.variants.push(variant);
         }
@@ -239,14 +176,6 @@ pub async fn get_all(
         }
     }
     Ok(result)
-}
-
-pub fn update_one<'a>(
-    conn: &'a mut SqliteConnection,
-    environment: &'a Environment,
-    feature: &'a Feature,
-) -> FeatureUpdate<'a> {
-    FeatureUpdate::new(conn, environment, feature)
 }
 
 pub async fn bump_up_accumulators(
@@ -378,25 +307,19 @@ pub async fn patch(
     }
     for (id, (new_value, new_weight)) in update_map {
         let var = variant::get_by_id(&mut tx, environment, id, None).await?;
-        let value = new_value.unwrap_or_else(|| var.value.clone());
-        let weight = new_weight.unwrap_or(var.weight);
 
-        // The control variant cannot be modified at the variant level.
-        // Its weight is auto-adjusted and its value must be updated via Feature::update_one.
-        if var.is_control() {
-            if new_weight.is_some() {
-                return Err(FlagrantError::InvalidOperation(
-                    "Setting weight on control variant is not allowed. Weight is auto-adjusted.",
-                )
-                .into());
-            }
-            update_one(&mut tx, environment, feature)
-                .value(value)
-                .update()
-                .await?;
-        } else {
-            variant::update_one(&mut tx, environment, &var, value, weight).await?;
+        // Routes transparently to the right underlying update for control vs. non-control
+        // (see `VariantUpdate::update`) - rejects outright if `new_weight` was given for
+        // the control variant, whose weight is always the auto-computed remainder.
+        let mut builder = variant::update(&mut tx, environment, feature.id, &var);
+
+        if let Some(value) = new_value {
+            builder = builder.value(value);
         }
+        if let Some(weight) = new_weight {
+            builder = builder.weight(weight);
+        }
+        builder.update().await?;
     }
 
     // Apply adds
@@ -406,8 +329,82 @@ pub async fn patch(
         }
     }
 
+    // Progressive rollout. Checked against the *post*-patch variant count (deletes/
+    // updates/adds above have already settled), so this also rejects e.g. adding a 2nd
+    // variant to an already-progressive feature, not just enabling on a bad count.
+    let effective_rollout = match &patch.rollout {
+        Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
+        Some(RolloutPatchOp::Unset) => None,
+        None => feature.rollout.clone(),
+    };
+
+    if let Some(cfg) = &effective_rollout {
+        if let Some(RolloutPatchOp::Set(_)) = &patch.rollout {
+            cfg.validate_steps().map_err(FlagrantError::BadRequest)?;
+        }
+
+        let live = variant::get_for_feature(&mut tx, environment, feature.id, None).await?;
+        let non_control: Vec<_> = live.iter().filter(|v| !v.is_control()).collect();
+        if non_control.len() != 1 {
+            return Err(FlagrantError::BadRequest(
+                "Progressive rollout requires exactly one non-control variant",
+            )
+            .into());
+        }
+
+        if let Some(RolloutPatchOp::Set(new_cfg)) = &patch.rollout {
+            let rollout_json = serde_json::to_string(new_cfg)?;
+            SQLFeatures::update_feature_rollout(&mut *tx, params![feature.id, rollout_json])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not set progressive rollout", e))?;
+
+            variant::set_weight_and_rebalance(
+                &mut tx,
+                environment,
+                feature.id,
+                non_control[0],
+                new_cfg.steps[0].weight,
+            )
+            .await?;
+
+            rollout::activate(&mut tx, environment.id, feature.id).await?;
+        }
+    }
+
+    if let Some(RolloutPatchOp::Unset) = &patch.rollout {
+        SQLFeatures::clear_feature_rollout(&mut *tx, params![feature.id])
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not clear progressive rollout", e))?;
+        rollout::deactivate(&mut tx, feature.id).await?;
+    }
+
     tx.commit().await?;
     get_by_id(conn, environment, feature.id).await.map(Some)
+}
+
+/// Force-sets (or clears) a feature's progressive-rollout config directly, bypassing the
+/// validation/step-reset machinery in [`patch`] - used only by `snapshot::restore`, which
+/// needs to restore a config and a specific historical step together, atomically, rather
+/// than going through `RolloutPatchOp::Set`'s normal "always reset to step 0" behavior.
+pub(crate) async fn restore_rollout_config(
+    conn: &mut SqliteConnection,
+    feature_id: i32,
+    config: Option<&RolloutConfig>,
+) -> anyhow::Result<()> {
+    match config {
+        Some(cfg) => {
+            let rollout_json = serde_json::to_string(cfg)?;
+            SQLFeatures::update_feature_rollout(conn, params![feature_id, rollout_json])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not restore progressive rollout", e))?;
+        }
+        None => {
+            SQLFeatures::clear_feature_rollout(conn, params![feature_id])
+                .await
+                .map_err(|e| FlagrantError::QueryFailed("Could not clear progressive rollout", e))?;
+        }
+    }
+    Ok(())
 }
 
 /// Permanently deletes a feature and all of its variants within a single transaction.
@@ -465,5 +462,10 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
             .is_ok_and(|v| v.is_some()),
         tags: row.try_get("tags").unwrap_or(TagList(vec![])),
         variants,
+        rollout: row
+            .try_get::<Option<String>, _>("rollout")
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok()),
     }
 }

@@ -132,15 +132,12 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         5
     );
 
-    variant::update_one(
-        &mut conn,
-        &environment,
-        &variant,
-        VariantValue::build("buzz"),
-        80,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &variant)
+        .value(VariantValue::build("buzz"))
+        .weight(80)
+        .update()
+        .await
+        .unwrap();
 
     // Having the variant updated to weight=80%, 8 out of 10 identities should be migrated
     assert_eq!(
@@ -153,15 +150,12 @@ async fn migrate_identities(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    variant::update_one(
-        &mut conn,
-        &environment,
-        &variant,
-        VariantValue::build("bezz"),
-        10,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &variant)
+        .value(VariantValue::build("bezz"))
+        .weight(10)
+        .update()
+        .await
+        .unwrap();
 
     // Having the variant downgraded to weight=10%, 1 out of 10 identities should be migrated
     assert_eq!(
@@ -216,15 +210,12 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         5
     );
 
-    variant::update_one(
-        &mut conn,
-        &environment,
-        &variant,
-        VariantValue::build("buzz"),
-        80,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &variant)
+        .value(VariantValue::build("buzz"))
+        .weight(80)
+        .update()
+        .await
+        .unwrap();
 
     assert_eq!(
         idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant).await,
@@ -235,15 +226,12 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap();
 
-    variant::update_one(
-        &mut conn,
-        &environment,
-        &variant,
-        VariantValue::build("bezz"),
-        10,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &variant)
+        .value(VariantValue::build("bezz"))
+        .weight(10)
+        .update()
+        .await
+        .unwrap();
 
     assert_eq!(
         idents_count_for_feature_variant(&mut conn, &environment, &feature, &variant).await,
@@ -501,15 +489,12 @@ async fn pinned_identity_not_redistributed_on_weight_change(mut conn: PoolConnec
     let alt_variant = variant::get_by_id(&mut conn, &environment, alt_variant.id, None)
         .await
         .unwrap();
-    variant::update_one(
-        &mut conn,
-        &environment,
-        &alt_variant,
-        VariantValue::build("alter"),
-        0,
-    )
-    .await
-    .unwrap();
+    variant::update(&mut conn, &environment, feature.id, &alt_variant)
+        .value(VariantValue::build("alter"))
+        .weight(0)
+        .update()
+        .await
+        .unwrap();
 
     // alice is pinned - get_identity_variants must NOT redistribute her
     let iv = identity::get_identity_variants(&mut conn, &environment, &alice)

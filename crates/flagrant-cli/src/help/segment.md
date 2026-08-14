@@ -12,7 +12,7 @@ Once you enter a feature context alongside a segment context, that segment can c
 - `SEGMENT delete <name>` - delete a segment
 - `SEGMENT use <name>` - switch into a segment context
 
-### Example scenarios
+### Use-cases
 
 - **Beta program**: a segment with one group matching identities whose `beta` trait equals `true`. Give it its own variant override so only beta testers see the new variant, while everyone else keeps the default.
 - **Staging behavior**: a segment matching the `staging` environment, used to force a different weight split there regardless of which identity is calling.

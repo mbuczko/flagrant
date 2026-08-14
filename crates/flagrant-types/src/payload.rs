@@ -3,8 +3,8 @@ use serde_valid::Validate;
 use utoipa::ToSchema;
 
 use crate::{
-    Comparator, Environment, Feature, VariantValue, GroupConnector, IdentityWithTraits, Project,
-    Segment, Snapshot, Subject, TraitValue,
+    Comparator, Environment, Feature, GroupConnector, IdentityWithTraits, Project, RolloutConfig,
+    Segment, Snapshot, Subject, TraitValue, VariantValue,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -33,15 +33,11 @@ pub enum TraitPatchOp {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub enum TagPatchOp {
     Add(
-        #[validate(pattern = r"^[a-z0-9+_.]+$")]
+        #[validate(pattern = r"^[A-Za-z0-9][A-Za-z0-9+_.-]*$")]
         #[validate(max_length = 32)]
         String,
     ),
-    Remove(
-        #[validate(pattern = r"^[a-z0-9+_.]+$")]
-        #[validate(max_length = 32)]
-        String,
-    ),
+    Remove(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -77,12 +73,6 @@ pub struct NewFeaturePayload {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewVariantPayload {
-    pub value: String,
-    pub weight: u8,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NewIdentityPayload {
     pub identity: String,
     pub traits: Option<Vec<IdentityTraitPayload>>,
@@ -99,6 +89,12 @@ pub struct IdentityTraitPayload {
     pub value: Option<TraitValue>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum RolloutPatchOp {
+    Set(RolloutConfig),
+    Unset,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct FeaturePatch {
     #[validate(pattern = r"^[A-Za-z][A-Za-z0-9_]+$")]
@@ -111,6 +107,9 @@ pub struct FeaturePatch {
     #[validate]
     pub tags: Vec<TagPatchOp>,
     pub variants: Vec<VariantPatchOp>,
+    /// `None` means no change. Mirrors `is_enabled: Option<bool>`'s convention, just one
+    /// level deeper since "change to what" itself needs a Set/Unset choice.
+    pub rollout: Option<RolloutPatchOp>,
     /// Stages deletion of the entire feature. When set, every other field/op in the same
     /// patch is ignored - the feature is deleted and nothing else is applied.
     pub delete: bool,
@@ -142,6 +141,7 @@ impl FeaturePatch {
             && self.description.is_none()
             && self.tags.is_empty()
             && self.variants.is_empty()
+            && self.rollout.is_none()
             && !self.delete
     }
 }
@@ -158,8 +158,8 @@ pub struct IdentityOverridePatch {
 pub struct IdentityPatch {
     pub traits: Vec<TraitPatchOp>,
     pub overrides: Vec<IdentityOverridePatch>,
-    /// Feature names whose variant assignment should be deleted (identity freed for distribution).
-    pub unpins: Vec<String>,
+    /// Feature names whose override should be unset (identity freed for distribution).
+    pub unset_overrides: Vec<String>,
     /// Stages deletion of the entire identity. When set, every other field/op in the same
     /// patch is ignored - the identity is deleted and nothing else is applied.
     pub delete: bool,
@@ -169,7 +169,7 @@ impl IdentityPatch {
     pub fn is_empty(&self) -> bool {
         self.traits.is_empty()
             && self.overrides.is_empty()
-            && self.unpins.is_empty()
+            && self.unset_overrides.is_empty()
             && !self.delete
     }
 }
@@ -178,20 +178,6 @@ impl IdentityPatch {
 pub struct NewSegmentPayload {
     pub name: String,
     pub description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewGroupPayload {
-    pub description: Option<String>,
-    /// Required for all groups except the first (head) group of a segment.
-    pub connector: Option<GroupConnector>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct NewRulePayload {
-    pub subject: Subject,
-    pub comparator: Comparator,
-    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

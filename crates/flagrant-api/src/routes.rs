@@ -31,10 +31,6 @@ pub fn init_router() -> Router<AppState> {
         )
         .route(
             "/envs/:environment/features/:feature_id",
-            put(features::update),
-        )
-        .route(
-            "/envs/:environment/features/:feature_id",
             delete(features::delete),
         )
         // Unified commit - see flagrant::models::commit::apply
@@ -66,24 +62,16 @@ pub fn init_router() -> Router<AppState> {
             delete(features::clear_distribution),
         )
         .route(
+            "/envs/:environment/features/:feature_id/rollout",
+            get(features::get_rollout_status),
+        )
+        .route(
             "/envs/:environment/features/:feature_id/variants",
             get(variants::list),
         )
         .route(
-            "/envs/:environment/features/:feature_id/variants",
-            post(variants::create),
-        )
-        .route(
             "/envs/:environment/variants/:variant_id",
             get(variants::fetch),
-        )
-        .route(
-            "/envs/:environment/variants/:variant_id",
-            put(variants::update),
-        )
-        .route(
-            "/envs/:environment/variants/:variant_id",
-            delete(variants::delete),
         )
         .route(
             "/envs/:environment/variants/:variant_id/identities",
@@ -113,21 +101,6 @@ pub fn init_router() -> Router<AppState> {
         .route("/segments", get(segments::list))
         .route("/segments", post(segments::create))
         .route("/segments/:segment_id", get(segments::fetch_by_id_or_name))
-        .route("/segments/:segment_id", put(segments::update))
-        .route("/segments/:segment_id", delete(segments::delete))
-        .route("/segments/:segment_id/groups", post(segments::add_group))
-        .route(
-            "/segments/:segment_id/groups/:group_id",
-            delete(segments::delete_group),
-        )
-        .route(
-            "/segments/:segment_id/groups/:group_id/rules",
-            post(segments::add_rule),
-        )
-        .route(
-            "/segments/:segment_id/groups/:group_id/rules/:rule_id",
-            delete(segments::delete_rule),
-        )
         .route(
             "/segments/:segment_id/features/:feature_id/overrides/:environment_id",
             get(segments::get_feature_override_weights),

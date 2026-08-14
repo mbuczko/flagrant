@@ -19,7 +19,7 @@ Once an identity lands on a variant it keeps seeing that same one on later reque
 - `VARIANT add 20` - add a variant weighted 20, opening `$EDITOR` to type its value interactively
 - `VARIANT add 30 json::{"color": "blue", "size": 12}` - add a variant with an explicit JSON value (values are treated as plain text by default, so use the `type::value` prefix to be explicit, e.g. `json::`, `toml::`, or `text::`)
 
-### Example scenarios
+### Use-cases
 
 - **Pricing experiment**: three variants holding different price points (`9.99`, `14.99`, `19.99`), weighted evenly, to see which converts best.
 - **Copy testing**: two variants holding different banner text, weighted 50/50, so half of identities see one wording and half see the other.

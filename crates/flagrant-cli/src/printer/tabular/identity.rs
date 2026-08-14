@@ -77,11 +77,12 @@ impl Tabular for IdentityWithTraits {
             trait_lines.join("\n")
         };
 
-        let staged_pins: &[IdentityOverridePatch] =
+        let staged_overrides: &[IdentityOverridePatch] =
             patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
-        let staged_unpins: &[String] = patch.map(|p| p.unpins.as_slice()).unwrap_or_default();
+        let staged_unset_overrides: &[String] =
+            patch.map(|p| p.unset_overrides.as_slice()).unwrap_or_default();
 
-        // Build variant lines: committed state overlaid with staged pins/unpins.
+        // Build variant lines: committed state overlaid with staged overrides/unset_overrides.
         let mut variant_lines: Vec<String> = Vec::new();
         let mut variants_staged = false;
 
@@ -97,13 +98,13 @@ impl Tabular for IdentityWithTraits {
 
                 variant_lines.push(format!("{feature} → {}", value.red()));
                 variants_staged = true;
-            } else if let Some(pin) = staged_pins
+            } else if let Some(ovr) = staged_overrides
                 .iter()
                 .find(|o| o.feature_name == iv.feature_name)
             {
                 // Staged override: green for a brand-new pin, yellow when replacing an
                 // already-pinned variant.
-                let value = pin.variant_value.bare_first_line();
+                let value = ovr.variant_value.bare_first_line();
                 let colored_value = if iv.pinned_at.is_some() {
                     value.yellow()
                 } else {
@@ -111,7 +112,7 @@ impl Tabular for IdentityWithTraits {
                 };
                 variant_lines.push(format!("{feature} → {colored_value}"));
                 variants_staged = true;
-            } else if staged_unpins.contains(&iv.feature_name) {
+            } else if staged_unset_overrides.contains(&iv.feature_name) {
                 // Staged unoverride - show the currently pinned variant being removed.
                 let value = iv
                     .feature_value
@@ -139,8 +140,8 @@ impl Tabular for IdentityWithTraits {
             }
         }
 
-        // Staged pins for features not yet in committed state
-        for o in staged_pins {
+        // Staged overrides for features not yet in committed state
+        for o in staged_overrides {
             if !ctx.iter().any(|iv| iv.feature_name == o.feature_name) {
                 let value = o.variant_value.bare_first_line();
                 variant_lines.push(format!(
@@ -179,7 +180,7 @@ impl Tabular for IdentityWithTraits {
         table.render(rows);
 
         let has_any_override =
-            ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_pins.is_empty();
+            ctx.iter().any(|iv| iv.pinned_at.is_some()) || !staged_overrides.is_empty();
 
         let left = if has_any_override {
             format!(" {} variant explicitly overridden", "★".dimmed())

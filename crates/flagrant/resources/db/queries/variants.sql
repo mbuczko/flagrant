@@ -77,7 +77,7 @@ ON CONFLICT(variant_id, environment_id, segment_id) WHERE segment_id IS NOT NULL
 DO UPDATE SET accumulator = excluded.accumulator, weight = excluded.weight
 RETURNING variant_id, weight
 
--- :name update_variant_value :|| :1
+-- :name update_variant_value :<> :!
 -- :doc Updates value of given feature variant
 UPDATE variants SET value = $2
 WHERE environment_id IS NULL AND variant_id = $1

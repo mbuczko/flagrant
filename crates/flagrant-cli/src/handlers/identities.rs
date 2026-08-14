@@ -420,8 +420,8 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
     pending.overrides.retain(|o| o.feature_name != feature_name);
 
     // Avoid duplicate unpin entries.
-    if !pending.unpins.contains(&feature_name) {
-        pending.unpins.push(feature_name.clone());
+    if !pending.unset_overrides.contains(&feature_name) {
+        pending.unset_overrides.push(feature_name.clone());
     }
     println!(
         "Staged: unpin '{}' identity from feature '{}' variant",

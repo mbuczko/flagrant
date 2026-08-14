@@ -1,8 +1,8 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::{
-    Feature, FeatureOverride, VariantValue, Variant,
-    payload::{FeaturePatch, SegmentVariantWeight},
+    Feature, FeatureOverride, Variant, VariantValue,
+    payload::{FeaturePatch, RolloutPatchOp, SegmentVariantWeight},
 };
 
 use crate::{handlers::internal::effectives as effective, printer::legend};
@@ -18,7 +18,7 @@ pub enum IdentityPending {
         variant_value: VariantValue,
     },
     /// The existing override was staged for removal (`OVERRIDE delete`).
-    Unpin(String),
+    UnsetOverride(String),
 }
 
 /// Context passed to `Feature::display` to show both committed and pending overrides.
@@ -129,16 +129,9 @@ impl Tabular for Feature {
             } else {
                 eff_tags
                     .iter()
-                    // Staged-removed tags are kept visible (not dropped) so they still show
-                    // up in the list, colored red, instead of silently vanishing.
                     .map(|t| {
-                        if t.is_deleted {
-                            t.name.red().to_string()
-                        } else if t.is_staged_add {
-                            t.name.green().to_string()
-                        } else {
-                            t.name.clone()
-                        }
+                        legend::stage_color(t.name.as_str(), t.is_deleted, t.is_staged_add, false)
+                            .into_owned()
                     })
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -255,6 +248,28 @@ impl Tabular for Feature {
             segment_override_lines(&self.variants, ctx, is_deleted);
         let segment_str = segment_lines.join("\n");
 
+        let staged_rollout = (!is_deleted)
+            .then(|| patch.and_then(|p| p.rollout.as_ref()))
+            .flatten();
+        let rollout_modified = staged_rollout.is_some();
+        let effective_rollout = match staged_rollout {
+            Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
+            Some(RolloutPatchOp::Unset) => None,
+            None => self.rollout.clone(),
+        };
+        let rollout_str = effective_rollout.as_ref().map(|cfg| {
+            let schedule = cfg
+                .steps
+                .iter()
+                .map(|s| match s.hold_for_secs {
+                    Some(secs) => format!("{}% for {secs}s", s.weight).white().to_string(),
+                    None => format!("{}%", s.weight).white().to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(" => ");
+            legend::stage_color(schedule, is_deleted, false, rollout_modified).into_owned()
+        });
+
         let has_staged = is_deleted
             || name_modified
             || status_modified
@@ -263,7 +278,8 @@ impl Tabular for Feature {
             || has_tag_ops
             || variants_staged
             || identity_staged
-            || segment_staged;
+            || segment_staged
+            || rollout_modified;
 
         let table = FancyTable::create(FancyTableOpts::default())
             .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
@@ -275,7 +291,7 @@ impl Tabular for Feature {
                 10,
             )
             .width(Width::Percentage(100))
-            .add_title_with_align(&title, TitleAlign::LeftOffset(6))
+            .add_title_with_align(&title, TitleAlign::LeftOffset(10))
             .build();
 
         let mut rows = vec![
@@ -288,6 +304,9 @@ impl Tabular for Feature {
         }
         if !identity_str.is_empty() {
             rows.push(vec!["identity overrides".to_string(), identity_str]);
+        }
+        if let Some(rollout_str) = rollout_str {
+            rows.push(vec!["progressive".to_string(), rollout_str]);
         }
         rows.push(vec!["tags".to_string(), tags_str]);
         rows.push(vec!["description".to_string(), desc_str]);
@@ -333,7 +352,7 @@ fn identity_override_line(
     let mut parts: Vec<String> = committed
         .iter()
         .map(|(id, variant_id)| match &ctx.identity_pending {
-            Some(IdentityPending::Unpin(pending_id)) if pending_id == id => {
+            Some(IdentityPending::UnsetOverride(pending_id)) if pending_id == id => {
                 format!("{id} → {}", variant_label(*variant_id, variants))
                     .red()
                     .dimmed()

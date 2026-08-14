@@ -1,11 +1,11 @@
 -- :name create_feature :|| :1
 -- :doc Creates a new feature with name, on/off status and value type
 INSERT INTO features(project_id, name, description, is_enabled, is_srv) VALUES($1, $2, $3, $4, $5)
-RETURNING feature_id, project_id, name, description, is_enabled, is_srv, archived_at
+RETURNING feature_id, project_id, name, description, is_enabled, is_srv, archived_at, rollout
 
 -- :name fetch_feature_by_id :|| :1
 -- :doc Returns a feature of given id (without corresponding variants)
-SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
+SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, rollout, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE f.feature_id = $1
@@ -13,7 +13,7 @@ GROUP BY f.feature_id
 
 -- :name fetch_feature_by_name :|| :1
 -- :doc Returns a feature with provided name
-SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, GROUP_CONCAT(ft.tag, ',') AS tags
+SELECT f.feature_id, project_id, name, description, is_enabled, is_srv, archived_at, rollout, GROUP_CONCAT(ft.tag, ',') AS tags
 FROM features f
 LEFT JOIN feature_tags ft ON ft.feature_id = f.feature_id
 WHERE project_id = $1 AND name = $2
@@ -26,7 +26,7 @@ WITH feature_tag_groups AS (
   FROM feature_tags
   GROUP BY feature_id
 )
-SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.is_srv, f.archived_at,
+SELECT f.feature_id, f.project_id, f.name, f.description, f.is_enabled, f.is_srv, f.archived_at, f.rollout,
        v.variant_id, v.environment_id, v.value,
        COALESCE(vw.weight, 0) AS weight, vw.accumulator,
        ftg.tags
@@ -110,3 +110,11 @@ WHERE NOT EXISTS (
 -- :name delete_tag_for_feature :<> :!
 -- :doc Removes a single tag from a feature.
 DELETE FROM feature_tags WHERE feature_id = $1 AND tag = $2
+
+-- :name update_feature_rollout :<> :!
+-- :doc Sets a feature's progressive-rollout rule definitions (raw JSON, or NULL to disable).
+UPDATE features SET rollout = $2 WHERE feature_id = $1
+
+-- :name clear_feature_rollout :<> :!
+-- :doc Clears a feature's progressive-rollout rule definitions.
+UPDATE features SET rollout = NULL WHERE feature_id = $1

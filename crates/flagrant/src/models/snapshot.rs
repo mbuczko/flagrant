@@ -9,7 +9,7 @@ use flagrant_types::{
 use hugsqlx::{HugSqlx, params};
 use sqlx::{Connection, SqliteConnection};
 
-use super::{feature, identity, rule, segment, variant};
+use super::{feature, identity, rollout, rule, segment, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -152,16 +152,26 @@ async fn build_state(
         )
         .collect();
 
+    // Captured together, not just the step - a step index only means something relative
+    // to the exact schedule it was recorded against.
+    let rollout_step = if feature.rollout.is_some() {
+        rollout::current_step(conn, feature.id, environment.id).await?
+    } else {
+        None
+    };
+
     Ok(SnapshotState {
         name: feature.name.clone(),
         description: feature.description.clone(),
         is_enabled: feature.is_enabled,
         is_srv: feature.is_srv,
         is_archived: feature.is_archived,
+        rollout_config: feature.rollout.clone(),
         tags: feature.tags.0.iter().map(|t| t.name.clone()).collect(),
         variants,
         segment_overrides,
         identity_overrides,
+        rollout_step,
     })
 }
 
@@ -362,6 +372,7 @@ pub async fn restore(
         description: (feature.description != state.description).then(|| state.description.clone()),
         tags: diff_tags(&feature.tags, &state.tags),
         variants: recon.patch_ops,
+        rollout: None,
         delete: false,
     };
 
@@ -467,6 +478,28 @@ pub async fn restore(
             )
             .await?;
         }
+    }
+
+    // Restore the rollout config and step together, atomically - a step index only means
+    // something relative to the exact schedule it was recorded against, which may have
+    // since been replaced by a different one (a rule change resets progression to step 0
+    // going forward, but that offers no protection for an *older* snapshot predating the
+    // change). Bypasses `RolloutPatchOp::Set`'s normal "always reset to step 0" behavior
+    // via `feature::restore_rollout_config`, since we're setting a specific historical
+    // step right after, not activating a fresh rollout.
+    match &state.rollout_config {
+        Some(cfg) => {
+            feature::restore_rollout_config(&mut tx, updated.id, Some(cfg)).await?;
+            match state.rollout_step {
+                Some(step) => rollout::set_step(&mut tx, environment.id, updated.id, step).await?,
+                None => rollout::activate(&mut tx, environment.id, updated.id).await?,
+            }
+        }
+        None if updated.rollout.is_some() => {
+            feature::restore_rollout_config(&mut tx, updated.id, None).await?;
+            rollout::deactivate(&mut tx, updated.id).await?;
+        }
+        None => {}
     }
 
     let default_comment = format!("restored from v{version}");

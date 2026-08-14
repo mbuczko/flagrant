@@ -83,7 +83,7 @@ async fn clone_variants_from_env(
 
     for feat in &features {
         let control_value = feat.get_default_value().clone();
-        variant::create_control(&mut tx, new_env, feat, control_value).await?;
+        variant::create_control(&mut tx, new_env, feat.id, control_value).await?;
 
         // Fetch all variants (including non-control) from base_env for this feature.
         let all_variants = variant::get_for_feature(&mut tx, base_env, feat.id, None)

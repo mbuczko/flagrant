@@ -187,13 +187,19 @@ fn main() -> anyhow::Result<()> {
             handlers::features::tag,
             in_context!(feature_ctx),
         ),
+        Command::Feature.op_in_context(
+            "progressive",
+            "rules <w1>:<dur1> ... <100> | sample <n> | off | status",
+            handlers::features::progressive,
+            in_context!(feature_ctx),
+        ),
         Command::Feature.op("delete", "feature", handlers::features::delete),
         Command::Feature.op("use", "feature", handlers::features::r#use),
         // Context-gated hint must come before the unconditional one below - `find()` takes
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · rename · show · server-side · status · tag · use",
+            "add · delete · describe · list · progressive · rename · show · server-side · status · tag · use",
             in_context!(feature_ctx),
         ),
         Command::Feature.args("add · delete · list · show · use"),

@@ -1,3 +1,4 @@
+use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::Environment;
 
@@ -33,9 +34,9 @@ impl Tabular for Environment {
 
     fn display(&self, _patch: Option<&()>, _ctx: &()) {
         let desc_str = self.description.as_deref().unwrap_or("");
-        let title = format!("Environment: {} (ID={})", self.name, self.id);
+        let title = "ENVIRONMENT".bold().to_string();
         let table = FancyTable::create(FancyTableOpts::default())
-            .add_column(None, Layout::Fixed(6), Align::Right, Overflow::Truncate, 1)
+            .add_column(None, Layout::Fixed(20), Align::Right, Overflow::Truncate, 1)
             .add_column(
                 None,
                 Layout::Expandable(120),
@@ -44,9 +45,10 @@ impl Tabular for Environment {
                 1,
             )
             .hseparator(Some(fancy_table::Separator::Custom('-')))
-            .add_title_with_align(title.as_str(), TitleAlign::RightOffset(1))
+            .add_title_with_align(title.as_str(), TitleAlign::LeftOffset(6))
+            .width(Width::Percentage(100))
             .build();
 
-        table.render(vec![&["NAME", &self.name], &["DESCRIPTION", desc_str]]);
+        table.render(vec![&["name", &self.name], &["description", desc_str]]);
     }
 }

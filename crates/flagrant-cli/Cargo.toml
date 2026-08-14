@@ -13,13 +13,14 @@ flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
 serde = {workspace = true}
 serde_json = {workspace = true}
 anyhow = {workspace = true}
+chrono = {workspace = true}
+colored = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
 rustyline = { workspace = true }
 fancy-table = "0.4.3"
 argh = "0.1"
 strum = {workspace = true}
 strum_macros = {workspace = true}
-colored = "3.0.0"
 tempfile = "3"
 termimad = "0.35.1"
 terminal_size = "0.4"
