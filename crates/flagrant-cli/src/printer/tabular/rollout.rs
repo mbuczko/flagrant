@@ -36,7 +36,7 @@ impl Tabular for RolloutStatus {
             .join(" => ");
 
         let is_terminal = idx + 1 >= step_count;
-        let sample_ok = self.distributed_identities >= self.config.min_sample_size as i64;
+        let sample_reached = self.distributed_identities >= self.config.min_sample_size as i64;
 
         // `last_change_at` is a naive UTC timestamp (the server records it via
         // `Utc::now().naive_utc()`) - anchor it to `Utc` explicitly, then convert to the
@@ -47,7 +47,7 @@ impl Tabular for RolloutStatus {
 
         let next_str = if is_terminal {
             "rollout complete".dimmed().to_string()
-        } else if idx == 0 && !sample_ok {
+        } else if idx == 0 && !sample_reached {
             format!(
                 "waiting for minimum sample: {}/{}",
                 self.distributed_identities, self.config.min_sample_size
@@ -59,6 +59,7 @@ impl Tabular for RolloutStatus {
                 Some(hold) => {
                     let elapsed = Local::now().signed_duration_since(last_change_local);
                     let remaining = hold as i64 - elapsed.num_seconds();
+
                     if remaining <= 0 {
                         "due - will advance on next read".green().to_string()
                     } else {

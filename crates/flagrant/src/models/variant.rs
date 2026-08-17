@@ -285,8 +285,6 @@ pub async fn get_by_identity<T: AsRef<str>>(
 /// `segment_id` scopes which weight/accumulator row is attached to each variant (`None` =
 /// organic default weights; `Some(id)` = that segment's override weights, sparse - variants
 /// without an explicit override resolve to weight 0 / accumulator 0).
-///
-/// Errors if the feature has no default value set in this environment (which should never happen).
 pub async fn get_for_feature(
     conn: &mut SqliteConnection,
     environment: &Environment,
@@ -299,15 +297,6 @@ pub async fn get_for_feature(
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not fetch variants for feature", e))?;
-
-    // Ensure the feature has a default value set in the given environment.
-    // Without a default value, any additional variants are pointless, even if they
-    // already exist in other environments - hence the error result.
-    if !variants.iter().any(|v| is_default(environment, v)) {
-        bail!(FlagrantError::BadRequest(
-            "No feature value set. Use \"FEATURE val ...\" to set default feature value."
-        ));
-    }
 
     Ok(variants)
 }

@@ -511,7 +511,7 @@ pub async fn get_identity_variants(
     // resolution transaction below opens - each advance is its own self-contained commit
     // (see `rollout::maybe_advance`). Re-fetch afterward: an advance rewrites `migrated_id`
     // via `identity::migrate_identities` on this identity's own `identity_variants` row,
-    // which the `variants` snapshot taken above would otherwise miss until the *next* read.
+    // which the `variants` snapshot taken above would otherwise miss until the next read.
     let mut checked_features: HashSet<i32> = HashSet::new();
     let mut any_advanced = false;
 
