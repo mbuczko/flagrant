@@ -642,6 +642,7 @@ fn parse_segment_override_content(
         let variant_id = ev
             .id
             .ok_or_else(|| anyhow::anyhow!("Staged (uncommitted) variants cannot be overridden by a segment. Commit the variant first."))?;
+
         result.push(SegmentVariantWeight { variant_id, weight });
     }
 

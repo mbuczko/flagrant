@@ -5,3 +5,9 @@ srv-token = "dev-srv-token"
 
 [projects.demo.envs.base]
 srv-token = "base-srv-token"
+
+# Optional: enables a Redis-backed response cache for the public features
+# endpoint. Omit this section entirely to disable caching.
+[redis]
+url = "redis://127.0.0.1:6379"
+ttl-seconds = 30

@@ -140,6 +140,9 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **Snapshots** - capture and restore the full state of a feature definition and its overrides at a point in time
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
 - [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
+- [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
+- [ ] **gRPC** - for backend-to-backend connection
+- [ ] **Server side SDKs** - for Rust, Python and Java
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 
