@@ -1,5 +1,10 @@
 # sample configuration
 
+# Optional: overrides the always-on HTTP server's listen address (defaults to
+# 127.0.0.1:3030 when this section, or the whole file, is absent).
+[http]
+listen = "127.0.0.1:3030"
+
 [projects.demo.envs.dev]
 srv-token = "dev-srv-token"
 

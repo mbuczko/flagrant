@@ -110,6 +110,15 @@ Unlike `srv-token`, the gRPC listener address is read once at startup only - `RE
 
 Both the Redis cache and the gRPC listener are also opt-in at *build* time, via the `redis` and `grpc` Cargo features on `flagrant-api` (both enabled by default) - independently of whether `[redis]`/`[grpc]` are actually present in `flagrant.toml`. Building with `cargo build -p flagrant-api --no-default-features` (optionally re-enabling just one, e.g. `--features redis`) drops the unused dependency (the `redis` client, or `tonic`/`prost` and the protobuf codegen build step) from the binary entirely - handy if you only ever run with one of them, or neither.
 
+The always-on HTTP server's own listen address is configurable the same way, via an optional `[http]` section - absent (or with `[http]` omitted entirely), it defaults to `127.0.0.1:3030`:
+
+```toml
+[http]
+listen = "0.0.0.0:3030"
+```
+
+Same restart caveat as `[grpc].listen`: read once at startup, not affected by `RELOAD`.
+
 ### Identities & traits
 
 An **identity** is a caller recognized across requests, identified by an arbitrary string value (a user id, session id, anything) sent via the `X-Flagrant-Identity` header. Identities can carry arbitrary typed **traits** (string/int/float/bool), used by segment rules to decide which cohort an identity belongs to. Once distributed to a variant for a feature, an identity keeps seeing that same variant on subsequent requests, unless something explicitly changes it - a weight change migrates a portion of identities, an override pins/unpins one, or its distribution is cleared outright.
@@ -173,7 +182,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
 - [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 - [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
-- [ ] **gRPC** - for backend-to-backend connection
+- [x] **gRPC** - for backend-to-backend connection
 - [ ] **Server side SDKs** - for Rust, Python and Java
 - [ ] **Prometheus metrics**
 

@@ -41,10 +41,11 @@ async fn main() {
         None => None,
     };
 
-    // Grabbed before `config` is moved into the Arc<RwLock<_>> below - the gRPC listener
-    // address is only ever read once, at startup, unlike srv-token/cache config which is
-    // re-read from `state.config` on every request and can be hot-reloaded via
-    // `/admin/reload` (a bound listener can't be rebound onto a new address in place).
+    // Grabbed before `config` is moved into the Arc<RwLock<_>> below - both the HTTP and
+    // gRPC listener addresses are only ever read once, at startup, unlike srv-token/cache
+    // config which is re-read from `state.config` on every request and can be hot-reloaded
+    // via `/admin/reload` (a bound listener can't be rebound onto a new address in place).
+    let http_listen = config.http.listen.clone();
     #[cfg(feature = "grpc")]
     let grpc_config = config.grpc.clone();
 
@@ -70,9 +71,9 @@ async fn main() {
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3030")
+    let listener = tokio::net::TcpListener::bind(&http_listen)
         .await
-        .expect("Cannot listen on port 3030");
+        .unwrap_or_else(|e| panic!("Cannot listen on {http_listen}: {e}"));
 
     ::tracing::info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, router)

@@ -8,8 +8,9 @@ use serde::Deserialize;
 
 /// Server configuration loaded once at startup from a TOML file, keyed by project and
 /// environment name. Carries per-environment settings (currently just the `srv-token`
-/// unlocking server-side-only features), plus optional top-level `[redis]` and `[grpc]`
-/// sections enabling those features when present.
+/// unlocking server-side-only features), an optional `[http]` section overriding the
+/// HTTP listen address, plus optional top-level `[redis]` and `[grpc]` sections enabling
+/// those features when present.
 ///
 /// ```toml
 /// [projects.my_project.envs.production]
@@ -20,9 +21,40 @@ pub struct ServerConfig {
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
     #[serde(default)]
+    pub http: HttpConfig,
+    #[serde(default)]
     pub redis: Option<RedisConfig>,
     #[serde(default)]
     pub grpc: Option<GrpcConfig>,
+}
+
+/// The always-on HTTP server's listen address. Unlike `[redis]`/`[grpc]`, there's nothing
+/// to opt into here - `[http]` is entirely optional and just overrides the default
+/// `listen` address when present; the HTTP route is always served either way.
+///
+/// Read once at startup, same as `[grpc]`'s `listen` - not picked up by `/admin/reload`,
+/// since a bound listener can't be rebound onto a new address in place.
+///
+/// ```toml
+/// [http]
+/// listen = "0.0.0.0:3030"
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct HttpConfig {
+    #[serde(default = "default_http_listen")]
+    pub listen: String,
+}
+
+impl Default for HttpConfig {
+    fn default() -> Self {
+        Self {
+            listen: default_http_listen(),
+        }
+    }
+}
+
+fn default_http_listen() -> String {
+    "127.0.0.1:3030".to_owned()
 }
 
 /// Optional gRPC exposure of the public feature-resolution endpoint, alongside the
