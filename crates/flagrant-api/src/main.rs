@@ -4,13 +4,17 @@ use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
 use tracing::init_tracing;
 
-use crate::{cache::FeatureCache, config::ServerConfig, state::AppState};
+#[cfg(feature = "redis")]
+use crate::cache::FeatureCache;
+use crate::{config::ServerConfig, state::AppState};
 
 mod api;
+#[cfg(feature = "redis")]
 mod cache;
 mod config;
 mod errors;
 mod extractors;
+#[cfg(feature = "grpc")]
 mod grpc;
 mod handlers;
 mod openapi;
@@ -26,6 +30,8 @@ async fn main() {
         .await
         .expect("Cannot initialize DB");
     let config = ServerConfig::load_resolved().expect("Cannot load configuration");
+
+    #[cfg(feature = "redis")]
     let cache = match &config.redis {
         Some(redis_config) => Some(Arc::new(
             FeatureCache::connect(redis_config)
@@ -39,14 +45,17 @@ async fn main() {
     // address is only ever read once, at startup, unlike srv-token/cache config which is
     // re-read from `state.config` on every request and can be hot-reloaded via
     // `/admin/reload` (a bound listener can't be rebound onto a new address in place).
+    #[cfg(feature = "grpc")]
     let grpc_config = config.grpc.clone();
 
     let state = AppState {
         pool,
         config: Arc::new(RwLock::new(config)),
+        #[cfg(feature = "redis")]
         cache,
     };
 
+    #[cfg(feature = "grpc")]
     if let Some(grpc_config) = grpc_config {
         let grpc_state = state.clone();
         tokio::spawn(async move {

@@ -108,6 +108,8 @@ listen = "127.0.0.1:50051"
 
 Unlike `srv-token`, the gRPC listener address is read once at startup only - `RELOAD` picks up srv-token/Redis changes on a running server, but changing `[grpc].listen` requires a restart, since a bound listener can't be rebound onto a different address/socket path in place.
 
+Both the Redis cache and the gRPC listener are also opt-in at *build* time, via the `redis` and `grpc` Cargo features on `flagrant-api` (both enabled by default) - independently of whether `[redis]`/`[grpc]` are actually present in `flagrant.toml`. Building with `cargo build -p flagrant-api --no-default-features` (optionally re-enabling just one, e.g. `--features redis`) drops the unused dependency (the `redis` client, or `tonic`/`prost` and the protobuf codegen build step) from the binary entirely - handy if you only ever run with one of them, or neither.
+
 ### Identities & traits
 
 An **identity** is a caller recognized across requests, identified by an arbitrary string value (a user id, session id, anything) sent via the `X-Flagrant-Identity` header. Identities can carry arbitrary typed **traits** (string/int/float/bool), used by segment rules to decide which cohort an identity belongs to. Once distributed to a variant for a feature, an identity keeps seeing that same variant on subsequent requests, unless something explicitly changes it - a weight change migrates a portion of identities, an override pins/unpins one, or its distribution is cleared outright.

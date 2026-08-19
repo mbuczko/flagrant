@@ -10,8 +10,9 @@ use flagrant::models::{environment, identity, project};
 use flagrant_types::FeatureResponse;
 use sqlx::SqliteConnection;
 
+#[cfg(feature = "redis")]
+use crate::cache::{CachedFeature, FeatureCache};
 use crate::{
-    cache::{CachedFeature, FeatureCache},
     errors::ServiceError,
     extractors::{DbConnection, Identity},
     state::AppState,
@@ -87,11 +88,13 @@ pub async fn resolve_features(
         }
     };
 
+    #[cfg(feature = "redis")]
     let cache_key = state
         .cache
         .as_ref()
         .map(|_| FeatureCache::key(&project_name, &env_name, &identity_value));
 
+    #[cfg(feature = "redis")]
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key) {
         if let Some(cached) = cache.get(key).await {
             let response = cached
@@ -115,6 +118,7 @@ pub async fn resolve_features(
     let identity = identity::get_or_create_by_value(conn, &env, identity_value).await?;
     let all_variants = identity::get_identity_variants(conn, &env, &identity).await?;
 
+    #[cfg(feature = "redis")]
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key) {
         // Cache the unfiltered list (srv-only features included) so one entry serves
         // both privileged and unprivileged callers; filtering happens at read time.
