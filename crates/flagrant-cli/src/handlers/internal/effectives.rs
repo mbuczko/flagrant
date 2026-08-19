@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use flagrant_types::{
-    Comparator, Feature, VariantValue, GroupConnector, IdentityWithTraits, Segment, Subject,
-    TraitValue,
+    Comparator, Feature, GroupConnector, IdentityWithTraits, Segment, Subject, TraitValue,
+    VariantValue,
     payload::{
         FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TagPatchOp, TraitPatchOp,
         VariantPatchOp,
@@ -336,9 +336,10 @@ pub(crate) fn effective_segment(
     let rule_comparator_overrides: HashMap<i32, &Comparator> = ops
         .iter()
         .filter_map(|op| match op {
-            SegmentPatchOp::SetRuleComparator { rule_id, comparator } => {
-                Some((*rule_id, comparator))
-            }
+            SegmentPatchOp::SetRuleComparator {
+                rule_id,
+                comparator,
+            } => Some((*rule_id, comparator)),
             _ => None,
         })
         .collect();
@@ -373,7 +374,8 @@ pub(crate) fn effective_segment(
                 .iter()
                 .map(|r| {
                     let rule_is_deleted = !is_deleted && deleted_rule_ids.contains(&r.id);
-                    let value_modified = !rule_is_deleted && rule_value_overrides.contains_key(&r.id);
+                    let value_modified =
+                        !rule_is_deleted && rule_value_overrides.contains_key(&r.id);
                     let comparator_modified =
                         !rule_is_deleted && rule_comparator_overrides.contains_key(&r.id);
                     EffectiveRule {

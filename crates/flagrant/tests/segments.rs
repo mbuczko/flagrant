@@ -8,7 +8,7 @@ use flagrant::{
     },
 };
 use flagrant_types::{
-    Comparator, Environment, Feature, VariantValue, Identity, Subject,
+    Comparator, Environment, Feature, Identity, Subject, VariantValue,
     payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
 use hugsqlx::params;

@@ -4,7 +4,7 @@ use flagrant::models::{
     project, traits, variant,
 };
 use flagrant_types::{
-    Environment, Feature, VariantValue, TraitValue, Variant,
+    Environment, Feature, TraitValue, Variant, VariantValue,
     payload::{FeaturePatch, IdentityPatch, IdentityTraitPayload, TraitPatchOp},
 };
 use hugsqlx::params;

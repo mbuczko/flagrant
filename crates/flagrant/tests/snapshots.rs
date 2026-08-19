@@ -1,6 +1,6 @@
 use flagrant::models::{commit, identity, segment, snapshot};
 use flagrant_types::{
-    Comparator, VariantValue, Subject,
+    Comparator, Subject, VariantValue,
     payload::{
         CommitPayload, FeatureCommitPart, FeaturePatch, IdentityCommitPart, IdentityOverridePatch,
         IdentityPatch, SegmentCommitPart, SegmentPatch, SegmentPatchOp, SegmentVariantWeight,
@@ -436,7 +436,9 @@ async fn segment_weight_only_commit_cascades_snapshot_to_overridden_feature(
 /// creates a snapshot" means every distinct patch application coordinated within one
 /// atomic operation, not one write per underlying resource touched.
 #[sqlx::test]
-async fn combined_feature_and_segment_commit_produces_one_snapshot(mut conn: PoolConnection<Sqlite>) {
+async fn combined_feature_and_segment_commit_produces_one_snapshot(
+    mut conn: PoolConnection<Sqlite>,
+) {
     let (project, environment) = create_context(&mut conn).await;
     let feature = create_feature(&mut conn, &environment, "hello").await;
     let feature = flagrant::models::feature::patch(
@@ -747,9 +749,15 @@ async fn set_comment_updates_only_the_comment(mut conn: PoolConnection<Sqlite>) 
     assert_eq!(updated.comment.as_deref(), Some("revised"));
     assert_eq!(updated.state, captured.state);
 
-    let cleared = snapshot::set_comment(&mut conn, feature.id, environment.id, captured.version, None)
-        .await
-        .unwrap();
+    let cleared = snapshot::set_comment(
+        &mut conn,
+        feature.id,
+        environment.id,
+        captured.version,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(cleared.comment, None);
 }
 

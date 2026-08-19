@@ -1,6 +1,6 @@
 use flagrant::models::{environment, feature, project, segment};
 use flagrant_types::{
-    Comparator, Environment, Feature, VariantValue, GroupConnector, Project, Segment, Subject,
+    Comparator, Environment, Feature, GroupConnector, Project, Segment, Subject, VariantValue,
     payload::{SegmentPatch, SegmentPatchOp},
 };
 use rand::Rng;

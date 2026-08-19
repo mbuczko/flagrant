@@ -17,7 +17,7 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Feature, VariantValue, IdentityVariant, IdentityWithTraits, TraitValue,
+    Feature, IdentityVariant, IdentityWithTraits, TraitValue, VariantValue,
     payload::{
         FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
         VariantPatchOp,

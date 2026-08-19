@@ -396,12 +396,16 @@ pub(crate) async fn restore_rollout_config(
             let rollout_json = serde_json::to_string(cfg)?;
             SQLFeatures::update_feature_rollout(conn, params![feature_id, rollout_json])
                 .await
-                .map_err(|e| FlagrantError::QueryFailed("Could not restore progressive rollout", e))?;
+                .map_err(|e| {
+                    FlagrantError::QueryFailed("Could not restore progressive rollout", e)
+                })?;
         }
         None => {
             SQLFeatures::clear_feature_rollout(conn, params![feature_id])
                 .await
-                .map_err(|e| FlagrantError::QueryFailed("Could not clear progressive rollout", e))?;
+                .map_err(|e| {
+                    FlagrantError::QueryFailed("Could not clear progressive rollout", e)
+                })?;
         }
     }
     Ok(())

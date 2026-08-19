@@ -6,13 +6,13 @@ use flagrant_client::{
     connection::Connection,
     http::{Auth, HttpClient},
 };
-use flagrant_types::Project;
 use flagrant_repl::{
     completer::CommandLineCompleter,
     hinter::ReplHinter,
     readline::{self, ReplHelper},
     session::Session,
 };
+use flagrant_types::Project;
 use rustyline::overlay::GenericOverlayer;
 
 mod command;

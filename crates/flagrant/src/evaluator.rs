@@ -421,22 +421,14 @@ mod tests {
     #[test]
     fn identity_subject_matches_against_identity_value() {
         let id = identity("user-42", vec![]);
-        let r = rule(
-            Subject::Identity,
-            Comparator::ExactlyMatches,
-            "user-42",
-        );
+        let r = rule(Subject::Identity, Comparator::ExactlyMatches, "user-42");
         assert!(rule_matches(&r, &env("prod"), &id.ctx()));
     }
 
     #[test]
     fn environment_subject_matches_against_environment_name() {
         let id = identity("user-42", vec![]);
-        let r = rule(
-            Subject::Environment,
-            Comparator::ExactlyMatches,
-            "prod",
-        );
+        let r = rule(Subject::Environment, Comparator::ExactlyMatches, "prod");
         assert!(rule_matches(&r, &env("prod"), &id.ctx()));
         assert!(!rule_matches(&r, &env("staging"), &id.ctx()));
     }
@@ -492,11 +484,7 @@ mod tests {
             None,
             vec![
                 rule(Subject::Identity, Comparator::ExactlyMatches, "nope"),
-                rule(
-                    Subject::Identity,
-                    Comparator::ExactlyMatches,
-                    "user-42",
-                ),
+                rule(Subject::Identity, Comparator::ExactlyMatches, "user-42"),
             ],
         );
         assert!(group_matches(&g, &env("prod"), &id.ctx()));

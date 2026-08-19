@@ -738,7 +738,10 @@ async fn restoring_a_snapshot_after_rules_changed_restores_matching_config(
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(status.current_step, 2, "sanity: should have caught up to v1's terminal step");
+    assert_eq!(
+        status.current_step, 2,
+        "sanity: should have caught up to v1's terminal step"
+    );
 
     let snapshots = snapshot::list(&mut conn, feature.id, environment.id)
         .await
@@ -763,7 +766,10 @@ async fn restoring_a_snapshot_after_rules_changed_restores_matching_config(
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(status.current_step, 0, "sanity: changing rules resets to step 0");
+    assert_eq!(
+        status.current_step, 0,
+        "sanity: changing rules resets to step 0"
+    );
     assert_eq!(status.config.steps.len(), 2, "sanity: v2 is now live");
 
     // Restore the snapshot captured mid-progression under v1, while v2 is live.
