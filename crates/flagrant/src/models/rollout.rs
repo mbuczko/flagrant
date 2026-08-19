@@ -89,7 +89,9 @@ pub(crate) async fn set_step(
 ) -> anyhow::Result<()> {
     SQLRollouts::set_rollout_state(conn, params![feature_id, environment_id, step])
         .await
-        .map_err(|e| FlagrantError::QueryFailed("Could not restore progressive rollout state", e))?;
+        .map_err(|e| {
+            FlagrantError::QueryFailed("Could not restore progressive rollout state", e)
+        })?;
 
     Ok(())
 }
@@ -198,7 +200,10 @@ pub(crate) async fn maybe_advance(
     }
 
     let Some(alternative) = current.variants.iter().find(|v| !v.is_control()) else {
-        tracing::warn!(feature_id, "Progressive rollout has no alternative variant to advance");
+        tracing::warn!(
+            feature_id,
+            "Progressive rollout has no alternative variant to advance"
+        );
         return Ok(false);
     };
 

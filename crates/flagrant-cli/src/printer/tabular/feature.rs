@@ -7,7 +7,7 @@ use flagrant_types::{
 
 use crate::{handlers::internal::effectives as effective, printer::legend};
 
-use super::Tabular;
+use super::{Tabular, rollout::format_duration};
 
 /// A staged change to the in-context identity's override for this feature.
 pub enum IdentityPending {
@@ -262,7 +262,9 @@ impl Tabular for Feature {
                 .steps
                 .iter()
                 .map(|s| match s.hold_for_secs {
-                    Some(secs) => format!("{}% for {secs}s", s.weight).white().to_string(),
+                    Some(secs) => format!("{}% for {}", s.weight, format_duration(secs))
+                        .white()
+                        .to_string(),
                     None => format!("{}%", s.weight).white().to_string(),
                 })
                 .collect::<Vec<_>>()

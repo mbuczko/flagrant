@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package flagrant.v1;
+
+// Mirrors GET /api/v1/projects/{project}/envs/{environment}/features.
+//
+// Identity is sent via the `x-flagrant-identity` gRPC metadata key (mirroring the
+// `X-Flagrant-Identity` HTTP header), and the srv-token via the standard `authorization`
+// metadata key as `Bearer <token>` (mirroring the HTTP `Authorization` header) - neither
+// is a message field, same reasoning as HTTP headers not being query/body params.
+service FeatureResolver {
+  rpc GetFeatures(GetFeaturesRequest) returns (GetFeaturesResponse);
+}
+
+message GetFeaturesRequest {
+  string project = 1;
+  string environment = 2;
+}
+
+message GetFeaturesResponse {
+  repeated Feature features = 1;
+}
+
+message Feature {
+  int32 feature_id = 1;
+  string name = 2;
+  VariantValue value = 3;
+  bool is_enabled = 4;
+}
+
+// Mirrors flagrant_types::VariantValue's three variants exactly.
+message VariantValue {
+  oneof kind {
+    string text = 1;
+    string json = 2;
+    string toml = 3;
+  }
+}

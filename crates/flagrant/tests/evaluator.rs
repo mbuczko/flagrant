@@ -3,7 +3,7 @@ use flagrant::{
     models::{identity, segment, variant},
 };
 use flagrant_types::{
-    Comparator, VariantValue, GroupConnector, Subject,
+    Comparator, GroupConnector, Subject, VariantValue,
     payload::{SegmentPatchOp, SegmentVariantWeight},
 };
 use sqlx::{Sqlite, pool::PoolConnection};

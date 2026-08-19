@@ -79,8 +79,9 @@ impl Tabular for IdentityWithTraits {
 
         let staged_overrides: &[IdentityOverridePatch] =
             patch.map(|p| p.overrides.as_slice()).unwrap_or_default();
-        let staged_unset_overrides: &[String] =
-            patch.map(|p| p.unset_overrides.as_slice()).unwrap_or_default();
+        let staged_unset_overrides: &[String] = patch
+            .map(|p| p.unset_overrides.as_slice())
+            .unwrap_or_default();
 
         // Build variant lines: committed state overlaid with staged overrides/unset_overrides.
         let mut variant_lines: Vec<String> = Vec::new();
@@ -147,7 +148,7 @@ impl Tabular for IdentityWithTraits {
                 variant_lines.push(format!(
                     "{} → {}",
                     o.feature_name.bright_blue(),
-                    if is_deleted { value.red() } else { value.green() }
+                    legend::stage_color(value, is_deleted, !is_deleted, false)
                 ));
                 variants_staged = true;
             }

@@ -7,7 +7,7 @@ use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Environment, VariantValue, TraitValue,
+    Environment, TraitValue, VariantValue,
     payload::{
         CommitPayload, CommitResult, FeatureCommitPart, FeaturePatch, IdentityCommitPart,
         IdentityPatch, SegmentCommitPart, TagPatchOp, TraitPatchOp, VariantPatchOp,

@@ -1,5 +1,10 @@
 # sample configuration
 
+# Optional: overrides the always-on HTTP server's listen address (defaults to
+# 127.0.0.1:3030 when this section, or the whole file, is absent).
+[http]
+listen = "127.0.0.1:3030"
+
 [projects.demo.envs.dev]
 srv-token = "dev-srv-token"
 
@@ -11,3 +16,11 @@ srv-token = "base-srv-token"
 [redis]
 url = "redis://127.0.0.1:6379"
 ttl-seconds = 30
+
+# Optional: exposes the public feature-resolution endpoint over gRPC too, in
+# addition to the always-on HTTP route. Omit this section entirely to disable
+# it. `listen` is either a TCP host:port, or a unix:<path> for a Unix domain
+# socket - handy for local IPC without exposing a TCP port.
+[grpc]
+listen = "unix:/tmp/flagrant/grpc.sock"
+# listen = "127.0.0.1:50051"   # alternative: plain TCP

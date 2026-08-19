@@ -1,7 +1,5 @@
 # Flagrant - CLI-driven feature flagging system
 
-> ⚠️ **Heavy development**: APIs, CLI commands and the on-disk schema are all still shifting release to release. Expect breaking changes without notice until this note goes away.
-
 The feature-flagging space is already well served by excellent solutions like [Unleash](https://www.getunleash.io/) or [Flagsmith](https://www.flagsmith.com/), so why yet another one? Flagrant has an ambition to become the Redis of feature flagging - small, reliable, and completely CLI driven, providing everything needed to keep features under control without dragging in a dashboard-first, heavyweight platform.
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
@@ -58,7 +56,13 @@ A feature context alone lets you edit the feature itself (status, variants, tags
 
 ### Features & variants
 
-A **feature** is a named flag scoped to a project + environment (e.g. `prod`/`staging`). Every feature has at least one **variant** - the *control* variant, always present, holding the feature's default value - plus any number of additional variants, each with its own value and a weight (0-100%). Weights across a feature's non-control variants describe how identities should be split between them; the control variant absorbs whatever's left. Distribution is handled by a self-balancing accumulator rather than a random number generator, so a given traffic split stays stable even as variants are added or weights change.
+A **feature** is a named flag scoped to a project, and automatically exists in every environment of that project (e.g. `prod`/`staging`) - there's no separate "create in staging, then create in prod" step. Every feature has at least one **variant** - the *control* variant, always present, holding the feature's default value - plus any number of additional variants, each with its own value and a weight (0-100%). Weights across a feature's non-control variants describe how identities should be split between them; the control variant absorbs whatever's left. Distribution is handled by a self-balancing accumulator rather than a random number generator, so a given traffic split stays stable even as variants are added or weights change.
+
+Values and weights are shared across environments differently depending on which kind of variant they belong to:
+
+- **Non-control variant value** is shared across every environment of the project - there's only one row for it, so changing a variant's value (`VARIANT value <index> <value>`) changes it everywhere at once.
+- **Control variant value**, on the other hand, is independent per environment - each environment owns its own row, seeded from the feature's default value at creation time, so running `VARIANT value <index> <value>` against the control variant in one environment leaves every other environment's control value untouched.
+- **Weight**, for both control and non-control variants, is always scoped per environment - so the very same variant (and, for non-control variants, the very same value) can be weighted differently in `prod` than in `staging`, letting you roll a feature out gradually per environment without duplicating variants.
 
 Enter a feature's context with:
 
@@ -77,6 +81,41 @@ The prompt then shows the active feature, and these become available:
 - `VARIANT delete <index>` to stage variant for removal
 
 None of this reaches the API until you run `COMMIT` (or `DISCARD` to drop it). Once commited, the change gets applied server-side in a single transaction.
+
+### Server-side-only flags
+
+A feature can be marked **server-side-only** with `FEATURE server-side on|off`. Such a feature is left out of the public feature-resolution endpoint (`GET /projects/{project}/envs/{environment}/features`) by default - useful for flags that should only ever be read by your own backend (internal rollout switches, backend-to-backend behaviour, etc.), never exposed to a browser/mobile client that only identifies itself via `X-Flagrant-Identity`.
+
+To actually read srv-only features, a caller additionally sends an `Authorization: Bearer <token>` header, matching a per-project+environment `srv-token` configured server-side in `flagrant-api`'s TOML config file (`flagrant.toml` by default, or whatever path `FLAGRANT_CONFIG` points to):
+
+```toml
+[projects.my_project.envs.production]
+srv-token = "prod-secret-token"
+```
+
+A valid token only ever *adds* srv-only features to the response on top of the normal ones - it never narrows it down to just those. No config entry (or an environment/project not listed at all) simply means no token unlocks srv-only features there, and the endpoint behaves as if the header was never sent - no error either way. Config is read once at startup; run `RELOAD` from the CLI (hits `POST /admin/reload`) to have a running server pick up changes to `flagrant.toml` - e.g. a rotated `srv-token` - without restarting it.
+
+The same endpoint is also reachable over gRPC, as an alternative to HTTP - useful for backend-to-backend callers that prefer gRPC's binary framing, or that want to talk over a local Unix domain socket instead of a TCP port. It's opt-in: absent a `[grpc]` section in the TOML config, no gRPC listener is started at all. When enabled, it serves the exact same `FeatureResolver/GetFeatures` RPC as the HTTP route - `x-flagrant-identity` gRPC metadata takes the place of the `X-Flagrant-Identity` header, and a standard `authorization: Bearer <token>` metadata entry takes the place of the `Authorization` header for unlocking srv-only features - so behaviour (including caching and srv-token gating) never diverges between the two transports.
+
+```toml
+[grpc]
+listen = "127.0.0.1:50051"
+# or, for local IPC over a Unix domain socket instead of TCP:
+# listen = "unix:/tmp/flagrant/grpc.sock"
+```
+
+Unlike `srv-token`, the gRPC listener address is read once at startup only - `RELOAD` picks up srv-token/Redis changes on a running server, but changing `[grpc].listen` requires a restart, since a bound listener can't be rebound onto a different address/socket path in place.
+
+Both the Redis cache and the gRPC listener are also opt-in at *build* time, via the `redis` and `grpc` Cargo features on `flagrant-api` (both enabled by default) - independently of whether `[redis]`/`[grpc]` are actually present in `flagrant.toml`. Building with `cargo build -p flagrant-api --no-default-features` (optionally re-enabling just one, e.g. `--features redis`) drops the unused dependency (the `redis` client, or `tonic`/`prost` and the protobuf codegen build step) from the binary entirely - handy if you only ever run with one of them, or neither.
+
+The always-on HTTP server's own listen address is configurable the same way, via an optional `[http]` section - absent (or with `[http]` omitted entirely), it defaults to `127.0.0.1:3030`:
+
+```toml
+[http]
+listen = "0.0.0.0:3030"
+```
+
+Same restart caveat as `[grpc].listen`: read once at startup, not affected by `RELOAD`.
 
 ### Identities & traits
 
@@ -141,7 +180,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
 - [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 - [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
-- [ ] **gRPC** - for backend-to-backend connection
+- [x] **gRPC** - for backend-to-backend connection
 - [ ] **Server side SDKs** - for Rust, Python and Java
 - [ ] **Prometheus metrics**
 
@@ -153,7 +192,7 @@ To keep things simple yet still allow for extensibility, code is structured into
 
 - `flagrant` - core logic: entity models, SQL queries (via [hugsqlx](https://github.com/mbuczko/hugsqlx)), the weighted variant distributor, and the segment rule evaluator
 - `flagrant-types` - core types shared across all other crates (`Feature`, `Variant`, `Identity`, `Segment`, request/patch payloads, ...)
-- `flagrant-api` - the Axum HTTP server exposing both the client-facing feature-resolution endpoint and the management API, with OpenAPI docs served via [Scalar](https://scalar.com/)
+- `flagrant-api` - the Axum HTTP server exposing both the client-facing feature-resolution endpoint (optionally also over gRPC, TCP or Unix socket - see [Server-side-only flags](#server-side-only-flags)) and the management API, with OpenAPI docs served via [Scalar](https://scalar.com/)
 - `flagrant-cli` - the command-line REPL used to manage projects, environments, features, identities and segments, with all table output rendered via [fancy-table](https://github.com/mbuczko/fancy-table)
 - `flagrant-client` - the HTTP client library used by `flagrant-cli` (and embeddable in other Rust apps) to talk to `flagrant-api`, with staging/caching baked in
 - `flagrant-repl` - a small, reusable REPL framework (readline, tab completion, hinting, command parsing) that `flagrant-cli` is built on

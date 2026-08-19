@@ -116,7 +116,14 @@ pub async fn restore(
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
-    let snapshot =
-        snapshot::restore(&mut conn, &project, &env, &feature, version, payload.comment).await?;
+    let snapshot = snapshot::restore(
+        &mut conn,
+        &project,
+        &env,
+        &feature,
+        version,
+        payload.comment,
+    )
+    .await?;
     Ok(Json(snapshot))
 }

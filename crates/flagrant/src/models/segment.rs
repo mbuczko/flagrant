@@ -310,7 +310,11 @@ pub async fn patch(
     mut segment: Segment,
     patch: SegmentPatch,
 ) -> anyhow::Result<Option<Segment>> {
-    if patch.ops.iter().any(|op| matches!(op, SegmentPatchOp::Delete)) {
+    if patch
+        .ops
+        .iter()
+        .any(|op| matches!(op, SegmentPatchOp::Delete))
+    {
         delete(conn, &segment).await?;
         return Ok(None);
     }
@@ -410,8 +414,7 @@ pub async fn patch(
                     .map(|r| r.value.clone())
                     .ok_or(FlagrantError::NotFound("Rule not found"))?;
 
-                rule::set_comparator(conn, segment.id, rule_id, comparator.clone(), &value)
-                    .await?;
+                rule::set_comparator(conn, segment.id, rule_id, comparator.clone(), &value).await?;
                 rule::update_comparator_in_groups(&mut segment.groups, rule_id, comparator);
             }
             SegmentPatchOp::SetFeatureOverride {

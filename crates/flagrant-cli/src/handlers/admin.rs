@@ -8,7 +8,10 @@ use serde_json::Value;
 
 pub fn reload(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
-    match ctx.client.post::<_, Value>("/admin/reload".into(), Value::Null) {
+    match ctx
+        .client
+        .post::<_, Value>("/admin/reload".into(), Value::Null)
+    {
         Ok(_) => {
             println!("Server configuration reloaded.");
             Ok(())
