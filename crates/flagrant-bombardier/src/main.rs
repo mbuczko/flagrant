@@ -95,7 +95,7 @@ pub fn main() -> anyhow::Result<()> {
         args.host,
         Auth::None,
         args.project,
-        args.environment,
+        Some(args.environment),
     )?);
 
     // Flipped to `false` by the watcher thread below only on an unrecoverable error (the

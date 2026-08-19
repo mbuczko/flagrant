@@ -80,19 +80,13 @@ pub async fn apply(
             });
 
         if weight_only {
-            // Weight-only ops already name their exact (feature, environment) scope.
+            // Weight-only ops are always scoped to this commit's own environment - see
+            // segment::patch.
             for op in &part.patch.ops {
                 match op {
-                    SegmentPatchOp::SetFeatureOverride {
-                        feature_id,
-                        environment_id,
-                        ..
-                    }
-                    | SegmentPatchOp::UnsetFeatureOverride {
-                        feature_id,
-                        environment_id,
-                    } => {
-                        affected.insert((*feature_id, *environment_id));
+                    SegmentPatchOp::SetFeatureOverride { feature_id, .. }
+                    | SegmentPatchOp::UnsetFeatureOverride { feature_id } => {
+                        affected.insert((*feature_id, environment.id));
                     }
                     _ => {}
                 }
@@ -109,7 +103,7 @@ pub async fn apply(
                 }
             }
         }
-        segment::patch(&mut tx, project, current, part.patch).await?
+        segment::patch(&mut tx, project, environment, current, part.patch).await?
     } else {
         None
     };

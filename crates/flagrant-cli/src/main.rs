@@ -41,9 +41,9 @@ struct Args {
     #[argh(option, short = 'p')]
     project: Option<String>,
 
-    /// environment ID
-    #[argh(option, short = 'e', default = "1")]
-    environment: i32,
+    /// environment ID (default: the project's first-created environment)
+    #[argh(option, short = 'e')]
+    environment: Option<i32>,
 
     /// list all projects
     #[argh(switch)]
@@ -130,7 +130,7 @@ fn main() -> anyhow::Result<()> {
         Ok(_) => Connection::init(args.host, Auth::None, project_name, args.environment)?,
         Err(_) => {
             let (project, env) = handlers::projects::create_with_env(&project_name, &client)?;
-            Connection::init(args.host, Auth::None, project.name, env.id)?
+            Connection::init(args.host, Auth::None, project.name, Some(env.id))?
         }
     };
 

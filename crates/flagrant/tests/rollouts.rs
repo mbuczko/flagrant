@@ -453,6 +453,7 @@ async fn rollout_step_advance_ignores_pinned_and_segment_governed_identities(
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -464,7 +465,6 @@ async fn rollout_step_advance_ignores_pinned_and_segment_governed_identities(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 0,

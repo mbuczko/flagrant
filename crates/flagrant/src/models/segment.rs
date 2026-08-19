@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use flagrant_types::{
-    GroupConnector, Project, Segment, SegmentFeatureOverride, SegmentGroup, SegmentRule,
+    Environment, GroupConnector, Project, Segment, SegmentFeatureOverride, SegmentGroup,
+    SegmentRule,
     payload::{SegmentPatch, SegmentPatchOp, SegmentVariantWeight},
 };
 use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use sqlx::{Acquire, SqliteConnection};
 
-use super::{environment, identity, rule, variant};
+use super::{identity, rule, variant};
 use crate::errors::FlagrantError;
 
 #[derive(HugSqlx)]
@@ -304,9 +305,14 @@ pub async fn set_group_description(
 /// Each op is executed immediately against the DB; the in-memory `segment` is kept in
 /// sync so that subsequent ops in the same batch (e.g. `AddRule` after `AddGroup`) can
 /// resolve labels and IDs without an extra round-trip.
+///
+/// `environment` scopes any `SetFeatureOverride`/`UnsetFeatureOverride` ops in the batch -
+/// there's no per-op environment, a patch (like the commit it's part of) is always applied
+/// against exactly one.
 pub async fn patch(
     conn: &mut SqliteConnection,
     project: &Project,
+    environment: &Environment,
     mut segment: Segment,
     patch: SegmentPatch,
 ) -> anyhow::Result<Option<Segment>> {
@@ -419,22 +425,19 @@ pub async fn patch(
             }
             SegmentPatchOp::SetFeatureOverride {
                 feature_id,
-                environment_id,
                 variant_weights,
             } => {
-                let environment = environment::get_by_id(&mut *conn, environment_id).await?;
-
                 variant::delete_segment_weights_for_feature(
                     &mut *conn,
                     segment.id,
                     feature_id,
-                    environment_id,
+                    environment.id,
                 )
                 .await?;
                 for vw in &variant_weights {
                     variant::set_segment_weight(
                         &mut *conn,
-                        &environment,
+                        environment,
                         segment.id,
                         vw.variant_id,
                         vw.weight,
@@ -445,30 +448,27 @@ pub async fn patch(
                 // how organic weights always sum to 100.
                 variant::balance_segment_control_weight(
                     &mut *conn,
-                    &environment,
+                    environment,
                     segment.id,
                     feature_id,
                 )
                 .await?;
 
-                identity::mark_feature_dirty(&mut *conn, environment_id, feature_id).await?;
+                identity::mark_feature_dirty(&mut *conn, environment.id, feature_id).await?;
             }
-            SegmentPatchOp::UnsetFeatureOverride {
-                feature_id,
-                environment_id,
-            } => {
+            SegmentPatchOp::UnsetFeatureOverride { feature_id } => {
                 variant::delete_segment_weights_for_feature(
                     &mut *conn,
                     segment.id,
                     feature_id,
-                    environment_id,
+                    environment.id,
                 )
                 .await?;
 
                 // Flag now that this segment no longer overrides the feature, so
                 // identities previously attributed to it re-evaluate (and fall through to
                 // a lower-priority segment or the organic pool) the next time they're read.
-                identity::mark_feature_dirty(&mut *conn, environment_id, feature_id).await?;
+                identity::mark_feature_dirty(&mut *conn, environment.id, feature_id).await?;
             }
             // Handled by the early-return above - never reached here.
             SegmentPatchOp::Delete => unreachable!(),

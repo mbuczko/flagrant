@@ -2,12 +2,16 @@ use axum::{
     Json,
     extract::{Path, Query},
 };
-use flagrant::models::{environment, project};
+use flagrant::{
+    errors::FlagrantError,
+    models::{environment, project},
+};
 use flagrant_types::{
     Environment,
     payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
 };
 use serde::Deserialize;
+use sqlx::SqliteConnection;
 use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
@@ -87,14 +91,36 @@ pub async fn fetch_by_id_or_name(
     DbConnection(mut conn): DbConnection,
     Path((project_name, env_id)): Path<(String, EnvironmentId)>,
 ) -> Result<Json<Environment>, ServiceError> {
-    let env = match env_id {
-        EnvironmentId::Id(id) => environment::get_by_id(&mut conn, id).await?,
-        EnvironmentId::Name(name) => {
-            let project = project::get_by_name(&mut conn, project_name).await?;
-            environment::get_by_name(&mut conn, &project, name).await?
-        }
-    };
+    let env = resolve_environment(&mut conn, project_name, env_id).await?;
     Ok(Json(env))
+}
+
+/// Resolves an `EnvironmentId` (numeric or name) to an `Environment`, always scoped to
+/// `project_name` - unlike a bare `environment::get_by_id`, which looks up an environment
+/// by id globally with no project check at all. Without this, a numeric id belonging to a
+/// *different* project would silently resolve (e.g. `/projects/demo/envs/1` returning
+/// project `sample`'s environment 1, just because the id happens to exist), letting a
+/// session end up scoped to the wrong project's environment while believing it's on the
+/// named one.
+async fn resolve_environment(
+    conn: &mut SqliteConnection,
+    project_name: String,
+    env_id: EnvironmentId,
+) -> anyhow::Result<Environment> {
+    let project = project::get_by_name(conn, project_name).await?;
+    match env_id {
+        EnvironmentId::Id(id) => {
+            let env = environment::get_by_id(conn, id).await?;
+            if env.project_id != project.id {
+                return Err(FlagrantError::NotFound(
+                    "No environment of given id found in this project",
+                )
+                .into());
+            }
+            Ok(env)
+        }
+        EnvironmentId::Name(name) => environment::get_by_name(conn, &project, name).await,
+    }
 }
 
 /// Updates an environment's description.
@@ -116,13 +142,7 @@ pub async fn update(
     Path((project_name, env_id)): Path<(String, EnvironmentId)>,
     Json(payload): Json<UpdateEnvironmentPayload>,
 ) -> Result<Json<()>, ServiceError> {
-    let env = match env_id {
-        EnvironmentId::Id(id) => environment::get_by_id(&mut conn, id).await?,
-        EnvironmentId::Name(name) => {
-            let project = project::get_by_name(&mut conn, project_name).await?;
-            environment::get_by_name(&mut conn, &project, name).await?
-        }
-    };
+    let env = resolve_environment(&mut conn, project_name, env_id).await?;
     environment::update(&mut conn, &env, payload.description.as_deref()).await?;
     Ok(Json(()))
 }

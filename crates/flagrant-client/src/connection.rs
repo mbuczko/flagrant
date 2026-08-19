@@ -74,44 +74,56 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// `environment` is `None` when the caller has no particular environment in mind (e.g.
+    /// no `-e` given on the CLI) - in that case, the project's environment with the
+    /// smallest id (i.e. whichever was created first) is used, rather than defaulting to
+    /// some arbitrary/hardcoded id that may not even belong to this project.
     #[cfg(feature = "blocking")]
     pub fn init(
         api_host: String,
         auth: Auth,
         project_name: String,
-        environment: impl Into<EnvironmentRef>,
+        environment: Option<impl Into<EnvironmentRef>>,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_name}");
-        let environment = environment.into();
 
-        Self::build(
-            client.get::<Project>(path.clone()).ok(),
-            client
-                .get::<Environment>(format!("{path}/envs/{environment}"))
+        let environment = match environment {
+            Some(env) => client
+                .get::<Environment>(format!("{path}/envs/{}", env.into()))
                 .ok(),
-            client,
-        )
+            None => client
+                .get::<Vec<Environment>>(format!("{path}/envs"))
+                .ok()
+                .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
+        };
+
+        Self::build(client.get::<Project>(path).ok(), environment, client)
     }
 
+    /// See the blocking `init` above for the `environment: None` default-selection rules.
     #[cfg(not(feature = "blocking"))]
     pub async fn init(
         api_host: String,
         project_name: String,
-        environment: impl Into<EnvironmentRef>,
+        environment: Option<impl Into<EnvironmentRef>>,
     ) -> anyhow::Result<Connection> {
         let client = HttpClient::new(api_host, Auth::None);
         let path = format!("/projects/{project_name}");
-        let environment = environment.into();
 
-        Self::build(
-            client.get::<Project>(path.clone()).await.ok(),
-            client
-                .get::<Environment>(format!("{path}/envs/{environment}"))
+        let environment = match environment {
+            Some(env) => client
+                .get::<Environment>(format!("{path}/envs/{}", env.into()))
                 .await
                 .ok(),
-            client,
-        )
+            None => client
+                .get::<Vec<Environment>>(format!("{path}/envs"))
+                .await
+                .ok()
+                .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
+        };
+
+        Self::build(client.get::<Project>(path).await.ok(), environment, client)
     }
 
     fn build(

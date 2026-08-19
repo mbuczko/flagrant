@@ -76,10 +76,11 @@ pub async fn create_feature(
 pub async fn apply(
     conn: &mut PoolConnection<Sqlite>,
     project: &Project,
+    environment: &Environment,
     segment: Segment,
     ops: Vec<SegmentPatchOp>,
 ) -> Segment {
-    segment::patch(conn, project, segment, SegmentPatch { ops })
+    segment::patch(conn, project, environment, segment, SegmentPatch { ops })
         .await
         .unwrap()
         .expect("apply() ops should not stage deletion")

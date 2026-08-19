@@ -218,16 +218,17 @@ pub enum SegmentPatchOp {
         rule_id: i32,
         comparator: Comparator,
     },
-    /// Stores per-environment weight overrides for a feature's variants within this segment.
+    /// Stores weight overrides for a feature's variants within this segment, scoped to
+    /// whichever environment the enclosing commit targets (there's no per-op environment -
+    /// a commit is already scoped to exactly one).
     SetFeatureOverride {
         feature_id: i32,
-        environment_id: i32,
         variant_weights: Vec<SegmentVariantWeight>,
     },
-    /// Removes all weight overrides for a feature within this segment and environment.
+    /// Removes all weight overrides for a feature within this segment, in the commit's
+    /// environment.
     UnsetFeatureOverride {
         feature_id: i32,
-        environment_id: i32,
     },
     /// Stages deletion of the entire segment. When present, every other op in the same
     /// patch is ignored - the segment is deleted and nothing else is applied.
