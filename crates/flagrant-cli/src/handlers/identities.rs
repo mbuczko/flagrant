@@ -496,7 +496,11 @@ fn build_override_editor_content(
         };
         content.push_str(&format!(
             "# variant {} ({}%){}{}\n{}\n\n",
-            idx, e.weight, staged, current, e.value
+            idx,
+            e.weight,
+            staged,
+            current,
+            e.value.bare()
         ));
     }
 

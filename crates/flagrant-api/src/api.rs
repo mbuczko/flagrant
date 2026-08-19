@@ -8,6 +8,7 @@ use axum_extra::{
 };
 use flagrant::models::{environment, identity, project};
 use flagrant_types::FeatureResponse;
+use sqlx::SqliteConnection;
 
 use crate::{
     cache::{CachedFeature, FeatureCache},
@@ -50,10 +51,38 @@ pub async fn get_features(
     Identity(identity_value): Identity,
     bearer: Option<TypedHeader<Authorization<Bearer>>>,
 ) -> Result<Json<Vec<FeatureResponse>>, ServiceError> {
+    let bearer_token = bearer
+        .as_ref()
+        .map(|TypedHeader(Authorization(token))| token.token());
+    let features = resolve_features(
+        &state,
+        &mut conn,
+        project_name,
+        env_name,
+        identity_value,
+        bearer_token,
+    )
+    .await?;
+
+    Ok(Json(features))
+}
+
+/// Shared resolution logic behind both the HTTP (`get_features` above) and gRPC
+/// (`grpc::GrpcFeatureResolver`) surfaces of the public feature-resolution endpoint -
+/// srv-token gating, cache lookup/write and the DB fallback all live here once, so the two
+/// transports can never drift in behavior.
+pub async fn resolve_features(
+    state: &AppState,
+    conn: &mut SqliteConnection,
+    project_name: String,
+    env_name: String,
+    identity_value: String,
+    bearer_token: Option<&str>,
+) -> anyhow::Result<Vec<FeatureResponse>> {
     let include_srv = {
         let config = state.config.read().unwrap();
-        match (config.srv_token(&project_name, &env_name), &bearer) {
-            (Some(expected), Some(TypedHeader(Authorization(token)))) => token.token() == expected,
+        match (config.srv_token(&project_name, &env_name), bearer_token) {
+            (Some(expected), Some(token)) => token == expected,
             _ => false,
         }
     };
@@ -77,14 +106,14 @@ pub async fn get_features(
                     is_enabled: f.is_enabled,
                 })
                 .collect();
-            return Ok(Json(response));
+            return Ok(response);
         }
     }
 
-    let project = project::get_by_name(&mut conn, project_name).await?;
-    let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let identity = identity::get_or_create_by_value(&mut conn, &env, identity_value).await?;
-    let all_variants = identity::get_identity_variants(&mut conn, &env, &identity).await?;
+    let project = project::get_by_name(conn, project_name).await?;
+    let env = environment::get_by_name(conn, &project, env_name).await?;
+    let identity = identity::get_or_create_by_value(conn, &env, identity_value).await?;
+    let all_variants = identity::get_identity_variants(conn, &env, &identity).await?;
 
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key) {
         // Cache the unfiltered list (srv-only features included) so one entry serves
@@ -121,5 +150,5 @@ pub async fn get_features(
         })
         .collect::<Vec<_>>();
 
-    Ok(Json(variants))
+    Ok(variants)
 }

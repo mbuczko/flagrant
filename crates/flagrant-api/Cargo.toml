@@ -28,6 +28,10 @@ thiserror = {workspace = true}
 smallvec = {workspace = true}
 toml = {workspace = true}
 redis = {workspace = true}
+tonic = {workspace = true}
+tonic-prost = {workspace = true}
+prost = {workspace = true}
+tokio-stream = {workspace = true}
 
 utoipa = {workspace = true}
 utoipa-scalar = {workspace = true}
@@ -35,6 +39,10 @@ utoipa-scalar = {workspace = true}
 [dependencies.tower-http]
 version = "0.5.2"
 features = ["add-extension", "compression-full", "trace"]
+
+[build-dependencies]
+tonic-prost-build = "0.14.6"
+protoc-bin-vendored = "3.2.0"
 
 [[bin]]
 name = "flagrant-api"

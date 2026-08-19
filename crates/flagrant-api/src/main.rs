@@ -11,6 +11,7 @@ mod cache;
 mod config;
 mod errors;
 mod extractors;
+mod grpc;
 mod handlers;
 mod openapi;
 mod routes;
@@ -33,11 +34,28 @@ async fn main() {
         )),
         None => None,
     };
+
+    // Grabbed before `config` is moved into the Arc<RwLock<_>> below - the gRPC listener
+    // address is only ever read once, at startup, unlike srv-token/cache config which is
+    // re-read from `state.config` on every request and can be hot-reloaded via
+    // `/admin/reload` (a bound listener can't be rebound onto a new address in place).
+    let grpc_config = config.grpc.clone();
+
     let state = AppState {
         pool,
         config: Arc::new(RwLock::new(config)),
         cache,
     };
+
+    if let Some(grpc_config) = grpc_config {
+        let grpc_state = state.clone();
+        tokio::spawn(async move {
+            if let Err(err) = grpc::serve(grpc_config, grpc_state).await {
+                ::tracing::error!(error = ?err, "gRPC server exited with an error");
+            }
+        });
+    }
+
     let router = routes::init_router()
         .with_state(state)
         .layer(CompressionLayer::new())

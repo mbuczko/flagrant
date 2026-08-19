@@ -7,8 +7,9 @@ use std::{
 use serde::Deserialize;
 
 /// Server configuration loaded once at startup from a TOML file, keyed by project and
-/// environment name. Currently only carries the `srv-token` unlocking server-side-only
-/// features, but the nesting leaves room for further per-environment settings later.
+/// environment name. Carries per-environment settings (currently just the `srv-token`
+/// unlocking server-side-only features), plus optional top-level `[redis]` and `[grpc]`
+/// sections enabling those features when present.
 ///
 /// ```toml
 /// [projects.my_project.envs.production]
@@ -20,6 +21,28 @@ pub struct ServerConfig {
     pub projects: HashMap<String, ProjectConfig>,
     #[serde(default)]
     pub redis: Option<RedisConfig>,
+    #[serde(default)]
+    pub grpc: Option<GrpcConfig>,
+}
+
+/// Optional gRPC exposure of the public feature-resolution endpoint, alongside the
+/// always-on HTTP route. Absent `[grpc]` section means the gRPC listener is disabled
+/// entirely - same on/off convention as `[redis]`.
+///
+/// `listen` is either a plain `host:port` (TCP) or a `unix:<path>` for a Unix domain
+/// socket (useful for same-host IPC without exposing a TCP port). Read once at startup;
+/// unlike `srv-token`, it is *not* picked up by `/admin/reload` - a listener can't be
+/// rebound onto a new address/path once the server is already running, so changing this
+/// value requires a restart.
+///
+/// ```toml
+/// [grpc]
+/// listen = "127.0.0.1:50051"
+/// # or: listen = "unix:/tmp/flagrant/grpc.sock"
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct GrpcConfig {
+    pub listen: String,
 }
 
 /// Optional Redis-backed response cache for the public features endpoint. Absent
