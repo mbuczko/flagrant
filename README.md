@@ -90,7 +90,7 @@ IDENTITY use <identity>
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
-- `IDENTITY trait <name:value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
+- `IDENTITY trait <name=value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country=pl -org`
 - `OVERRIDE add [value]` / `OVERRIDE delete` see Overrides below
 
 ### Segments
