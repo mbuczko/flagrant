@@ -76,8 +76,7 @@ pub async fn get_pinned_identities(
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
     let var = variant::get_by_id(&mut conn, &env, variant_id, None).await?;
-    let identities =
-        identity::list_identities_pinned_to_variant(&mut conn, env.id, var.id).await?;
+    let identities = identity::list_identities_pinned_to_variant(&mut conn, env.id, var.id).await?;
 
     Ok(Json(identities))
 }

@@ -120,7 +120,6 @@ pub async fn fetch_by_id_or_name(
     Ok(Json(feature))
 }
 
-
 /// Lists features optionally pre-filtered by name.
 /// Each feature includes obligatory control variant and optional non-control ones.
 ///
