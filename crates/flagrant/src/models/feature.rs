@@ -329,9 +329,12 @@ pub async fn patch(
         }
     }
 
-    // Progressive rollout. Checked against the *post*-patch variant count (deletes/
+    // Progressive rollout. Checked against the post-patch variant count (deletes/
     // updates/adds above have already settled), so this also rejects e.g. adding a 2nd
-    // variant to an already-progressive feature, not just enabling on a bad count.
+    // variant to an already-progressive feature, not just enabling on a bad count. The
+    // non-control variant count is a feature-wide property (that variant's value/identity
+    // - though not its weight - is shared across every environment), so checking it via
+    // just `environment` here is enough; no need to repeat per environment below.
     let effective_rollout = match &patch.rollout {
         Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
         Some(RolloutPatchOp::Unset) => None,
@@ -358,16 +361,34 @@ pub async fn patch(
                 .await
                 .map_err(|e| FlagrantError::QueryFailed("Could not set progressive rollout", e))?;
 
-            variant::set_weight_and_rebalance(
-                &mut tx,
-                environment,
-                feature.id,
-                non_control[0],
-                new_cfg.steps[0].weight,
-            )
-            .await?;
+            // Defining a schedule activates it everywhere at once, from step 0 - there's
+            // no separate manual "activate this environment" step. Progression still
+            // gates independently per environment from here on (each has its own
+            // minimum-sample-size and hold-duration checks via `rollout::maybe_advance`),
+            // so this only synchronizes the starting point, not the whole schedule.
+            let project = Project {
+                id: environment.project_id,
+                ..Default::default()
+            };
+            for env in super::environment::get_by_project(&mut tx, &project).await? {
+                let env_variants = variant::get_for_feature(&mut tx, &env, feature.id, None)
+                    .await
+                    .unwrap_or_default();
+                let Some(alt) = env_variants.iter().find(|v| !v.is_control()) else {
+                    continue;
+                };
 
-            rollout::activate(&mut tx, environment.id, feature.id).await?;
+                variant::set_weight_and_rebalance(
+                    &mut tx,
+                    &env,
+                    feature.id,
+                    alt,
+                    cfg.steps[0].weight,
+                )
+                .await?;
+
+                rollout::activate(&mut tx, env.id, feature.id).await?;
+            }
         }
     }
 

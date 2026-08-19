@@ -183,7 +183,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "progressive",
-            "rules <w1>:<dur1> ... <100> | sample <n> | off | status",
+            "rules <w1>:<dur1> ... <100> | sample <n> | delete | status",
             handlers::features::progressive,
             in_context!(feature_ctx),
         ),

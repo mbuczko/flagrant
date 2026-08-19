@@ -91,7 +91,14 @@ pub struct IdentityTraitPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum RolloutPatchOp {
+    /// Defines (or redefines) the schedule and immediately activates it, from step 0, in
+    /// every environment of the project - not just the one the commit happens to be in.
+    /// Progression itself still gates independently per environment (each has its own
+    /// minimum-sample-size and hold-duration checks), so this only synchronizes the
+    /// starting point, not the whole schedule.
     Set(RolloutConfig),
+    /// Removes the rollout entirely - the schedule and every environment's progression,
+    /// not just one.
     Unset,
 }
 

@@ -153,7 +153,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
                     "server-side" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
                     "progressive" if arg_n == 2 => {
-                        filter_by_prefix(&["rules", "sample", "off", "status"], prefix)
+                        filter_by_prefix(&["rules", "sample", "delete", "status"], prefix)
                     }
                     // Auto-complete tag names for `FEATURE tag`. A `-` prefix means removal.
                     "tag" if arg_n >= 2 => {

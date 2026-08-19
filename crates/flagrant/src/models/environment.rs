@@ -6,7 +6,7 @@ use sqlx::{Acquire, SqliteConnection};
 use crate::errors::FlagrantError;
 use flagrant_types::{Environment, Project};
 
-use super::{feature, variant};
+use super::{feature, rollout, variant};
 
 #[derive(HugSqlx)]
 #[queries = "resources/db/queries/environments.sql"]
@@ -71,8 +71,17 @@ pub async fn create(
 ///
 /// For each feature in the project the function:
 /// 1. Creates a control variant in `new_env` with the same value as in `base_env`.
-/// 2. Inserts weight entries for every non-control variant using the weights from `base_env`.
+/// 2. Inserts weight entries for every non-control variant using the weights from
+///    `base_env` - except for a feature with an active progressive rollout, which starts
+///    fresh at step 0 instead (see below).
 /// 3. Recalculates the control variant weight so that all weights still sum to 100.
+///
+/// A feature with a progressive rollout configured is deliberately not given `base_env`'s
+/// current (possibly mid-schedule) weight - since `feature::patch`'s `Set` op already
+/// activates a schedule in every environment of the project from step 0, a new environment
+/// should join at that same starting point rather than inheriting an arbitrary snapshot of
+/// wherever `base_env` happened to have progressed to, with no progression state of its own
+/// to keep advancing it.
 async fn clone_variants_from_env(
     conn: &mut SqliteConnection,
     base_env: &Environment,
@@ -92,10 +101,17 @@ async fn clone_variants_from_env(
 
         let non_control: Vec<_> = all_variants.iter().filter(|v| !v.is_control()).collect();
         for v in &non_control {
-            variant::set_weight(&mut tx, new_env, v.id, v.weight).await?;
+            let weight = match &feat.rollout {
+                Some(cfg) => cfg.steps[0].weight,
+                None => v.weight,
+            };
+            variant::set_weight(&mut tx, new_env, v.id, weight).await?;
         }
         if !non_control.is_empty() {
             variant::recalculate_control_weight(&mut tx, new_env, feat.id).await?;
+        }
+        if feat.rollout.is_some() {
+            rollout::activate(&mut tx, new_env.id, feat.id).await?;
         }
     }
     tx.commit().await?;
