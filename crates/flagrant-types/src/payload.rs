@@ -278,8 +278,8 @@ pub struct SegmentCommitPart {
 pub struct CommitPayload {
     pub comment: Option<String>,
     pub feature: Option<FeatureCommitPart>,
-    pub identity: Option<IdentityCommitPart>,
     pub segment: Option<SegmentCommitPart>,
+    pub identity: Option<IdentityCommitPart>,
 }
 
 impl CommitPayload {
@@ -295,8 +295,8 @@ impl CommitPayload {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CommitResult {
     pub feature: Option<Feature>,
-    pub identity: Option<IdentityWithTraits>,
     pub segment: Option<Segment>,
+    pub identity: Option<IdentityWithTraits>,
     pub snapshots: Vec<Snapshot>,
 }
 

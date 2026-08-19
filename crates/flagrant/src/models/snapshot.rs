@@ -131,6 +131,7 @@ async fn build_state(
                 rules: g.rules,
             })
             .collect();
+
         segment_overrides.push(SnapshotSegmentOverride {
             segment_id: seg.id,
             segment_name: seg.name,
@@ -181,20 +182,17 @@ fn diff_tags(current: &TagList, target: &[String]) -> Vec<TagPatchOp> {
     let current_names: HashSet<&str> = current.0.iter().map(|t| t.name.as_str()).collect();
     let target_names: HashSet<&str> = target.iter().map(|s| s.as_str()).collect();
 
-    let mut ops: Vec<TagPatchOp> = target_names
+    target_names
         .iter()
         .filter(|name| !current_names.contains(*name))
         .map(|name| TagPatchOp::Add((*name).to_string()))
-        .collect();
-
-    ops.extend(
-        current_names
-            .iter()
-            .filter(|name| !target_names.contains(*name))
-            .map(|name| TagPatchOp::Remove((*name).to_string())),
-    );
-
-    ops
+        .chain(
+            current_names
+                .iter()
+                .filter(|name| !target_names.contains(*name))
+                .map(|name| TagPatchOp::Remove((*name).to_string())),
+        )
+        .collect()
 }
 
 /// Result of reconciling a snapshot's variants against the feature's current live variants.
@@ -244,6 +242,7 @@ fn reconcile_variants(current: &[Variant], snapshot: &[SnapshotVariant]) -> Vari
         {
             id_map.insert(sv.id, cur.id);
             matched.insert(cur.id);
+
             if cur.value != sv.value {
                 ops.push(VariantPatchOp::SetValue {
                     id: cur.id,
@@ -265,6 +264,7 @@ fn reconcile_variants(current: &[Variant], snapshot: &[SnapshotVariant]) -> Vari
         {
             id_map.insert(sv.id, cur.id);
             matched.insert(cur.id);
+
             if cur.weight != sv.weight {
                 ops.push(VariantPatchOp::SetWeight {
                     id: cur.id,

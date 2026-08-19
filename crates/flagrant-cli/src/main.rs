@@ -6,6 +6,7 @@ use flagrant_client::{
     connection::Connection,
     http::{Auth, HttpClient},
 };
+use flagrant_types::Project;
 use flagrant_repl::{
     completer::CommandLineCompleter,
     hinter::ReplHinter,
@@ -36,17 +37,13 @@ struct Args {
     )]
     host: String,
 
-    /// project name (mutually exclusive with --create-project)
+    /// project name - opens it if it exists, or creates and opens it if it doesn't
     #[argh(option, short = 'p')]
     project: Option<String>,
 
     /// environment ID
     #[argh(option, short = 'e', default = "1")]
     environment: i32,
-
-    /// create a new project with this name and use it for the session (mutually exclusive with --project)
-    #[argh(option)]
-    create_project: Option<String>,
 
     /// list all projects
     #[argh(switch)]
@@ -125,19 +122,16 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let connection = match (args.project, args.create_project) {
-        (Some(project_name), None) => {
-            Connection::init(args.host, Auth::None, project_name, args.environment)?
-        }
-        (None, Some(name)) => {
-            let client = HttpClient::new(args.host.clone(), Auth::None);
-            let (project, env) = handlers::projects::create_with_env(&name, &client)?;
+    let Some(project_name) = args.project else {
+        anyhow::bail!("--project must be provided");
+    };
+    let client = HttpClient::new(args.host.clone(), Auth::None);
+    let connection = match client.get::<Project>(format!("/projects/{project_name}")) {
+        Ok(_) => Connection::init(args.host, Auth::None, project_name, args.environment)?,
+        Err(_) => {
+            let (project, env) = handlers::projects::create_with_env(&project_name, &client)?;
             Connection::init(args.host, Auth::None, project.name, env.id)?
         }
-        (Some(_), Some(_)) => {
-            anyhow::bail!("--project and --create-project are mutually exclusive")
-        }
-        (None, None) => anyhow::bail!("one of --project or --create-project must be provided"),
     };
 
     let session = Session::new(connection);

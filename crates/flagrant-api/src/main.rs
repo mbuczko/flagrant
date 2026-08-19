@@ -4,9 +4,10 @@ use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
 use tracing::init_tracing;
 
-use crate::{config::ServerConfig, state::AppState};
+use crate::{cache::FeatureCache, config::ServerConfig, state::AppState};
 
 mod api;
+mod cache;
 mod config;
 mod errors;
 mod extractors;
@@ -24,9 +25,18 @@ async fn main() {
         .await
         .expect("Cannot initialize DB");
     let config = ServerConfig::load_resolved().expect("Cannot load configuration");
+    let cache = match &config.redis {
+        Some(redis_config) => Some(Arc::new(
+            FeatureCache::connect(redis_config)
+                .await
+                .expect("Cannot connect to Redis"),
+        )),
+        None => None,
+    };
     let state = AppState {
         pool,
         config: Arc::new(RwLock::new(config)),
+        cache,
     };
     let router = routes::init_router()
         .with_state(state)

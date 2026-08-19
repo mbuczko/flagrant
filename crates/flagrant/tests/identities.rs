@@ -5,7 +5,7 @@ use flagrant::models::{
 };
 use flagrant_types::{
     Environment, Feature, VariantValue, TraitValue, Variant,
-    payload::{IdentityPatch, IdentityTraitPayload, TraitPatchOp},
+    payload::{FeaturePatch, IdentityPatch, IdentityTraitPayload, TraitPatchOp},
 };
 use hugsqlx::params;
 use smallvec::smallvec;
@@ -251,6 +251,48 @@ async fn distribute_identities(mut conn: PoolConnection<Sqlite>) {
             .await,
         0
     );
+}
+
+#[sqlx::test]
+async fn get_identity_variants_excludes_archived_features(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = feature::create(
+        &mut conn,
+        &environment,
+        "archivable_feature".to_owned(),
+        None,
+        VariantValue::build("foo"),
+        true,
+        false,
+    )
+    .await
+    .unwrap();
+
+    let bob = identity::get_or_create_by_value(&mut conn, &environment, "bob".to_owned())
+        .await
+        .unwrap();
+
+    let variants = identity::get_identity_variants(&mut conn, &environment, &bob)
+        .await
+        .unwrap();
+    assert!(variants.iter().any(|v| v.feature_id == feature.id));
+
+    feature::patch(
+        &mut conn,
+        &environment,
+        &feature,
+        FeaturePatch {
+            is_archived: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let variants = identity::get_identity_variants(&mut conn, &environment, &bob)
+        .await
+        .unwrap();
+    assert!(!variants.iter().any(|v| v.feature_id == feature.id));
 }
 
 #[sqlx::test]

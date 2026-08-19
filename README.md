@@ -90,7 +90,7 @@ IDENTITY use <identity>
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
-- `IDENTITY trait <name:value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country:pl -org`
+- `IDENTITY trait <name=value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country=pl -org`
 - `OVERRIDE add [value]` / `OVERRIDE delete` see Overrides below
 
 ### Segments
@@ -140,6 +140,10 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **Snapshots** - capture and restore the full state of a feature definition and its overrides at a point in time
 - [ ] **Scheduled feature-flags** - turn features on/off (or shift variant weights) on a schedule, not just on/off by hand
 - [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
+- [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
+- [ ] **gRPC** - for backend-to-backend connection
+- [ ] **Server side SDKs** - for Rust, Python and Java
+- [ ] **Prometheus metrics**
 
 Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
 

@@ -221,6 +221,7 @@ pub struct IdentityVariant {
     pub feature_value: Option<VariantValue>,
     pub pinned_at: Option<NaiveDateTime>,
     pub is_srv: bool,
+    pub is_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -543,6 +544,7 @@ pub struct FeatureResponse {
     pub feature_id: i32,
     pub name: String,
     pub value: VariantValue,
+    pub is_enabled: bool,
 }
 
 impl Feature {

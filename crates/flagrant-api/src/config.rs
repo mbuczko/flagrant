@@ -18,6 +18,27 @@ use serde::Deserialize;
 pub struct ServerConfig {
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
+    #[serde(default)]
+    pub redis: Option<RedisConfig>,
+}
+
+/// Optional Redis-backed response cache for the public features endpoint. Absent
+/// `[redis]` section means caching is disabled entirely.
+///
+/// ```toml
+/// [redis]
+/// url = "redis://127.0.0.1:6379"
+/// ttl-seconds = 30
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisConfig {
+    pub url: String,
+    #[serde(rename = "ttl-seconds", default = "default_ttl_seconds")]
+    pub ttl_seconds: u64,
+}
+
+fn default_ttl_seconds() -> u64 {
+    30
 }
 
 #[derive(Debug, Default, Deserialize)]
