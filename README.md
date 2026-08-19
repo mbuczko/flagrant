@@ -1,7 +1,5 @@
 # Flagrant - CLI-driven feature flagging system
 
-> ⚠️ **Heavy development**: APIs, CLI commands and the on-disk schema are all still shifting release to release. Expect breaking changes without notice until this note goes away.
-
 The feature-flagging space is already well served by excellent solutions like [Unleash](https://www.getunleash.io/) or [Flagsmith](https://www.flagsmith.com/), so why yet another one? Flagrant has an ambition to become the Redis of feature flagging - small, reliable, and completely CLI driven, providing everything needed to keep features under control without dragging in a dashboard-first, heavyweight platform.
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
