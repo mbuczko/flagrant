@@ -29,15 +29,12 @@ pub async fn upsert(
 
 /// Returns all traits ordered by name.
 pub async fn get_by_id(conn: &mut SqliteConnection, trait_id: i32) -> anyhow::Result<Trait> {
-    let t = SQLTraits::fetch_trait_by_id::<_, Trait>(conn, params![trait_id]).await?;
-    Ok(t)
+    Ok(SQLTraits::fetch_trait_by_id::<_, Trait>(conn, params![trait_id]).await?)
 }
 
 /// Returns all traits ordered by name.
 pub async fn get_all(conn: &mut SqliteConnection, project_id: i32) -> anyhow::Result<Vec<Trait>> {
-    let traits = SQLTraits::fetch_all_traits::<_, Trait>(conn, params![project_id]).await?;
-
-    Ok(traits)
+    Ok(SQLTraits::fetch_all_traits::<_, Trait>(conn, params![project_id]).await?)
 }
 
 /// Returns traits with names matching the given LIKE pattern.
@@ -46,10 +43,7 @@ pub async fn get_by_prefix(
     project_id: i32,
     pattern: String,
 ) -> anyhow::Result<Vec<Trait>> {
-    let traits =
-        SQLTraits::fetch_traits_by_prefix::<_, Trait>(conn, params![project_id, pattern]).await?;
-
-    Ok(traits)
+    Ok(SQLTraits::fetch_traits_by_prefix::<_, Trait>(conn, params![project_id, pattern]).await?)
 }
 
 /// Deletes a trait and removes it from all identities.

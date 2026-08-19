@@ -16,6 +16,7 @@ pub struct CachedFeature {
     pub name: String,
     pub value: VariantValue,
     pub is_srv: bool,
+    pub is_enabled: bool,
 }
 
 pub struct FeatureCache {

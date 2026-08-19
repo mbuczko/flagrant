@@ -152,7 +152,8 @@ ORDER BY f.name, (v.environment_id IS NULL), vw.variant_id
 -- :name fetch_variants_for_identity :<> :*
 -- :doc Fetches feature variants for given identity. Variants attached to identity by distributor are denoted by non-NULL identity_id field.
 SELECT f.feature_id, iv.variant_id, f.name AS feature_name, iv_v.value AS feature_value, iv.migrated_id,
-       iv.segment_id, COALESCE(iv.segment_dirty, FALSE) AS segment_dirty, iv.pinned_at, iv.identity_id, f.is_srv
+       iv.segment_id, COALESCE(iv.segment_dirty, FALSE) AS segment_dirty, iv.pinned_at, iv.identity_id, f.is_srv,
+       f.is_enabled
 FROM features f
 LEFT JOIN identities i ON i.identity = lower($3) AND i.environment_id = $2
 LEFT JOIN identity_variants iv ON iv.feature_id = f.feature_id AND iv.environment_id = $2 AND iv.identity_id = i.identity_id

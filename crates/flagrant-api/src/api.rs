@@ -24,6 +24,10 @@ use crate::{
 /// project+environment, additionally unlocks server-side-only ("srv") features - without
 /// it (or with a non-matching token) those features are left out, everything else is
 /// returned as usual.
+///
+/// The result is cached (when a cache is configured) per project+environment+identity,
+/// keyed independently of the srv-token, so a single cached entry serves both privileged
+/// and unprivileged callers; srv-only filtering is applied at read time.
 #[utoipa::path(
     get,
     path = "/api/v1/projects/{project}/envs/{environment}/features",
@@ -70,6 +74,7 @@ pub async fn get_features(
                     feature_id: f.feature_id,
                     name: f.name,
                     value: f.value,
+                    is_enabled: f.is_enabled,
                 })
                 .collect();
             return Ok(Json(response));
@@ -92,6 +97,7 @@ pub async fn get_features(
                     name: v.feature_name.clone(),
                     value: v.feature_value.clone()?,
                     is_srv: v.is_srv,
+                    is_enabled: v.is_enabled,
                 })
             })
             .collect();
@@ -110,6 +116,7 @@ pub async fn get_features(
                 feature_id: v.feature_id,
                 name: v.feature_name,
                 value: v.feature_value?,
+                is_enabled: v.is_enabled,
             })
         })
         .collect::<Vec<_>>();
