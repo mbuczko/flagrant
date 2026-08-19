@@ -58,7 +58,13 @@ A feature context alone lets you edit the feature itself (status, variants, tags
 
 ### Features & variants
 
-A **feature** is a named flag scoped to a project + environment (e.g. `prod`/`staging`). Every feature has at least one **variant** - the *control* variant, always present, holding the feature's default value - plus any number of additional variants, each with its own value and a weight (0-100%). Weights across a feature's non-control variants describe how identities should be split between them; the control variant absorbs whatever's left. Distribution is handled by a self-balancing accumulator rather than a random number generator, so a given traffic split stays stable even as variants are added or weights change.
+A **feature** is a named flag scoped to a project, and automatically exists in every environment of that project (e.g. `prod`/`staging`) - there's no separate "create in staging, then create in prod" step. Every feature has at least one **variant** - the *control* variant, always present, holding the feature's default value - plus any number of additional variants, each with its own value and a weight (0-100%). Weights across a feature's non-control variants describe how identities should be split between them; the control variant absorbs whatever's left. Distribution is handled by a self-balancing accumulator rather than a random number generator, so a given traffic split stays stable even as variants are added or weights change.
+
+Values and weights are shared across environments differently depending on which kind of variant they belong to:
+
+- **Non-control variant value** is shared across every environment of the project - there's only one row for it, so changing a variant's value (`VARIANT value <index> <value>`) changes it everywhere at once.
+- **Control variant value**, on the other hand, is independent per environment - each environment owns its own row, seeded from the feature's default value at creation time, so running `VARIANT value <index> <value>` against the control variant in one environment leaves every other environment's control value untouched.
+- **Weight**, for both control and non-control variants, is always scoped per environment - so the very same variant (and, for non-control variants, the very same value) can be weighted differently in `prod` than in `staging`, letting you roll a feature out gradually per environment without duplicating variants.
 
 Enter a feature's context with:
 
@@ -77,6 +83,19 @@ The prompt then shows the active feature, and these become available:
 - `VARIANT delete <index>` to stage variant for removal
 
 None of this reaches the API until you run `COMMIT` (or `DISCARD` to drop it). Once commited, the change gets applied server-side in a single transaction.
+
+### Server-side-only flags
+
+A feature can be marked **server-side-only** with `FEATURE server-side on|off`. Such a feature is left out of the public feature-resolution endpoint (`GET /projects/{project}/envs/{environment}/features`) by default - useful for flags that should only ever be read by your own backend (internal rollout switches, backend-to-backend behaviour, etc.), never exposed to a browser/mobile client that only identifies itself via `X-Flagrant-Identity`.
+
+To actually read srv-only features, a caller additionally sends an `Authorization: Bearer <token>` header, matching a per-project+environment `srv-token` configured server-side in `flagrant-api`'s TOML config file (`flagrant.toml` by default, or whatever path `FLAGRANT_CONFIG` points to):
+
+```toml
+[projects.my_project.envs.production]
+srv-token = "prod-secret-token"
+```
+
+A valid token only ever *adds* srv-only features to the response on top of the normal ones - it never narrows it down to just those. No config entry (or an environment/project not listed at all) simply means no token unlocks srv-only features there, and the endpoint behaves as if the header was never sent - no error either way. Config is read once at startup; run `RELOAD` from the CLI (hits `POST /admin/reload`) to have a running server pick up changes to `flagrant.toml` - e.g. a rotated `srv-token` - without restarting it.
 
 ### Identities & traits
 
