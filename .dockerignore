@@ -1,0 +1,15 @@
+target
+.git
+.github
+.claude
+.agent-shell
+.lsp
+.idea
+*.db
+*.db-shm
+*.db-wal
+*.org
+*.org_archive
+TAGS
+history.txt
+bacon.toml
