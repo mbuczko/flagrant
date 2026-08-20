@@ -8,9 +8,10 @@ fn whitespace(ch: char) -> bool {
 }
 
 /// Consumes from `chars` up to and including the `close` bracket matching the `open`
-/// bracket already consumed at the start of the token, tracking nesting depth so an inner
-/// `[`/`{` doesn't end the scan early. Whitespace within is literal content, not an
-/// argument separator - this is what lets a raw JSON value like `["dev", "staging"]` be
+/// bracket already consumed (whether that was the very start of the current token, as in
+/// `["a", "b"]`, or partway through it, as in `json::{"a": 1}`), tracking nesting depth so
+/// an inner `[`/`{` doesn't end the scan early. Whitespace within is literal content, not
+/// an argument separator - this is what lets a raw JSON value like `["dev", "staging"]` be
 /// typed as a single argument without wrapping the whole thing in `"..."`. Quoted-string
 /// contents (including escaped quotes) are skipped over as a unit so a bracket or
 /// whitespace inside one (e.g. `["a b"]`) doesn't affect nesting depth either.
@@ -77,16 +78,18 @@ pub fn split_command_line(input: &str) -> anyhow::Result<Vec<Arg<'_>>> {
                     break;
                 }
             },
-            // A JSON array/object value (e.g. the `in`/`not_in` rule comparator's value)
-            // also stays a single argument even with internal whitespace, same as a quoted
-            // one - only when the bracket starts a fresh token, same reasoning as `"` above.
-            '[' if start.is_none() => {
-                let end = scan_bracketed(&mut chars, input, '[', ']');
-                output.push(Arg(&input[pos..end], pos));
-            }
-            '{' if start.is_none() => {
-                let end = scan_bracketed(&mut chars, input, '{', '}');
-                output.push(Arg(&input[pos..end], pos));
+            // A JSON array/object value (e.g. the `in`/`not_in` rule comparator's value, or
+            // a `json::{...}`-typed variant value) also stays a single argument even with
+            // internal whitespace, same as a quoted one - whether the bracket starts a
+            // fresh token (`["a", "b"]`) or follows other characters already accumulated
+            // into the current token (`json::{"a": 1}`), in which case the bracketed span
+            // is folded into that same token rather than pushed as its own.
+            '[' | '{' => {
+                if start.is_none() {
+                    start = Some(pos);
+                }
+                let close = if ch == '[' { ']' } else { '}' };
+                scan_bracketed(&mut chars, input, ch, close);
             }
             _ => {
                 if start.is_none() {
@@ -159,6 +162,21 @@ mod tests {
                 Arg("environment", 12),
                 Arg("in", 24),
                 Arg(r#"["dev", "staging"]"#, 27),
+            ]
+        );
+    }
+    #[test]
+    fn bracket_mid_token_after_a_type_prefix_stays_part_of_that_token() {
+        // A `type::{...}`-typed variant value (e.g. `VARIANT add 30 json::{"a": 1}`) must
+        // stay one token even though the bracket doesn't start the token - the `json::`
+        // prefix comes first.
+        assert_eq!(
+            split_command_line(r#"VARIANT add 30 json::{"a": 1, "b": 2}"#).unwrap(),
+            vec![
+                Arg("VARIANT", 0),
+                Arg("add", 8),
+                Arg("30", 12),
+                Arg(r#"json::{"a": 1, "b": 2}"#, 15),
             ]
         );
     }
