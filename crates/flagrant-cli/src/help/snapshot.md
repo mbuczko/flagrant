@@ -18,9 +18,3 @@ Restoring is itself a commit: it produces a brand-new snapshot matching the targ
 - `SNAPSHOT show 3` - inspect exactly what version 3 looked like
 - `SNAPSHOT describe 3 pre-launch baseline` - label version 3 with a comment
 - `SNAPSHOT restore 3` - roll the feature back to version 3, recorded as a new snapshot
-
-### Use-cases
-
-- **Rollback after a bad rollout**: a weight change or new variant turns out wrong - `SNAPSHOT list` to find the last known-good version, then `SNAPSHOT restore <version>` to revert.
-- **Audit trail**: `SNAPSHOT describe <version> <comment>` labels meaningful versions (e.g. "before Black Friday pricing test") so the history stays legible later.
-- **Confirming past intent**: `SNAPSHOT show <version>` to see exactly what a past commit changed, including any segment override or pinned identity in effect at the time.

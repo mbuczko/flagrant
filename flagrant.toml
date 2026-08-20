@@ -5,12 +5,6 @@
 [http]
 listen = "127.0.0.1:3030"
 
-[projects.demo.envs.dev]
-srv-token = "dev-srv-token"
-
-[projects.demo.envs.base]
-srv-token = "base-srv-token"
-
 # Optional: enables a Redis-backed response cache for the public features
 # endpoint. Omit this section entirely to disable caching.
 [redis]
@@ -24,3 +18,9 @@ ttl-seconds = 30
 [grpc]
 listen = "unix:/tmp/flagrant/grpc.sock"
 # listen = "127.0.0.1:50051"   # alternative: plain TCP
+
+[projects.demo.envs.dev]
+srv-token = "dev-srv-token"
+
+[projects.demo.envs.base]
+srv-token = "base-srv-token"

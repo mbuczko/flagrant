@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    io::Write,
     sync::{
         Arc, RwLock,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -65,7 +66,6 @@ fn feature_value(response: Vec<FeatureResponse>, feature_name: &str) -> Option<V
 pub fn main() -> anyhow::Result<()> {
     let args: Args = argh::from_env();
     let idents_count = args.idents + args.named_idents;
-
     let idents = Arc::new(RwLock::new(HashMap::<usize, String>::with_capacity(
         idents_count,
     )));
@@ -83,11 +83,13 @@ pub fn main() -> anyhow::Result<()> {
     }
     IDX.store(args.named_idents, Ordering::SeqCst);
 
-    println!(
-        "Seeded {} {} named identities for manual testing.",
-        named.len(),
-        "tester-n".green(),
-    );
+    if named.len() > 0 {
+        println!(
+            "Seeded {} {} named identities for manual testing.",
+            named.len(),
+            "tester-n".green(),
+        );
+    }
     println!();
 
     let buckets = Arc::new(RwLock::new(HashMap::new()));
@@ -98,28 +100,25 @@ pub fn main() -> anyhow::Result<()> {
         Some(args.environment),
     )?);
 
-    // Flipped to `false` by the watcher thread below only on an unrecoverable error (the
-    // feature got deleted, the API is unreachable, ...), so every loop (workers, the watcher
-    // itself, and the progress renderer) winds down and `main` can report why the run stopped.
-    let running = Arc::new(AtomicBool::new(true));
-
     // Tracks whether the feature is currently enabled. Starts `false` so workers wait for the
     // watcher's first check rather than assuming enabled; toggled as the feature is enabled/
     // disabled over the run instead of ending the whole process on a disabled feature.
     let enabled = Arc::new(AtomicBool::new(false));
+
+    print!("\x1B[2J\x1B[H");
+    let _ = std::io::stdout().flush();
 
     thread::scope(|s| {
         for _ in 0..args.threads {
             let idents = Arc::clone(&idents);
             let buckets = Arc::clone(&buckets);
             let conn = Arc::clone(&connection);
-            let running = Arc::clone(&running);
             let enabled = Arc::clone(&enabled);
             let feature_name = args.feature.as_str();
 
             s.spawn(move || {
                 let mut rng = rand::thread_rng();
-                while running.load(Ordering::Relaxed) {
+                loop {
                     if !enabled.load(Ordering::Relaxed) {
                         thread::sleep(Duration::from_millis(200));
                         continue;
@@ -160,7 +159,6 @@ pub fn main() -> anyhow::Result<()> {
         // feature mid-run, instead of only ever checking before the first request.
         {
             let conn = Arc::clone(&connection);
-            let running = Arc::clone(&running);
             let enabled = Arc::clone(&enabled);
             let m = m.clone();
             let feature_name = args.feature.as_str();
@@ -170,9 +168,16 @@ pub fn main() -> anyhow::Result<()> {
 
             s.spawn(move || {
                 let mut last_enabled = None;
-                while running.load(Ordering::Relaxed) {
+                let mut was_erroring = false;
+                loop {
                     match conn.client.get::<Feature>(feature_path.clone()) {
                         Ok(feature) => {
+                            if was_erroring {
+                                let _ = m.println(format!(
+                                    "Feature '{feature_name}' is reachable again."
+                                ));
+                                was_erroring = false;
+                            }
                             if last_enabled != Some(feature.is_enabled) {
                                 let msg = if feature.is_enabled {
                                     format!("Feature '{feature_name}' is enabled - distributing.")
@@ -185,20 +190,31 @@ pub fn main() -> anyhow::Result<()> {
                                 last_enabled = Some(feature.is_enabled);
                             }
                             enabled.store(feature.is_enabled, Ordering::Relaxed);
-                            thread::sleep(Duration::from_secs(2));
                         }
+                        // Never fatal - the feature (or the API itself) may just not be up
+                        // yet, e.g. bombardier started before `FEATURE add` was run. Keep
+                        // retrying instead of tearing down the whole run; workers just stay
+                        // paused (same as a disabled feature) until it becomes reachable.
                         Err(err) => {
-                            let _ =
-                                m.println(format!("Could not fetch feature '{feature_name}': {err}"));
-                            running.store(false, Ordering::Relaxed);
+                            enabled.store(false, Ordering::Relaxed);
+                            if !was_erroring {
+                                let _ = m.println(format!(
+                                    "Could not fetch feature '{feature_name}': {err} - retrying..."
+                                ));
+                                was_erroring = true;
+                            }
+                            // Force re-announcing enabled/disabled once the feature is
+                            // reachable again, since its state may have changed meanwhile.
+                            last_enabled = None;
                         }
                     }
+                    thread::sleep(Duration::from_secs(2));
                 }
             });
         }
 
         let mut pbs = HashMap::<String, ProgressBar>::new();
-        while running.load(Ordering::Relaxed) {
+        loop {
             let guard = buckets.read().unwrap();
             for (val, set) in guard.iter() {
                 if set.is_empty() {
@@ -222,12 +238,6 @@ pub fn main() -> anyhow::Result<()> {
         }
     });
 
-    if !running.load(Ordering::Relaxed) {
-        anyhow::bail!(
-            "Stopped: feature '{}' is no longer available.",
-            args.feature
-        );
-    }
     Ok(())
 }
 

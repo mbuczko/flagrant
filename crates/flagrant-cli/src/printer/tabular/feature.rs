@@ -273,8 +273,13 @@ impl Tabular for Feature {
                 })
                 .collect::<Vec<_>>()
                 .join(" => ");
-            legend::stage_color(schedule, is_deleted || rollout_unset, false, rollout_modified)
-                .into_owned()
+            legend::stage_color(
+                schedule,
+                is_deleted || rollout_unset,
+                false,
+                rollout_modified,
+            )
+            .into_owned()
         });
 
         let has_staged = is_deleted

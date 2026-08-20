@@ -50,6 +50,23 @@ struct Args {
     list_projects: bool,
 }
 
+fn print_banner() {
+    println!();
+    println!(
+        "  {} {}{}",
+        "Flagrant".bold(),
+        "⚡".yellow(),
+        "CLI-driven feature flagging".dimmed()
+    );
+    println!();
+    println!(
+        "  {} for help (BACKSPACE to escape help mode)",
+        HELP_TRIGGER.to_string().green()
+    );
+
+    println!();
+}
+
 fn prompter(session: &Session<Connection>) -> String {
     let ctx = session.context.read().unwrap();
     let dirty_feature = ctx
@@ -133,6 +150,8 @@ fn main() -> anyhow::Result<()> {
             Connection::init(args.host, Auth::None, project.name, Some(env.id))?
         }
     };
+
+    print_banner();
 
     let session = Session::new(connection);
     let commands = vec![
