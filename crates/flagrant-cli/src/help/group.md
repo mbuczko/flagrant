@@ -1,8 +1,3 @@
-
-## GROUP
-
-Manage rule groups within the current segment (requires an active segment context).
-
 A **group** is a set of OR-ed rules: it matches if *any* of its rules matches. A segment is one or more groups combined with AND / AND-NOT, so groups are the layer between individual rules and the segment as a whole, letting you build boolean logic that a single flat rule list couldn't express: "match any of these, but only if that other condition also holds, and never if this third one does". The first group added is the segment's head and needs no connector; every group after it must say how it relates to what came before, via `--and` or `--and-not` (the former is assumed by default).
 
 - `GROUP add [--and|--and-not] [description]` - stage a new group on the current segment

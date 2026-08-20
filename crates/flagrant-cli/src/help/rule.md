@@ -1,8 +1,3 @@
-
-## RULE
-
-Manage rules within a segment's groups (requires an active segment context).
-
 A **rule** is a single condition, matching on identity value, environment name, or a trait, using a comparator such as equals, contains, greater/lower-than, or in/not-in. Rules are what a group is built from: all rules within a group are OR-ed together, and groups themselves combine with AND / AND-NOT to build up the segment's overall matching logic (see `GROUP` help). A rule is the smallest building block, so getting these right is what makes a segment match the identities you actually intend.
 
 - `RULE add <group-label> <identity|trait|environment> <comparator> <value>` - stage a new rule

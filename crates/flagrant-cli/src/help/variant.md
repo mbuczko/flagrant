@@ -1,6 +1,3 @@
-
-## VARIANT
-
 Manage a feature's variants (requires an active feature context).
 
 A **variant** is one of the possible values a feature can resolve to. Every feature always has a *control* variant, added automatically and holding the feature's default value, and you can add any number of variants alongside it, each with its own value and a weight from 0 to 100%. Weights describe how identities should be split across the non-control variants; the control variant quietly absorbs whatever weight is left over.

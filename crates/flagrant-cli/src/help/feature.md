@@ -1,6 +1,3 @@
-
-## FEATURE
-
 A **feature** is a named flag scoped to a project + environment (e.g. `prod`, `staging`). It always has at least one variant: the *control* variant, holding its default value, present even before you add anything else. Add more variants and give each a weight (0 to 100), and traffic splits across them accordingly; the control variant quietly absorbs whatever weight is left over.
 
 **Identities** (callers recognized across requests) get distributed across a feature's variants according to those weights, and keep seeing the same variant on later requests unless something changes it: editing a weight (which may trigger migration of a portion of identities from one variant to the other) or identity-override which pins identity explicitly to given variant.
