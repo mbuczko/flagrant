@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         musl-tools \
         perl \
+        protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # `distroless/static` has no libc at all, so we target musl (statically linked) instead of
@@ -16,8 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN rustup toolchain install nightly && rustup default nightly \
     && rustup component add rust-src \
     && HOST="$(rustc --print host-tuple)" \
-    && rustup target add "${HOST%-gnu}-musl" \
-    && printf '[unstable]\ncodegen-backend = true\n' >> "${CARGO_HOME:-/usr/local/cargo}/config.toml"
+    && rustup target add "${HOST%-gnu}-musl"
 
 WORKDIR /usr/src/flagrant
 
