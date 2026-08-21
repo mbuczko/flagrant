@@ -712,7 +712,10 @@ async fn new_environment_joins_active_rollout_at_step_zero(mut conn: PoolConnect
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(status.current_step, 1, "sanity check: base env has advanced");
+    assert_eq!(
+        status.current_step, 1,
+        "sanity check: base env has advanced"
+    );
 
     let project = flagrant_types::Project {
         id: environment.project_id,
