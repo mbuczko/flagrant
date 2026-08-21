@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup toolchain install nightly && rustup default nightly \
+    && rustup component add rust-src \
     && printf '[unstable]\ncodegen-backend = true\n' >> "${CARGO_HOME:-/usr/local/cargo}/config.toml"
 
 WORKDIR /usr/src/flagrant
@@ -21,12 +22,21 @@ COPY . .
 # to `native-tls`, which dynamically links the system's OpenSSL at runtime - not present in
 # a distroless image. `native-tls-vendored` compiles OpenSSL from source and statically
 # links it in instead, so the final image needs nothing beyond glibc/libgcc/libstdc++.
+# `--target` is required even though we're not cross-compiling: without it, Cargo doesn't
+# treat this as a cross-compile and leaks RUSTFLAGS (notably -Cpanic=immediate-abort) into
+# build scripts and proc-macro crates, which rustc always compiles with panic=unwind - causing
+# a "core was compiled with a panic strategy which is incompatible" error.
+# See https://github.com/rust-lang/rust/issues/146974
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/flagrant/target \
+    TARGET="$(rustc --print host-tuple)" && \
+    RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none -Zunstable-options -Cpanic=immediate-abort" \
     cargo build --release --locked \
-        -p flagrant-api -p flagrant-cli \
-        --features reqwest/native-tls-vendored \
-    && cp target/release/flagrant-api target/release/flagrant-cli /usr/local/bin/
+      -Z build-std=std,panic_abort \
+      -Z build-std-features= \
+      --target "$TARGET" \
+      -p flagrant-api -p flagrant-cli --features reqwest/native-tls-vendored \
+    && cp "target/$TARGET/release/flagrant-api" "target/$TARGET/release/flagrant-cli" /usr/local/bin/
 
 # A writable directory for flagrant-api's SQLite file, pre-created and owned by
 # distroless's `nonroot` user (uid/gid 65532) - the final stage has no shell to `mkdir`

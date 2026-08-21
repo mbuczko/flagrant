@@ -181,10 +181,10 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **Progressive rollouts** - to automatically increase the amount of traffic to a specific flag variation over time 
 - [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
 - [x] **gRPC** - for backend-to-backend connection
-- [ ] **Server side SDKs** - for Rust, Python and Java
+- [x] **Docker image** 
 - [ ] **Prometheus metrics**
 
-Further out: analytics on flag exposure/conversion, and client libraries beyond Rust (JVM, JS, Python).
+Further out: analytics on flag exposure/conversion, and client SDKs beyond Rust (JVM, JS, Python).
 
 # Architecture
 
