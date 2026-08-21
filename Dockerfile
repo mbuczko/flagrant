@@ -7,11 +7,16 @@ FROM rust:1-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
+        musl-tools \
         perl \
     && rm -rf /var/lib/apt/lists/*
 
+# `distroless/static` has no libc at all, so we target musl (statically linked) instead of
+# the default glibc host triple.
 RUN rustup toolchain install nightly && rustup default nightly \
     && rustup component add rust-src \
+    && HOST="$(rustc --print host-tuple)" \
+    && rustup target add "${HOST%-gnu}-musl" \
     && printf '[unstable]\ncodegen-backend = true\n' >> "${CARGO_HOME:-/usr/local/cargo}/config.toml"
 
 WORKDIR /usr/src/flagrant
@@ -29,7 +34,10 @@ COPY . .
 # See https://github.com/rust-lang/rust/issues/146974
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/flagrant/target \
-    TARGET="$(rustc --print host-tuple)" && \
+    HOST="$(rustc --print host-tuple)" && \
+    TARGET="${HOST%-gnu}-musl" && \
+    CC_aarch64_unknown_linux_musl=musl-gcc \
+    CC_x86_64_unknown_linux_musl=musl-gcc \
     RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none -Zunstable-options -Cpanic=immediate-abort" \
     cargo build --release --locked \
       -Z build-std=std,panic_abort \
@@ -46,7 +54,7 @@ RUN mkdir -p /data && chown 65532:65532 /data
 #############################################
 # Runtime image - both binaries, distroless
 #############################################
-FROM gcr.io/distroless/cc-debian12:nonroot AS final
+FROM gcr.io/distroless/static-debian12:nonroot AS final
 
 COPY --from=builder /usr/local/bin/flagrant-api /usr/local/bin/flagrant-api
 COPY --from=builder /usr/local/bin/flagrant-cli /usr/local/bin/flagrant-cli
