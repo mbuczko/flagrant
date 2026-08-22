@@ -403,7 +403,6 @@ async fn segment_weight_only_commit_cascades_snapshot_to_overridden_feature(
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,
-                    environment_id: environment.id,
                     variant_weights: vec![SegmentVariantWeight {
                         variant_id: variant_a_id,
                         weight: 80,
@@ -487,7 +486,6 @@ async fn combined_feature_and_segment_commit_produces_one_snapshot(
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,
-                    environment_id: environment.id,
                     variant_weights: vec![SegmentVariantWeight {
                         variant_id: variant_a_id,
                         weight: 60,
@@ -543,10 +541,18 @@ async fn restore_recreates_deleted_overriding_segment(mut conn: PoolConnection<S
     let seg = segment::create(&mut conn, &project, segment_name.clone(), None)
         .await
         .unwrap();
-    let seg = apply(&mut conn, &project, seg, vec![add_group(None)]).await;
     let seg = apply(
         &mut conn,
         &project,
+        &environment,
+        seg,
+        vec![add_group(None)],
+    )
+    .await;
+    let seg = apply(
+        &mut conn,
+        &project,
+        &environment,
         seg,
         vec![add_rule(
             "group-1",
@@ -559,10 +565,10 @@ async fn restore_recreates_deleted_overriding_segment(mut conn: PoolConnection<S
     let seg = apply(
         &mut conn,
         &project,
+        &environment,
         seg,
         vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: variant_a_id,
                 weight: 90,
@@ -683,7 +689,6 @@ async fn restore_clears_segment_override_added_after_the_target_snapshot(
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,
-                    environment_id: environment.id,
                     variant_weights: vec![SegmentVariantWeight {
                         variant_id: variant_a_id,
                         weight: 70,

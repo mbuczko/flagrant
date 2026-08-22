@@ -77,14 +77,13 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
     let patch = SegmentPatch {
         ops: vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 30,
             }],
         }],
     };
-    segment::patch(&mut conn, &project, segment.clone(), patch)
+    segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
         .await
         .unwrap();
 
@@ -159,14 +158,13 @@ async fn creating_a_variant_seeds_it_into_overriding_segments_at_zero_weight(
     let patch = SegmentPatch {
         ops: vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 30,
             }],
         }],
     };
-    segment::patch(&mut conn, &project, segment.clone(), patch)
+    segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
         .await
         .unwrap();
 
@@ -233,7 +231,6 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
     let patch = SegmentPatch {
         ops: vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![
                 SegmentVariantWeight {
                     variant_id: alt.id,
@@ -246,7 +243,7 @@ async fn deleting_a_variant_rebalances_segment_overrides(mut conn: PoolConnectio
             ],
         }],
     };
-    segment::patch(&mut conn, &project, segment.clone(), patch)
+    segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
         .await
         .unwrap();
 
@@ -298,6 +295,7 @@ async fn deleting_a_segment_releases_governed_identities(mut conn: PoolConnectio
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -309,7 +307,6 @@ async fn deleting_a_segment_releases_governed_identities(mut conn: PoolConnectio
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -373,6 +370,7 @@ async fn deleting_a_segment_leaves_pinned_identity_untouched(mut conn: PoolConne
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -384,7 +382,6 @@ async fn deleting_a_segment_leaves_pinned_identity_untouched(mut conn: PoolConne
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -427,10 +424,10 @@ async fn deleting_a_segment_does_not_affect_other_segments_overrides(
     apply(
         &mut conn,
         &project,
+        &environment,
         vip.clone(),
         vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 30,
@@ -445,10 +442,10 @@ async fn deleting_a_segment_does_not_affect_other_segments_overrides(
     apply(
         &mut conn,
         &project,
+        &environment,
         testers.clone(),
         vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 55,
@@ -471,7 +468,7 @@ async fn deleting_a_segment_does_not_affect_other_segments_overrides(
 /// first and then delete, and not error out.
 #[sqlx::test]
 async fn patch_delete_ignores_other_staged_ops(mut conn: PoolConnection<Sqlite>) {
-    let (project, _environment) = create_context(&mut conn).await;
+    let (project, environment) = create_context(&mut conn).await;
     let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
         .await
         .unwrap();
@@ -482,7 +479,7 @@ async fn patch_delete_ignores_other_staged_ops(mut conn: PoolConnection<Sqlite>)
             SegmentPatchOp::Delete,
         ],
     };
-    let result = segment::patch(&mut conn, &project, segment.clone(), patch)
+    let result = segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
         .await
         .unwrap();
     assert!(result.is_none());
@@ -531,14 +528,13 @@ async fn list_overridden_features_groups_by_feature(mut conn: PoolConnection<Sql
         let patch = SegmentPatch {
             ops: vec![SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt_id,
                     weight: 25,
                 }],
             }],
         };
-        segment::patch(&mut conn, &project, segment.clone(), patch)
+        segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
             .await
             .unwrap();
     }
@@ -587,14 +583,13 @@ async fn distributor_scopes_by_segment_id(mut conn: PoolConnection<Sqlite>) {
     let patch = SegmentPatch {
         ops: vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 30,
             }],
         }],
     };
-    segment::patch(&mut conn, &project, segment.clone(), patch)
+    segment::patch(&mut conn, &project, &environment, segment.clone(), patch)
         .await
         .unwrap();
 
@@ -683,6 +678,7 @@ async fn segment_override_migrates_already_distributed_matching_identity(
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -694,7 +690,6 @@ async fn segment_override_migrates_already_distributed_matching_identity(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -746,6 +741,7 @@ async fn segment_override_leaves_non_matching_identity_untouched(mut conn: PoolC
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -757,7 +753,6 @@ async fn segment_override_leaves_non_matching_identity_untouched(mut conn: PoolC
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -811,6 +806,7 @@ async fn segment_override_leaves_pinned_identity_untouched(mut conn: PoolConnect
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -822,7 +818,6 @@ async fn segment_override_leaves_pinned_identity_untouched(mut conn: PoolConnect
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -868,6 +863,7 @@ async fn adding_rule_to_already_overriding_segment_retroactively_migrates(
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -879,7 +875,6 @@ async fn adding_rule_to_already_overriding_segment_retroactively_migrates(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -903,6 +898,7 @@ async fn adding_rule_to_already_overriding_segment_retroactively_migrates(
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![add_rule(
             "group-1",
@@ -941,12 +937,12 @@ async fn direct_rule_add_triggers_reconciliation_not_just_patch(mut conn: PoolCo
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -1007,6 +1003,7 @@ async fn deleting_a_rule_falls_the_identity_back_to_organic(mut conn: PoolConnec
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -1018,7 +1015,6 @@ async fn deleting_a_rule_falls_the_identity_back_to_organic(mut conn: PoolConnec
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -1073,6 +1069,7 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
     let older = apply(
         &mut conn,
         &project,
+        &environment,
         older,
         vec![
             add_group(None),
@@ -1084,7 +1081,6 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 15,
@@ -1111,6 +1107,7 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
     apply(
         &mut conn,
         &project,
+        &environment,
         newer.clone(),
         vec![
             add_group(None),
@@ -1122,7 +1119,6 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 45,
@@ -1147,15 +1143,23 @@ async fn higher_priority_segment_keeps_identity_when_a_later_one_also_matches(
 async fn patch_rejects_invalid_json_for_in_comparator_and_does_not_persist(
     mut conn: PoolConnection<Sqlite>,
 ) {
-    let (project, _environment) = create_context(&mut conn).await;
+    let (project, environment) = create_context(&mut conn).await;
     let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
         .await
         .unwrap();
-    let segment = apply(&mut conn, &project, segment, vec![add_group(None)]).await;
+    let segment = apply(
+        &mut conn,
+        &project,
+        &environment,
+        segment,
+        vec![add_group(None)],
+    )
+    .await;
 
     let result = segment::patch(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         SegmentPatch {
             ops: vec![add_rule(
@@ -1182,11 +1186,18 @@ async fn patch_rejects_invalid_json_for_in_comparator_and_does_not_persist(
 async fn direct_rule_add_rejects_invalid_json_for_not_in_comparator_and_does_not_persist(
     mut conn: PoolConnection<Sqlite>,
 ) {
-    let (project, _environment) = create_context(&mut conn).await;
+    let (project, environment) = create_context(&mut conn).await;
     let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
         .await
         .unwrap();
-    let segment = apply(&mut conn, &project, segment, vec![add_group(None)]).await;
+    let segment = apply(
+        &mut conn,
+        &project,
+        &environment,
+        segment,
+        vec![add_group(None)],
+    )
+    .await;
     let group_id = segment.groups[0].id;
 
     let result = rule::add(
@@ -1210,13 +1221,14 @@ async fn direct_rule_add_rejects_invalid_json_for_not_in_comparator_and_does_not
 /// against the validation above being overly strict.
 #[sqlx::test]
 async fn valid_json_array_for_in_comparator_is_persisted(mut conn: PoolConnection<Sqlite>) {
-    let (project, _environment) = create_context(&mut conn).await;
+    let (project, environment) = create_context(&mut conn).await;
     let segment = segment::create(&mut conn, &project, "vip".to_owned(), None)
         .await
         .unwrap();
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),

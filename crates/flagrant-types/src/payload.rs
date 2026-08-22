@@ -91,7 +91,14 @@ pub struct IdentityTraitPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum RolloutPatchOp {
+    /// Defines (or redefines) the schedule and immediately activates it, from step 0, in
+    /// every environment of the project - not just the one the commit happens to be in.
+    /// Progression itself still gates independently per environment (each has its own
+    /// minimum-sample-size and hold-duration checks), so this only synchronizes the
+    /// starting point, not the whole schedule.
     Set(RolloutConfig),
+    /// Removes the rollout entirely - the schedule and every environment's progression,
+    /// not just one.
     Unset,
 }
 
@@ -218,16 +225,17 @@ pub enum SegmentPatchOp {
         rule_id: i32,
         comparator: Comparator,
     },
-    /// Stores per-environment weight overrides for a feature's variants within this segment.
+    /// Stores weight overrides for a feature's variants within this segment, scoped to
+    /// whichever environment the enclosing commit targets (there's no per-op environment -
+    /// a commit is already scoped to exactly one).
     SetFeatureOverride {
         feature_id: i32,
-        environment_id: i32,
         variant_weights: Vec<SegmentVariantWeight>,
     },
-    /// Removes all weight overrides for a feature within this segment and environment.
+    /// Removes all weight overrides for a feature within this segment, in the commit's
+    /// environment.
     UnsetFeatureOverride {
         feature_id: i32,
-        environment_id: i32,
     },
     /// Stages deletion of the entire segment. When present, every other op in the same
     /// patch is ignored - the segment is deleted and nothing else is applied.

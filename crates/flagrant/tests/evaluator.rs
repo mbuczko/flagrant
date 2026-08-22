@@ -57,6 +57,7 @@ async fn matching_segment_returns_its_id(mut conn: PoolConnection<Sqlite>) {
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -68,7 +69,6 @@ async fn matching_segment_returns_its_id(mut conn: PoolConnection<Sqlite>) {
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -118,6 +118,7 @@ async fn segment_with_non_matching_rule_returns_none(mut conn: PoolConnection<Sq
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -129,7 +130,6 @@ async fn segment_with_non_matching_rule_returns_none(mut conn: PoolConnection<Sq
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -188,6 +188,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
     apply(
         &mut conn,
         &project,
+        &environment,
         first.clone(),
         vec![
             add_group(None),
@@ -199,7 +200,6 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 10,
@@ -216,6 +216,7 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
     apply(
         &mut conn,
         &project,
+        &environment,
         second.clone(),
         vec![
             add_group(None),
@@ -227,7 +228,6 @@ async fn falls_through_a_non_matching_segment_to_a_later_matching_one(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 30,
@@ -280,6 +280,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
     apply(
         &mut conn,
         &project,
+        &environment,
         older.clone(),
         vec![
             add_group(None),
@@ -291,7 +292,6 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 15,
@@ -308,6 +308,7 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
     apply(
         &mut conn,
         &project,
+        &environment,
         newer.clone(),
         vec![
             add_group(None),
@@ -319,7 +320,6 @@ async fn first_created_segment_wins_when_multiple_match(mut conn: PoolConnection
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 45,
@@ -373,6 +373,7 @@ async fn rules_within_a_group_are_or_ed(mut conn: PoolConnection<Sqlite>) {
     apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -390,7 +391,6 @@ async fn rules_within_a_group_are_or_ed(mut conn: PoolConnection<Sqlite>) {
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 20,
@@ -441,6 +441,7 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment.clone(),
         vec![
             add_group(None),
@@ -457,6 +458,7 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(Some(GroupConnector::AndNot)),
@@ -468,7 +470,6 @@ async fn groups_combine_via_and_and_and_not(mut conn: PoolConnection<Sqlite>) {
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 20,
@@ -519,6 +520,7 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
     let segment = apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -535,13 +537,13 @@ async fn empty_non_head_group_blocks_the_segment_from_matching(mut conn: PoolCon
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(Some(GroupConnector::And)),
             // group-2 has no rules - AND with an always-false group.
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 20,
@@ -593,10 +595,10 @@ async fn segment_with_zero_groups_never_matches(mut conn: PoolConnection<Sqlite>
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![SegmentPatchOp::SetFeatureOverride {
             feature_id: feature.id,
-            environment_id: environment.id,
             variant_weights: vec![SegmentVariantWeight {
                 variant_id: alt.id,
                 weight: 20,
@@ -647,6 +649,7 @@ async fn trait_subject_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -658,7 +661,6 @@ async fn trait_subject_matches_a_db_loaded_trait(mut conn: PoolConnection<Sqlite
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 20,

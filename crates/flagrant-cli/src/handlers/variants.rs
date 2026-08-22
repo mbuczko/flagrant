@@ -34,7 +34,9 @@ use crate::{
 /// Expects args: `<weight> [value]`
 ///
 /// If value is omitted, opens `$EDITOR` for interactive input. Fails if the
-/// new weight would push total non-control weight over 100%.
+/// new weight would push total non-control weight over 100%, or if the value is typed
+/// (explicitly via `json::...`, or auto-detected from a leading `{`) as `json` but doesn't
+/// actually parse as valid JSON.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -69,6 +71,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let vv: VariantValue = value
         .parse()
         .unwrap_or_else(|_| VariantValue::build(&value));
+
+    if let VariantValue::Json(json) = &vv {
+        serde_json::from_str::<serde_json::Value>(json)
+            .map_err(|e| anyhow::anyhow!("Value is not valid JSON: {e}"))?;
+    }
 
     let feature = ctx.feature.as_ref().unwrap();
     if feature.variants.iter().any(|v| v.value == vv)

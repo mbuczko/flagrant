@@ -1,0 +1,18 @@
+services:
+  flagrant-api:
+    build: .
+    ports:
+      - "3030:3030"
+    volumes:
+      - flagrant-data:/data
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+
+volumes:
+  flagrant-data:
+  redis-data:

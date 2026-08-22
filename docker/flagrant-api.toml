@@ -1,0 +1,12 @@
+# Default config baked into the Docker image (see /etc/flagrant/flagrant.toml in the
+# Dockerfile). Override by mounting a different file over that path, or by pointing
+# FLAGRANT_CONFIG elsewhere - e.g. to disable [redis], add [grpc], or set per-project
+# srv-tokens. See the repo root's flagrant.toml for a fully annotated example.
+
+[http]
+listen = "0.0.0.0:3030"
+
+# Enables the Redis-backed response cache for the public features endpoint.
+[redis]
+url = "redis://redis:6379"
+ttl-seconds = 30

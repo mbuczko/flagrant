@@ -41,13 +41,30 @@ struct Args {
     #[argh(option, short = 'p')]
     project: Option<String>,
 
-    /// environment ID
-    #[argh(option, short = 'e', default = "1")]
-    environment: i32,
+    /// environment ID (default: the project's first-created environment)
+    #[argh(option, short = 'e')]
+    environment: Option<i32>,
 
     /// list all projects
     #[argh(switch)]
     list_projects: bool,
+}
+
+fn print_banner() {
+    println!();
+    println!(
+        "  {} {}{}",
+        "Flagrant".bold(),
+        "⚡".yellow(),
+        "CLI-driven feature flagging".dimmed()
+    );
+    println!();
+    println!(
+        "  {} for help (BACKSPACE to escape help mode)",
+        HELP_TRIGGER.to_string().green()
+    );
+
+    println!();
 }
 
 fn prompter(session: &Session<Connection>) -> String {
@@ -130,9 +147,11 @@ fn main() -> anyhow::Result<()> {
         Ok(_) => Connection::init(args.host, Auth::None, project_name, args.environment)?,
         Err(_) => {
             let (project, env) = handlers::projects::create_with_env(&project_name, &client)?;
-            Connection::init(args.host, Auth::None, project.name, env.id)?
+            Connection::init(args.host, Auth::None, project.name, Some(env.id))?
         }
     };
+
+    print_banner();
 
     let session = Session::new(connection);
     let commands = vec![
@@ -183,7 +202,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "progressive",
-            "rules <w1>:<dur1> ... <100> | sample <n> | off | status",
+            "rules <w1>:<dur1> ... <100> | sample <n> | delete | status",
             handlers::features::progressive,
             in_context!(feature_ctx),
         ),

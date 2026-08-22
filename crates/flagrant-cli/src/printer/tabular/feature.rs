@@ -252,24 +252,34 @@ impl Tabular for Feature {
             .then(|| patch.and_then(|p| p.rollout.as_ref()))
             .flatten();
         let rollout_modified = staged_rollout.is_some();
+        let rollout_unset = matches!(staged_rollout, Some(RolloutPatchOp::Unset));
         let effective_rollout = match staged_rollout {
             Some(RolloutPatchOp::Set(cfg)) => Some(cfg.clone()),
-            Some(RolloutPatchOp::Unset) => None,
-            None => self.rollout.clone(),
+            // Show the committed schedule (in red) rather than hiding the row outright,
+            // so a staged removal is visible the same way every other staged deletion
+            // (tags, variants, overrides) is - not silently vanishing.
+            Some(RolloutPatchOp::Unset) | None => self.rollout.clone(),
         };
         let rollout_str = effective_rollout.as_ref().map(|cfg| {
+            // No per-step coloring here - each step's own ANSI reset would fight the
+            // stage_color wrap below (e.g. forcing white even when the whole line should
+            // render red), so the entire joined schedule is colored once, as a unit.
             let schedule = cfg
                 .steps
                 .iter()
                 .map(|s| match s.hold_for_secs {
-                    Some(secs) => format!("{}% for {}", s.weight, format_duration(secs))
-                        .white()
-                        .to_string(),
-                    None => format!("{}%", s.weight).white().to_string(),
+                    Some(secs) => format!("{}% for {}", s.weight, format_duration(secs)),
+                    None => format!("{}%", s.weight),
                 })
                 .collect::<Vec<_>>()
                 .join(" => ");
-            legend::stage_color(schedule, is_deleted, false, rollout_modified).into_owned()
+            legend::stage_color(
+                schedule,
+                is_deleted || rollout_unset,
+                false,
+                rollout_modified,
+            )
+            .into_owned()
         });
 
         let has_staged = is_deleted

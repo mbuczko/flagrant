@@ -515,7 +515,6 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     });
     patch.ops.push(SegmentPatchOp::SetFeatureOverride {
         feature_id,
-        environment_id,
         variant_weights: variant_weights.clone(),
     });
 
@@ -538,7 +537,6 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
     })?;
     let feature_id = feature.id;
     let feature_name = feature.name.clone();
-    let environment_id = ctx.environment.id;
 
     if ctx.segment.is_none() {
         bail!("Not in a segment context. Use \"SEGMENT use ...\" to set a context.");
@@ -553,10 +551,9 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
             if *fid == feature_id
         )
     });
-    patch.ops.push(SegmentPatchOp::UnsetFeatureOverride {
-        feature_id,
-        environment_id,
-    });
+    patch
+        .ops
+        .push(SegmentPatchOp::UnsetFeatureOverride { feature_id });
 
     println!("Staged: unset segment override for '{feature_name}'");
     Ok(())

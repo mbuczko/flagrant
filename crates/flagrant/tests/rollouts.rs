@@ -12,7 +12,8 @@ use hugsqlx::params;
 use sqlx::{Sqlite, SqliteConnection, pool::PoolConnection};
 
 use crate::common::{
-    add_group, add_rule, apply, create_context, create_environment, create_feature,
+    add_group, add_rule, apply, create_context, create_environment, create_environment_from,
+    create_feature,
 };
 
 mod common;
@@ -197,7 +198,7 @@ async fn adding_second_variant_while_rollout_active_is_rejected(mut conn: PoolCo
 
     let patch = FeaturePatch {
         variants: vec![VariantPatchOp::Add {
-            value: VariantValue::build("second"),
+            value: VariantValue::build("secundo"),
             weight: 10,
         }],
         ..Default::default()
@@ -453,6 +454,7 @@ async fn rollout_step_advance_ignores_pinned_and_segment_governed_identities(
     apply(
         &mut conn,
         &project,
+        &environment,
         segment,
         vec![
             add_group(None),
@@ -464,7 +466,6 @@ async fn rollout_step_advance_ignores_pinned_and_segment_governed_identities(
             ),
             SegmentPatchOp::SetFeatureOverride {
                 feature_id: feature.id,
-                environment_id: environment.id,
                 variant_weights: vec![SegmentVariantWeight {
                     variant_id: alt.id,
                     weight: 0,
@@ -580,7 +581,9 @@ async fn rollout_step_advance_is_idempotent_on_repeated_reads(mut conn: PoolConn
 #[sqlx::test]
 async fn disabling_rollout_clears_state_across_environments(mut conn: PoolConnection<Sqlite>) {
     let (project, environment) = create_context(&mut conn).await;
-    let env_b = create_environment(&mut conn, &project).await;
+    // Already exists when the schedule is set below, so setting it activates both
+    // environments at once - no need to simulate a second activation separately.
+    let _env_b = create_environment(&mut conn, &project).await;
 
     let feature = create_feature(&mut conn, &environment, "prog").await;
     variant::create(
@@ -603,17 +606,6 @@ async fn disabling_rollout_clears_state_across_environments(mut conn: PoolConnec
     .unwrap()
     .unwrap();
 
-    // Simulate the rollout having also been activated in a second environment.
-    sqlx::query(
-        "INSERT INTO feature_rollout_state(feature_id, environment_id, current_step, last_change_at) \
-         VALUES (?, ?, 0, CURRENT_TIMESTAMP)",
-    )
-    .bind(feature.id)
-    .bind(env_b.id)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-
     assert_eq!(rollout_state_rows_count(&mut conn, feature.id).await, 2);
 
     let patch = FeaturePatch {
@@ -630,6 +622,126 @@ async fn disabling_rollout_clears_state_across_environments(mut conn: PoolConnec
         rollout_state_rows_count(&mut conn, feature.id).await,
         0,
         "disabling should clear progression state across every environment"
+    );
+}
+
+/// Setting a schedule activates it in every environment that already exists, from step 0
+/// - not just the one the commit happens to be in.
+#[sqlx::test]
+async fn setting_rollout_activates_every_existing_environment(mut conn: PoolConnection<Sqlite>) {
+    let (project, environment) = create_context(&mut conn).await;
+    let env_b = create_environment(&mut conn, &project).await;
+
+    let feature = create_feature(&mut conn, &environment, "prog").await;
+    let alt = variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        VariantValue::build("alt"),
+        0,
+    )
+    .await
+    .unwrap();
+
+    set_rollout(
+        &mut conn,
+        &environment,
+        &feature,
+        rollout_cfg(0, &[(30, Some(3600)), (100, None)]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        rollout_state_rows_count(&mut conn, feature.id).await,
+        2,
+        "both environments should have progression state, not just the one committed in"
+    );
+
+    let alt_in_a = variant::get_by_id(&mut conn, &environment, alt.id, None)
+        .await
+        .unwrap();
+    let alt_in_b = variant::get_by_id(&mut conn, &env_b, alt.id, None)
+        .await
+        .unwrap();
+    assert_eq!(alt_in_a.weight, 30);
+    assert_eq!(
+        alt_in_b.weight, 30,
+        "env_b never had a manual activate step, yet should already be at step 0's weight"
+    );
+
+    let status_b = rollout::get_status(&mut conn, &env_b, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status_b.current_step, 0);
+}
+
+/// A new environment created while a feature's rollout is already mid-schedule elsewhere
+/// should join at step 0, not inherit whatever weight the base environment has already
+/// progressed to.
+#[sqlx::test]
+async fn new_environment_joins_active_rollout_at_step_zero(mut conn: PoolConnection<Sqlite>) {
+    let (_, environment) = create_context(&mut conn).await;
+    let feature = create_feature(&mut conn, &environment, "prog").await;
+    variant::create(
+        &mut conn,
+        &environment,
+        &feature,
+        VariantValue::build("alt"),
+        0,
+    )
+    .await
+    .unwrap();
+
+    let feature = set_rollout(
+        &mut conn,
+        &environment,
+        &feature,
+        rollout_cfg(0, &[(10, Some(60)), (100, None)]),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    // Force `environment` past step 0, so it's no longer where a fresh clone should land.
+    backdate(&mut conn, feature.id, environment.id, 1000).await;
+    touch(&mut conn, &environment, "advance-identity").await;
+
+    let status = rollout::get_status(&mut conn, &environment, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        status.current_step, 1,
+        "sanity check: base env has advanced"
+    );
+
+    let project = flagrant_types::Project {
+        id: environment.project_id,
+        ..Default::default()
+    };
+    let env_b = create_environment_from(&mut conn, &project, &environment).await;
+
+    let status_b = rollout::get_status(&mut conn, &env_b, feature.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        status_b.current_step, 0,
+        "a newly created environment should start the schedule fresh, not inherit the base \
+         environment's current step"
+    );
+
+    let alt_in_b = variant::get_for_feature(&mut conn, &env_b, feature.id, None)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|v| !v.is_control())
+        .unwrap();
+    assert_eq!(
+        alt_in_b.weight, 10,
+        "should get step 0's weight (10%), not the base environment's current 100%"
     );
 }
 

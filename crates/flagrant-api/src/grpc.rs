@@ -71,7 +71,7 @@ impl FeatureResolver for GrpcFeatureResolver {
                         VariantValue::Toml(v) => Kind::Toml(v),
                     }),
                 }),
-                is_enabled: f.is_enabled,
+                is_enabled: Some(f.is_enabled),
             })
             .collect();
 

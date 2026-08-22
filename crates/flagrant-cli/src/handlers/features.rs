@@ -570,19 +570,24 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
 /// Expected args:
 /// - `rules <w1>:<dur1> [<w2>:<dur2> ...] <100>` - stage a new schedule, e.g.
 ///   `10:6h 50:2d 80:30m 100`. Each duration accepts an `s`/`m`/`h`/`d` suffix; the last
-///   token is the terminal step and must be a bare weight with no duration.
+///   token is the terminal step and must be a bare weight with no duration. Committing
+///   this immediately activates the schedule, from step 0, in *every* environment of the
+///   project - there's no separate per-environment activation step. Progression itself
+///   still gates independently per environment from there on (each has its own
+///   minimum-sample-size and hold-duration checks).
 /// - `sample <n>` - stage a new minimum-sample-size gate for the currently staged (or
 ///   already committed) schedule.
-/// - `off` - stage disabling the rollout.
+/// - `delete` - stage removing the rollout entirely (clears the schedule and every
+///   environment's progression, not just this one).
 /// - `status` - print the live progression status. Not staged: fetched immediately, since
 ///   progression itself only ever advances lazily on the server, on the next read.
 pub fn progressive(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     match args.get(1).map(|a| a.to_lowercase()).as_deref() {
         Some("rules") => progressive_rules(&args[2..], session),
         Some("sample") => progressive_sample(args.get(2), session),
-        Some("off") => progressive_off(session),
+        Some("delete") => progressive_delete(session),
         Some("status") => progressive_status(session),
-        _ => bail!("Expected one of: rules, sample, off, status"),
+        _ => bail!("Expected one of: rules, sample, delete, status"),
     }
 }
 
@@ -692,13 +697,13 @@ fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyho
     Ok(())
 }
 
-fn progressive_off(session: &Session<Connection>) -> anyhow::Result<()> {
+fn progressive_delete(session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
         bail!("Not in a feature context. Use \"FEATURE use ...\" to set a context.");
     }
     ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Unset);
-    println!("Staged: progressive rollout disabled");
+    println!("Staged: progressive rollout deleted");
     Ok(())
 }
 
@@ -707,6 +712,8 @@ fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
     let feature = ctx.feature.as_ref().ok_or_else(|| {
         anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
     })?;
+    let has_config = feature.rollout.is_some();
+    let environment_name = ctx.environment.name.clone();
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{}/rollout", feature.id));
@@ -715,7 +722,17 @@ fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
 
     match status {
         Some(status) => status.display(None, &()),
-        None => println!("No progressive rollout configured for this feature."),
+        // Shouldn't normally happen - committing `rules` activates every environment at
+        // once - but can occur for a schedule set before that guarantee existed, or an
+        // environment created before this one joined the project. Re-staging the same
+        // schedule re-activates everywhere, this environment included.
+        None if has_config => println!(
+            "A progressive rollout is configured for this feature, but isn't active in '{environment_name}'.\n\
+             Run \"FEATURE progressive rules ...\" with the same schedule to (re)activate it everywhere."
+        ),
+        None => println!(
+            "No progressive rollout configured for this feature. Use \"FEATURE progressive rules ...\" to define one."
+        ),
     }
     Ok(())
 }
