@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: gitea.rodzinks.pl/michal/flagrant-ci:latest
-      # only needed while the package is private; harmless if it's public.
       credentials:
         username: ${{ gitea.actor }}
         password: ${{ secrets.REGISTRY_TOKEN }}
