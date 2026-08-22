@@ -198,7 +198,7 @@ async fn adding_second_variant_while_rollout_active_is_rejected(mut conn: PoolCo
 
     let patch = FeaturePatch {
         variants: vec![VariantPatchOp::Add {
-            value: VariantValue::build("second"),
+            value: VariantValue::build("secundo"),
             weight: 10,
         }],
         ..Default::default()
