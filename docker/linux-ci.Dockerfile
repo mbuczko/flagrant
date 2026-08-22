@@ -1,4 +1,4 @@
-# CI image for the `test` job in .gitea/workflows/dockerize.yml - bundles the
+# CI image for the jobs in .gitea/workflows/dockerize.yml - bundles the
 # system deps that job otherwise installs (and re-downloads) on every run.
 FROM rustlang/rust:nightly
 

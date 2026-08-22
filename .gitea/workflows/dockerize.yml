@@ -7,7 +7,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
-      image: gitea.rodzinks.pl/michal/flagrant-ci:latest
+      image: gitea.rodzinks.pl/michal/flagrant-linux-ci:latest
       credentials:
         username: ${{ gitea.actor }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -69,3 +69,37 @@ jobs:
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ gitea.sha }}
           cache-from: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache,mode=max
+
+  build-freebsd-package:
+    needs: test
+    if: gitea.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    container:
+      image: gitea.rodzinks.pl/michal/flagrant-freebsd-ci:latest
+      credentials:
+        username: ${{ gitea.actor }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build flagrant-api and flagrant-cli for FreeBSD
+        run: cargo build --release --target x86_64-unknown-freebsd -p flagrant-api -p flagrant-cli
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          tar -czf dist/flagrant-freebsd-amd64.tar.gz -C target/x86_64-unknown-freebsd/release flagrant-api flagrant-cli
+
+      # Gitea's generic package registry: PUT the file to
+      # /api/packages/{owner}/generic/{package}/{version}/{filename}. Owner is derived
+      # from `gitea.repository` (owner/repo) since the `gitea` context has no dedicated
+      # repository-owner field.
+      - name: Publish generic package to Gitea
+        env:
+          REPO: ${{ gitea.repository }}
+        run: |
+          OWNER="${REPO%%/*}"
+          curl -sSf -u "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" \
+            --upload-file dist/flagrant-freebsd-amd64.tar.gz \
+            "${{ gitea.server_url }}/api/packages/${OWNER}/generic/flagrant/${{ gitea.sha }}/flagrant-freebsd-amd64.tar.gz"
