@@ -9,6 +9,10 @@ on:
 
 jobs:
   test:
+    # skip plain pushes to master: it only needs to run there to gate the tag-triggered
+    # publish jobs below (via `needs: test`), and a tag push re-runs it anyway for the
+    # same commit, so testing master pushes themselves is redundant.
+    if: gitea.ref != 'refs/heads/master'
     runs-on: ubuntu-latest
     container:
       image: gitea.rodzinks.pl/michal/flagrant-linux-ci:latest
