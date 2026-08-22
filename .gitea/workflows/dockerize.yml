@@ -6,25 +6,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: rustlang/rust:nightly
+    container:
+      image: gitea.rodzinks.pl/michal/flagrant-ci:latest
+      # only needed while the package is private; harmless if it's public.
+      credentials:
+        username: ${{ gitea.actor }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
     steps:
-      # actions/checkout and actions/cache are JS-based actions, so `node` must be on
-      # PATH inside the job container before any `uses:` step runs. gitea's act_runner
-      # is supposed to inject its own node into custom containers automatically, but
-      # when that fails (exec: "node": executable file not found) installing a real
-      # one ourselves, first, is the reliable workaround.
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends nodejs protobuf-compiler pkg-config
-
       - name: Checkout
         uses: actions/checkout@v4
-
-      # rustlang/rust:nightly already ships rustup + a nightly toolchain, so we
-      # only need to add the cranelift codegen backend that profile.dev requires.
-      - name: Add cranelift codegen backend
-        run: rustup component add rustc-codegen-cranelift
 
       - name: Cache cargo registry and build artifacts
         continue-on-error: true
