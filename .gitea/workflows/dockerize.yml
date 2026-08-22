@@ -43,6 +43,7 @@ jobs:
 
   build-and-push:
     needs: test
+    if: gitea.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     container:
       image: docker:27-cli
