@@ -2,6 +2,10 @@ name: dockerize
 
 on:
   push:
+    branches:
+      - '**'
+    tags:
+      - '*'
 
 jobs:
   test:
@@ -30,9 +34,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
-  build-and-push:
+  build-docker-image:
     needs: test
-    if: gitea.ref == 'refs/heads/master'
+    if: startsWith(gitea.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     container:
       image: docker:27-cli
@@ -47,6 +51,12 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: vars
+        env:
+          REF: ${{ gitea.ref }}
+        run: echo "tag=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Gitea container registry
         uses: docker/login-action@v3
@@ -66,13 +76,13 @@ jobs:
           push: true
           tags: |
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:latest
-            ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ gitea.sha }}
+            ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ steps.vars.outputs.tag }}
           cache-from: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache,mode=max
 
   build-freebsd-package:
     needs: test
-    if: gitea.ref == 'refs/heads/master'
+    if: startsWith(gitea.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     container:
       image: gitea.rodzinks.pl/michal/flagrant-freebsd-ci:latest
@@ -83,8 +93,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Determine release tag
+        id: vars
+        env:
+          REF: ${{ gitea.ref }}
+        run: echo "tag=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      # native-tls-vendored statically embeds OpenSSL instead of linking the target's
+      # system libssl - the cross toolchain's sysroot is FreeBSD 13, whose libssl.so.12
+      # doesn't exist on newer releases (e.g. FreeBSD 15), so dynamic linking breaks at
+      # runtime there. Same reasoning as the Dockerfile's musl build.
       - name: Build flagrant-api and flagrant-cli for FreeBSD
-        run: cargo build --release --target x86_64-unknown-freebsd -p flagrant-api -p flagrant-cli
+        run: cargo build --release --target x86_64-unknown-freebsd -p flagrant-api -p flagrant-cli --features reqwest/native-tls-vendored
 
       - name: Package binaries
         run: |
@@ -102,4 +122,4 @@ jobs:
           OWNER="${REPO%%/*}"
           curl -sSf -u "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" \
             --upload-file dist/flagrant-freebsd-amd64.tar.gz \
-            "${{ gitea.server_url }}/api/packages/${OWNER}/generic/flagrant/${{ gitea.sha }}/flagrant-freebsd-amd64.tar.gz"
+            "${{ gitea.server_url }}/api/packages/${OWNER}/generic/flagrant-freebsd/${{ steps.vars.outputs.tag }}/flagrant-freebsd-amd64.tar.gz"
