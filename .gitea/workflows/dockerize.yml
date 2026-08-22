@@ -77,3 +77,5 @@ jobs:
           tags: |
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:latest
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ gitea.sha }}
+          cache-from: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ vars.REGISTRY }}/${{ env.IMAGE }}:buildcache,mode=max
