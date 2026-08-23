@@ -213,13 +213,14 @@ impl Tabular for Feature {
             } else {
                 e.weight
             };
+            let (typ, val) = e.value.decompose();
+            let first_line = val.trim().lines().next().unwrap_or("");
             let line = format!(
-                "{}{} {}{} {}",
+                "{}{} {}{} {typ}::{first_line}",
                 connector,
                 format_weight_bar(weight, 10),
                 if e.is_control { "★" } else { " " },
                 (i + 1).to_string().dimmed(),
-                e.value
             );
 
             if is_deleted || e.is_deleted {

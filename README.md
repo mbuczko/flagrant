@@ -173,6 +173,13 @@ Snapshots require a feature context (`FEATURE use <feature>`):
 
 Restoring is itself a commit, not a rewrite of history - it produces a brand-new snapshot matching the target version's state, so version numbers only ever go up. It reproduces variants (recreating one under a new id if it was deleted since), segment overrides (recreating the segment from its stored definition if it was deleted - though a still-existing segment's *rules* are left untouched, since rewriting them would silently change behaviour for every other feature that segment also overrides), and pinned identity overrides. Anything not part of the target version - like an override added after that point - is cleared rather than left behind. Organic (non-pinned) identity assignments are always cleared and left to redistribute on the next request, never restored.
 
+### Querying resolved values
+
+`GET` and `GETALL` hit the same identity-facing evaluation endpoint SDKs use - read-only, nothing to stage or commit. Either takes its feature/identity from the current context if omitted, or explicitly overrides it:
+
+- `GET [feature][@identity]` - resolve one feature's value for an identity.
+- `GETALL [@identity]` - resolve every feature's value for an identity.
+
 ## What's next
 
 - [x] **Backend only flags** - allow to reach for certain flags only within backend-to-backend communication

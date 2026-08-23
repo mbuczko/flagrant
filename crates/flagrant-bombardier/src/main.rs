@@ -125,7 +125,7 @@ pub fn main() -> anyhow::Result<()> {
                     }
                     // TODO: fetch idents_count idents from the pool and generate new ones if needed
                     if let Some(ident) = get_or_generate_ident(&idents, idents_count, &mut rng)
-                        && let Some(response) = conn.get_features(&ident)
+                        && let Some(response) = conn.get_features(&ident).ok()
                         && let Some(vv) = feature_value(response, feature_name)
                     {
                         let mut guard = buckets.write().unwrap();

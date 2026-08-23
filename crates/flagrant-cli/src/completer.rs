@@ -32,7 +32,6 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 let ctx = self.session.context.read().unwrap();
                 let project_res = ctx.project.as_base_resource();
-                let env_res = ctx.env_resource();
 
                 Ok(match op {
                     "add" if arg_n >= 3 && !prefix.contains('=') => ctx
@@ -67,14 +66,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                             })
                             .collect::<Vec<_>>()
                     }
-                    "delete" | "show" | "use" if arg_n == 2 => ctx
-                        .client
-                        .get::<Vec<IdentityWithTraits>>(
-                            env_res.subpath(format!("/identities?prefix={prefix}")),
-                        )?
-                        .into_iter()
-                        .map(|c| c.value)
-                        .collect::<Vec<_>>(),
+                    "delete" | "show" | "use" if arg_n == 2 => {
+                        complete_identities(&ctx, prefix)?
+                    }
                     // Auto-complete trait names for filtering, e.g. `trait:vip` or `trait:-vip`
                     "list" => match prefix.split_once(':') {
                         Some(("trait", val)) => {
@@ -114,13 +108,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                     // when prefix contains `@` / `+`
                     "use" if arg_n == 2 => {
                         if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
-                            ctx.client
-                                .get::<Vec<IdentityWithTraits>>(
-                                    ctx.env_resource()
-                                        .subpath(format!("/identities?prefix={identity_prefix}")),
-                                )?
+                            complete_identities(&ctx, identity_prefix)?
                                 .into_iter()
-                                .map(|i| format!("{feature_part}@{}", i.value))
+                                .map(|v| format!("{feature_part}@{v}"))
                                 .collect::<Vec<_>>()
                         } else if let Some((feature_part, segment_prefix)) = prefix.split_once('+')
                         {
@@ -133,22 +123,11 @@ impl AutoCompleter for ArgCompleter<'_> {
                                 .map(|s| format!("{feature_part}+{}", s.name))
                                 .collect::<Vec<_>>()
                         } else {
-                            ctx.client
-                                .get::<Vec<Feature>>(
-                                    res.subpath(format!("/features?prefix={prefix}")),
-                                )?
-                                .into_iter()
-                                .map(|c| c.name)
-                                .collect::<Vec<_>>()
+                            complete_features(&ctx, prefix)?
                         }
                     }
                     // Auto-complete feature name
-                    "delete" | "show" if arg_n == 2 => ctx
-                        .client
-                        .get::<Vec<Feature>>(res.subpath(format!("/features?prefix={prefix}")))?
-                        .into_iter()
-                        .map(|c| c.name)
-                        .collect::<Vec<_>>(),
+                    "delete" | "show" if arg_n == 2 => complete_features(&ctx, prefix)?,
 
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
                     "server-side" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
@@ -206,6 +185,34 @@ impl AutoCompleter for ArgCompleter<'_> {
                     _ => vec![],
                 })
             }
+            // Auto-complete feature name, or `feature@identity`, for the `GET` test
+            // command - same `@` split as `FEATURE use` above.
+            "GET" if arg_n == 1 => {
+                let ctx = self.session.context.read().unwrap();
+
+                Ok(match prefix.split_once('@') {
+                    Some((feature_part, identity_prefix)) => {
+                        complete_identities(&ctx, identity_prefix)?
+                            .into_iter()
+                            .map(|v| format!("{feature_part}@{v}"))
+                            .collect::<Vec<_>>()
+                    }
+                    None => complete_features(&ctx, prefix)?,
+                })
+            }
+            // Auto-complete `@identity` for the `GETALL` test command - only once `@` has
+            // been typed, since (unlike GET) GETALL has no bare-token form.
+            "GETALL" if arg_n == 1 => {
+                let ctx = self.session.context.read().unwrap();
+
+                Ok(match prefix.strip_prefix('@') {
+                    Some(identity_prefix) => complete_identities(&ctx, identity_prefix)?
+                        .into_iter()
+                        .map(|v| format!("@{v}"))
+                        .collect::<Vec<_>>(),
+                    None => vec![],
+                })
+            }
             "RULE" if arg_n >= 2 => {
                 let op: &str = &args[1];
                 let ctx = self.session.context.read().unwrap();
@@ -235,16 +242,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .filter(|s| s.starts_with(prefix))
                         .collect(),
                     "add" if arg_n == 5 => match args.get(3).map(|a| a.as_ref()) {
-                        Some("identity") => {
-                            let env_res = ctx.env_resource();
-                            ctx.client
-                                .get::<Vec<IdentityWithTraits>>(
-                                    env_res.subpath(format!("/identities?prefix={prefix}")),
-                                )?
-                                .into_iter()
-                                .map(|i| i.value)
-                                .collect()
-                        }
+                        Some("identity") => complete_identities(&ctx, prefix)?,
                         Some("environment") => {
                             let project_res = ctx.project.as_base_resource();
                             ctx.client
@@ -294,6 +292,28 @@ impl AutoCompleter for ArgCompleter<'_> {
             _ => Ok(vec![]),
         }
     }
+}
+
+/// Completes identity values (bare, unformatted) matching `prefix`, scoped to the
+/// current environment. Shared by every command completing an identity token.
+fn complete_identities(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
+    Ok(ctx
+        .client
+        .get::<Vec<IdentityWithTraits>>(ctx.env_resource().subpath(format!("/identities?prefix={prefix}")))?
+        .into_iter()
+        .map(|i| i.value)
+        .collect())
+}
+
+/// Completes feature names (bare, unformatted) matching `prefix`, scoped to the
+/// current environment. Shared by every command completing a feature token.
+fn complete_features(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
+    Ok(ctx
+        .client
+        .get::<Vec<Feature>>(ctx.env_resource().subpath(format!("/features?prefix={prefix}")))?
+        .into_iter()
+        .map(|c| c.name)
+        .collect())
 }
 
 fn strip_tag(input: &str) -> (&str, Option<char>, &str) {

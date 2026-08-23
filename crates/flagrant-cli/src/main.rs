@@ -25,7 +25,6 @@ mod printer;
 /// overlay, the reduced tab-completion mode, and the REPL's help dispatch, so they
 /// can't drift out of sync.
 const HELP_TRIGGER: char = '?';
-const TEST_TRIGGER: char = ']';
 
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
@@ -404,6 +403,9 @@ fn main() -> anyhow::Result<()> {
             in_context!(any_ctx),
         ),
         Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
+        // Query resolved feature values for an identity, without mutating any context
+        Command::Get.no_op("[feature][@identity]", handlers::tester::get),
+        Command::GetAll.no_op("[@identity]", handlers::tester::get_all),
         // Identity overrides (only in identity context)
         Command::Override.op_in_context(
             "add",
@@ -441,10 +443,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
-    let overlays = vec![
-        (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
-        (TEST_TRIGGER, "\x1b[36mtest> \x1b[0m"),
-    ];
+    let overlays = vec![(HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m")];
     let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
     let helper = ReplHelper {
