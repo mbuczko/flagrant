@@ -7,7 +7,10 @@ use flagrant_types::{
     payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
 };
 
-use crate::{handlers::open_in_editor, printer::tabular::Tabular};
+use crate::{
+    handlers::open_in_editor,
+    printer::tabular::{Tabular, environment::list_with_current},
+};
 
 /// Create a new environment in the current project.
 ///
@@ -36,10 +39,11 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
 
-    Environment::list(
+    list_with_current(
         ctx.client
             .get::<Vec<Environment>>(res.subpath("/envs"))?
             .as_ref(),
+        Some(&ctx.environment.name),
     );
     Ok(())
 }

@@ -219,7 +219,7 @@ impl Tabular for Feature {
                 "{}{} {}{} {typ}::{first_line}",
                 connector,
                 format_weight_bar(weight, 10),
-                if e.is_control { "★" } else { " " },
+                if e.is_control { "★" } else { " " }.dimmed(),
                 (i + 1).to_string().dimmed(),
             );
 

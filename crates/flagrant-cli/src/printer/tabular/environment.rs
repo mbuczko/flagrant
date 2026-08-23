@@ -2,6 +2,8 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 use flagrant_types::Environment;
 
+use crate::printer::legend;
+
 use super::Tabular;
 
 impl Tabular for Environment {
@@ -9,27 +11,7 @@ impl Tabular for Environment {
     type Context = ();
 
     fn list(selfs: &[Self]) {
-        if selfs.is_empty() {
-            println!("No environments found.");
-            return;
-        }
-        let rows: Vec<_> = selfs
-            .iter()
-            .map(|env| {
-                [
-                    env.name.clone(),
-                    env.description.clone().unwrap_or_default(),
-                ]
-            })
-            .collect();
-
-        FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
-            .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
-            .rseparator(None)
-            .width(Width::Percentage(100))
-            .build()
-            .render(rows);
+        list_with_current(selfs, None);
     }
 
     fn display(&self, _patch: Option<&()>, _ctx: &()) {
@@ -50,5 +32,40 @@ impl Tabular for Environment {
             .build();
 
         table.render(vec![&["name", &self.name], &["description", desc_str]]);
+    }
+}
+
+/// Renders the environment list table, marking `current`'s row with a star and
+/// explaining it in a footer legend below (if given). `Tabular::list`'s signature has no
+/// room for "which one is current" - environments are the only type needing to flag that
+/// in a list view - so `ENVIRONMENT list` calls this directly instead of going through
+/// the trait; `Tabular::list` itself just delegates here with `current: None`.
+pub(crate) fn list_with_current(envs: &[Environment], current: Option<&str>) {
+    if envs.is_empty() {
+        println!("No environments found.");
+        return;
+    }
+    let rows: Vec<_> = envs
+        .iter()
+        .map(|env| {
+            let name = if current == Some(env.name.as_str()) {
+                format!("{} {}", env.name, "★".dimmed())
+            } else {
+                env.name.clone()
+            };
+            [name, env.description.clone().unwrap_or_default()]
+        })
+        .collect();
+
+    FancyTable::create(FancyTableOpts::default())
+        .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
+        .add_column_named_with_align("DESCRIPTION".into(), Layout::Expandable(100), Align::Left)
+        .rseparator(None)
+        .width(Width::Percentage(100))
+        .build()
+        .render(rows);
+
+    if current.is_some() {
+        legend::print_footer(&format!(" {} current environment", "★".dimmed()), false);
     }
 }
