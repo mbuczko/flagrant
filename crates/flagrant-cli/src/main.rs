@@ -25,6 +25,7 @@ mod printer;
 /// overlay, the reduced tab-completion mode, and the REPL's help dispatch, so they
 /// can't drift out of sync.
 const HELP_TRIGGER: char = '?';
+const TEST_TRIGGER: char = ']';
 
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
@@ -441,9 +442,8 @@ fn main() -> anyhow::Result<()> {
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
     let overlays = vec![
-        (']', "\x1b[36mdir> \x1b[0m"),
         (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
-        ('\\', "\x1b[36mset> \x1b[0m"),
+        (TEST_TRIGGER, "\x1b[36mtest> \x1b[0m"),
     ];
     let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
