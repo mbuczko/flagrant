@@ -47,11 +47,24 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .validate_value(value)
         .map_err(|e| anyhow::anyhow!(e))?;
 
-    let mut ctx = session.context.write().unwrap();
+    let ctx = session.context.read().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))?;
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(segment, patch);
 
-    if ctx.segment.is_none() {
-        bail!("Not in a segment context. Use `SEGMENT use <name>` first.");
+    if !eff
+        .groups
+        .iter()
+        .any(|g| g.label == label.as_ref() && !g.is_deleted)
+    {
+        bail!("Group '{label}' not found in current segment. Use `GROUP add` first.");
     }
+    drop(ctx);
+
+    let mut ctx = session.context.write().unwrap();
     ctx.get_or_init_segment_patch()
         .ops
         .push(SegmentPatchOp::AddRule {
