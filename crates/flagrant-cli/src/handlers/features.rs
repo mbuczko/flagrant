@@ -1,22 +1,3 @@
-//! REPL command handlers for feature management.
-//!
-//! Each public function corresponds to a `FEATURE <op>` or `SET <op>` command,
-//! plus the top-level `COMMIT` and `DISCARD` commands:
-//!
-//! | Command              | Handler                | Description                                           |
-//! |----------------------|------------------------|-------------------------------------------------------|
-//! | `FEATURE list`       | [`list`]               | List features in the current environment.             |
-//! | `FEATURE add`        | [`add`]                | Create a new feature with a default value.            |
-//! | `FEATURE use`        | [`r#use`]              | Switch into a feature context.                        |
-//! | `FEATURE show`       | [`show`]               | Print details of a feature.                           |
-//! | `FEATURE delete`     | [`delete`]             | Delete a feature.                                     |
-//! | `FEATURE rename`     | [`rename`]             | Stage a feature name change.                          |
-//! | `FEATURE describe`   | [`describe`]           | Stage a feature description.                          |
-//! | `FEATURE status`     | [`status`]             | Stage a feature status (`on` / `off` / 'archived').   |
-//! | `FEATURE server-side`| [`server-side`]        | Stage a feature server-side only state (`on` / `off`).|
-//! | `FEATURE tag`        | [`tag`]                | Stage adding/removing tags on a feature.              |
-//! | `UNSET distribution` | [`unset_distribution`] | Clear variant assignments matching a pattern.         |
-
 use std::ops::Deref;
 
 use anyhow::bail;

@@ -1,17 +1,3 @@
-//! REPL command handlers for segment management.
-//!
-//! | Command                   | Handler            | Description                                                                 |
-//! |---------------------------|--------------------|-----------------------------------------------------------------------------|
-//! | `SEGMENT add`             | [`add`]            | Create a new segment and enter its context.                                 |
-//! | `SEGMENT list`            | [`list`]           | List all segments in the current project.                                   |
-//! | `SEGMENT show`            | [`show`]           | Print details of a segment.                                                 |
-//! | `SEGMENT delete`          | [`delete`]         | Delete a segment by name.                                                   |
-//! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                                              |
-//! | `SEGMENT rename`          | [`rename`]         | Stage a segment name change.                                                |
-//! | `SEGMENT describe`        | [`describe`]       | Stage a segment description change.                                         |
-//! | `OVERRIDE add`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
-//! | `OVERRIDE delete`         | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
-
 use std::borrow::Cow;
 
 use anyhow::bail;

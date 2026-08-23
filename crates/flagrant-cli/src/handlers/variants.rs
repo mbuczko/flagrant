@@ -1,18 +1,3 @@
-//! REPL command handlers for variant management.
-//!
-//! Each public function corresponds to a `VARIANT <op>` command:
-//!
-//! | Command            | Handler    | Description                                      |
-//! |--------------------|------------|--------------------------------------------------|
-//! | `VARIANT add`      | [`add`]    | Stage a new variant addition.                    |
-//! | `VARIANT show`     | [`show`]   | Print details of an existing variant.            |
-//! | `VARIANT value`    | [`value`]  | Stage a value change for an existing variant.    |
-//! | `VARIANT weight`   | [`weight`] | Stage a weight change for an existing variant.   |
-//! | `VARIANT delete`   | [`delete`] | Stage a variant deletion.                        |
-//!
-//! All mutations are accumulated in [`Connection::pending`] as a [`FeaturePatch`] and
-//! only sent to the API when the user runs `COMMIT`.
-
 use anyhow::bail;
 use flagrant_client::connection::{Connection, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};

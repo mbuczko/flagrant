@@ -1,12 +1,3 @@
-//! REPL command handlers for feature snapshot history.
-//!
-//! | Command               | Handler     | Description                                                |
-//! |------------------------|-------------|-------------------------------------------------------------|
-//! | `SNAPSHOT list`        | [`list`]    | List every snapshot recorded for the current feature.       |
-//! | `SNAPSHOT show`        | [`show`]    | Print the full state captured by a snapshot version.        |
-//! | `SNAPSHOT describe`    | [`describe`]| Change a snapshot's comment.                                 |
-//! | `SNAPSHOT restore`     | [`restore`] | Restore the current feature to an earlier snapshot version. |
-
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Width};
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};

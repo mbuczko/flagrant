@@ -1,12 +1,3 @@
-//! REPL command handlers for segment group management.
-//!
-//! | Command                          | Handler      | Description                                          |
-//! |----------------------------------|--------------|------------------------------------------------------|
-//! | `GROUP add [--and|--and-not]`    | [`add`]      | Stage a new group on the current segment.            |
-//! | `GROUP show <label>`             | [`show`]     | Print details of a group with its rules.             |
-//! | `GROUP delete <label>`           | [`delete`]   | Stage a group deletion by label.                     |
-//! | `GROUP describe <label> [desc]`  | [`describe`] | Stage a group description change.                    |
-
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
