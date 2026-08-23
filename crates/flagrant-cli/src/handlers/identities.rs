@@ -1,16 +1,3 @@
-//! REPL command handlers for identity management.
-//!
-//! | Command                          | Handler           | Description                                         |
-//! |----------------------------------|-------------------|-----------------------------------------------------|
-//! | `IDENTITY add`                   | [`add`]           | Create or upsert an identity with optional traits.  |
-//! | `IDENTITY list`                  | [`list`]          | List up to 10 identities, optionally filtered.      |
-//! | `IDENTITY show`                  | [`show`]          | Print details of an identity with its traits.       |
-//! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
-//! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
-//! | `IDENTITY trait <name=value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
-//! | `OVERRIDE add [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
-//! | `OVERRIDE delete`                | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
-
 use std::ops::Deref;
 
 use anyhow::bail;

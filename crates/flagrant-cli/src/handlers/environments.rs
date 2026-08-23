@@ -1,18 +1,3 @@
-//! REPL command handlers for environment management.
-//!
-//! Each public function corresponds to an `ENVIRONMENT <op>` command:
-//!
-//! | Command                  | Handler            | Description                                |
-//! |--------------------------|--------------------|--------------------------------------------|
-//! | `ENVIRONMENT add`        | [`add`]            | Create a new environment in the project.   |
-//! | `ENVIRONMENT list`       | [`list`]           | Print all environments in the project.     |
-//! | `ENVIRONMENT show`       | [`show`]           | Print details of an environment.           |
-//! | `ENVIRONMENT describe`   | [`describe`]       | Update an environment's description.       |
-//! | `ENVIRONMENT use`        | [`r#use`]          | Switch the active environment.             |
-//!
-//! Unlike `FEATURE`/`SEGMENT`, environment mutations apply immediately - there is no
-//! patch/`COMMIT`/`DISCARD` staging concept for environments.
-
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};

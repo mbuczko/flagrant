@@ -1,13 +1,3 @@
-//! REPL command handlers for segment rule management.
-//!
-//! | Command                               | Handler        | Description                                        |
-//! |---------------------------------------|----------------|----------------------------------------------------|
-//! | `RULE add <label> <subject> <cmp> <v>`| [`add`]        | Stage a new rule on a group in the current segment.|
-//! | `RULE delete <label> <index>`         | [`delete`]     | Stage a rule deletion by 1-based index.            |
-//! | `RULE show <label> <index>`           | [`show`]       | Print details of a single rule within a group.     |
-//! | `RULE value <label> <index> [v]`      | [`value`]      | Stage a value change for an existing rule.         |
-//! | `RULE comparator <label> <index> [c]` | [`comparator`] | Stage a comparator change for an existing rule.    |
-
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
@@ -48,10 +38,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let ctx = session.context.read().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))?;
+    let segment = ctx.segment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
+    })?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
 

@@ -209,11 +209,10 @@ impl Connection {
     }
 
     #[cfg(feature = "blocking")]
-    pub fn get_features(&self, identity: &str) -> Option<Vec<FeatureResponse>> {
+    pub fn get_features(&self, identity: &str) -> anyhow::Result<Vec<FeatureResponse>> {
         let path = self.env_resource().subpath("/features");
         self.client
             .get_with_identity(format!("/api/v1{path}"), Some(identity))
-            .ok()
     }
 }
 
