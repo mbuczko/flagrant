@@ -887,7 +887,7 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flagrant"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-api"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "axum 0.7.7",
@@ -936,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-bombardier"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "argh",
@@ -953,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-cli"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "argh",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-client"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "flagrant-types",
@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-repl"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "rustyline",
@@ -994,7 +994,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-types"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "chrono",
  "regex",

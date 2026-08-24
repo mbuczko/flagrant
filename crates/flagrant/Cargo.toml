@@ -11,7 +11,7 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.21"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.22"}
 
 sqlx = {workspace = true}
 hugsqlx = {workspace = true}
