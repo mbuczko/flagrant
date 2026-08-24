@@ -1,8 +1,7 @@
 use flagrant::errors::FlagrantError;
 use flagrant::models::{commit, segment};
 use flagrant_types::payload::{
-    CommitPayload, FeatureCommitPart, FeaturePatch, SegmentCommitPart, SegmentPatch,
-    SegmentPatchOp,
+    CommitPayload, FeatureCommitPart, FeaturePatch, SegmentCommitPart, SegmentPatch, SegmentPatchOp,
 };
 use sqlx::{Sqlite, pool::PoolConnection};
 
@@ -51,15 +50,18 @@ async fn stale_feature_version_is_rejected(mut conn: PoolConnection<Sqlite>) {
         .await
         .unwrap_err();
 
-    assert!(err.downcast_ref::<FlagrantError>().is_some_and(|e| matches!(
-        e,
-        FlagrantError::VersionMismatch {
-            kind: "feature",
-            expected: 1,
-            current: 2,
-            ..
-        }
-    )));
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(
+                e,
+                FlagrantError::VersionMismatch {
+                    kind: "feature",
+                    expected: 1,
+                    current: 2,
+                    ..
+                }
+            ))
+    );
 }
 
 #[sqlx::test]
@@ -321,11 +323,14 @@ async fn rule_op_is_gated_by_owning_segment_version(mut conn: PoolConnection<Sql
         .await
         .unwrap_err();
 
-    assert!(err.downcast_ref::<FlagrantError>().is_some_and(|e| matches!(
-        e,
-        FlagrantError::VersionMismatch {
-            kind: "segment",
-            ..
-        }
-    )));
+    assert!(
+        err.downcast_ref::<FlagrantError>()
+            .is_some_and(|e| matches!(
+                e,
+                FlagrantError::VersionMismatch {
+                    kind: "segment",
+                    ..
+                }
+            ))
+    );
 }

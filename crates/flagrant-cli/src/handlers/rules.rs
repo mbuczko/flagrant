@@ -33,6 +33,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let subject = parse_subject(subject_str)?;
     let comparator = parse_comparator(comparator_str)?;
+
     comparator
         .validate_value(value)
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -177,6 +178,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     effective_comparator
         .validate_value(&value)
         .map_err(|e| anyhow::anyhow!(e))?;
+
     println!("Staged: rule #{index} in [{label}] value = {value}");
 
     let mut ctx = session.context.write().unwrap();
@@ -221,6 +223,7 @@ pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
     comparator
         .validate_value(&effective_value)
         .map_err(|e| anyhow::anyhow!(e))?;
+
     println!("Staged: rule #{index} in [{label}] comparator = {comparator}");
 
     let mut ctx = session.context.write().unwrap();
