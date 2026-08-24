@@ -7,6 +7,7 @@ use flagrant_types::{
 use sqlx::{Connection, SqliteConnection};
 
 use super::{environment, feature, identity, segment, snapshot};
+use crate::errors::FlagrantError;
 
 /// Applies a single `COMMIT` as one atomic, server-side operation: whichever of the
 /// feature/identity/segment parts are present in `payload` are applied together in one
@@ -29,6 +30,19 @@ pub async fn apply(
 
     let updated_feature = if let Some(part) = payload.feature {
         let current = feature::get_by_id(&mut tx, environment, part.id).await?;
+
+        if let Some(expected) = part.version
+            && expected != current.version
+        {
+            return Err(FlagrantError::VersionMismatch {
+                kind: "feature",
+                id: current.id,
+                expected,
+                current: current.version,
+            }
+            .into());
+        }
+
         let result = feature::patch(&mut tx, environment, &current, part.patch).await?;
 
         if result.is_some() {
@@ -69,6 +83,18 @@ pub async fn apply(
 
     let updated_segment = if let Some(part) = payload.segment {
         let current = segment::get_by_id(&mut tx, project, part.id).await?;
+
+        if let Some(expected) = part.version
+            && expected != current.version
+        {
+            return Err(FlagrantError::VersionMismatch {
+                kind: "segment",
+                id: current.id,
+                expected,
+                current: current.version,
+            }
+            .into());
+        }
 
         let weight_only = !part.patch.ops.is_empty()
             && part.patch.ops.iter().all(|op| {

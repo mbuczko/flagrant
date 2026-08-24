@@ -252,6 +252,7 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
         comment,
         feature: has_feature.then(|| FeatureCommitPart {
             id: feature_id.unwrap(),
+            version: ctx.feature.as_ref().map(|f| f.version),
             patch: ctx.feature_patch.clone().unwrap(),
         }),
         identity: has_identity.then(|| IdentityCommitPart {
@@ -260,6 +261,7 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
         }),
         segment: has_segment.then(|| SegmentCommitPart {
             id: ctx.segment.as_ref().unwrap().id,
+            version: ctx.segment.as_ref().map(|s| s.version),
             patch: ctx.segment_patch.clone().unwrap(),
         }),
     };

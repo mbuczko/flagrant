@@ -258,6 +258,11 @@ impl SegmentPatch {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FeatureCommitPart {
     pub id: i32,
+    /// Optimistic-concurrency check: `Some(v)` must equal the feature's current
+    /// `version` or the commit is rejected with a version-conflict error (HTTP 409).
+    /// `None` skips the check entirely - needed so raw OpenAPI/Swagger-UI callers that
+    /// don't know about versioning still work.
+    pub version: Option<i32>,
     pub patch: FeaturePatch,
 }
 
@@ -274,6 +279,11 @@ pub struct IdentityCommitPart {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SegmentCommitPart {
     pub id: i32,
+    /// Same optimistic-concurrency semantics as `FeatureCommitPart::version`, checked
+    /// against the segment's `version`. Also transitively gates every group/rule op
+    /// nested in this patch's ops list, since those are never addressed independently
+    /// of their owning segment.
+    pub version: Option<i32>,
     pub patch: SegmentPatch,
 }
 

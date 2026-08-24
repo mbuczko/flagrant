@@ -61,6 +61,9 @@ pub struct Feature {
     pub is_enabled: bool,
     pub is_archived: bool,
     pub is_srv: bool,
+    /// Optimistic-concurrency counter, bumped by one on every commit that touches this
+    /// feature (property change or delete). Global per feature, not per-environment.
+    pub version: i32,
     /// `Some` marks this feature as a progressive rollout - a single alternative
     /// variant's weight ramping up over a defined schedule of steps. Feature-level
     /// (shared across environments) by design; only the live progression state (see
@@ -403,6 +406,12 @@ pub struct Segment {
     pub name: String,
     #[validate(max_length = 2048)]
     pub description: Option<String>,
+    /// Optimistic-concurrency counter, bumped by one on every commit that touches this
+    /// segment (property/group/rule change or delete - groups and rules have no version
+    /// of their own, so any op targeting them via `SegmentPatchOp` bumps this instead).
+    /// Echo the value you last fetched back on a commit's `SegmentCommitPart.version` to
+    /// have the server reject it if the segment changed elsewhere in the meantime.
+    pub version: i32,
     /// Groups ordered by position; first group has `connector = None`.
     pub groups: Vec<SegmentGroup>,
 }

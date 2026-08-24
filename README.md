@@ -52,7 +52,6 @@ Combine a feature switch with an identity/segment switch in one step by putting 
 ```
 USE feature@identity
 USE feature+segment
-USE /environment
 ```
 
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.

@@ -1,30 +1,30 @@
 -- :name create_segment :<> :1
 -- :doc Creates a new segment with name and optional description
 INSERT INTO segments(project_id, name, description) VALUES($1, $2, $3)
-RETURNING segment_id, project_id, name, description
+RETURNING segment_id, project_id, name, description, version
 
 -- :name fetch_segment_by_id :<> :1
 -- :doc Returns a segment row for the given segment_id and project_id
-SELECT segment_id, project_id, name, description
+SELECT segment_id, project_id, name, description, version
 FROM segments
 WHERE segment_id = $1 AND project_id = $2
 
 -- :name fetch_segment_by_name :<> :1
 -- :doc Returns a segment row for the given name and project_id
-SELECT segment_id, project_id, name, description
+SELECT segment_id, project_id, name, description, version
 FROM segments
 WHERE name = $1 AND project_id = $2
 
 -- :name fetch_segments :<> :*
 -- :doc Returns all segments for the given project
-SELECT segment_id, project_id, name, description
+SELECT segment_id, project_id, name, description, version
 FROM segments
 WHERE project_id = $1
 ORDER BY name
 
 -- :name fetch_segments_by_pattern :<> :*
 -- :doc Returns segments for the given project with names matching a LIKE pattern
-SELECT segment_id, project_id, name, description
+SELECT segment_id, project_id, name, description, version
 FROM segments
 WHERE project_id = $1 AND name LIKE $2
 ORDER BY name
@@ -111,3 +111,7 @@ UPDATE segment_rules SET value = $2 WHERE rule_id = $1
 -- :name update_rule_comparator :<> :!
 -- :doc Updates a rule's comparator
 UPDATE segment_rules SET comparator = $2 WHERE rule_id = $1
+
+-- :name bump_segment_version :<> :!
+-- :doc Increments a segment's optimistic-concurrency version by exactly one.
+UPDATE segments SET version = version + 1 WHERE segment_id = $1

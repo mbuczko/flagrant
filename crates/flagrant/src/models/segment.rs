@@ -22,6 +22,7 @@ struct SegmentRow {
     project_id: i32,
     name: String,
     description: Option<String>,
+    version: i32,
 }
 
 #[derive(sqlx::FromRow)]
@@ -54,6 +55,7 @@ pub async fn create(
         project_id: row.project_id,
         name: row.name,
         description: row.description,
+        version: row.version,
         groups: vec![],
     };
 
@@ -475,6 +477,10 @@ pub async fn patch(
         }
     }
 
+    SQLSegments::bump_segment_version::<_>(&mut *conn, params![segment.id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not bump segment version", e))?;
+
     get_by_id(conn, project, segment.id).await.map(Some)
 }
 
@@ -553,6 +559,7 @@ async fn load_segment(conn: &mut SqliteConnection, row: SegmentRow) -> anyhow::R
         project_id: row.project_id,
         description: row.description,
         name: row.name,
+        version: row.version,
         groups,
     })
 }
@@ -586,6 +593,7 @@ async fn load_all_segments(
                 project_id: row.project_id,
                 name: row.name,
                 description: row.description,
+                version: row.version,
                 groups: seg_groups,
             }
         })

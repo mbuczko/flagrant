@@ -19,4 +19,17 @@ pub enum FlagrantError {
 
     #[error("Not found: {0}")]
     NotFound(&'static str),
+
+    /// `kind` is "feature" or "segment". Raised in `commit::apply`, the only place
+    /// this is checked, right after fetching the entity and before applying the patch -
+    /// covers both modification and deletion, since delete is just a branch of patch.
+    #[error(
+        "Version conflict on {kind}: you were working from version {expected}, but the current version is {current} - it was modified elsewhere since you last fetched it. Refresh and reapply your change."
+    )]
+    VersionMismatch {
+        kind: &'static str,
+        id: i32,
+        expected: i32,
+        current: i32,
+    },
 }

@@ -33,6 +33,14 @@ impl IntoResponse for ServiceError {
                 (StatusCode::UNAUTHORIZED, error.to_string())
             }
             Some(FlagrantError::NotFound(error)) => (StatusCode::NOT_FOUND, error.to_string()),
+            Some(FlagrantError::InvalidOperation(error)) => {
+                tracing::error!(error);
+                (StatusCode::BAD_REQUEST, error.to_string())
+            }
+            Some(err @ FlagrantError::VersionMismatch { .. }) => {
+                tracing::error!(error = %err);
+                (StatusCode::CONFLICT, err.to_string())
+            }
             _ => {
                 tracing::error!(error = ?self.0, "Unexpected error");
                 (StatusCode::BAD_REQUEST, format!("Error: {}", self.0))

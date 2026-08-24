@@ -97,6 +97,9 @@ fn map_error(err: anyhow::Error) -> Status {
         Some(FlagrantError::NoIdentity(msg)) => Status::unauthenticated(*msg),
         Some(FlagrantError::NotFound(msg)) => Status::not_found(*msg),
         Some(FlagrantError::InvalidOperation(msg)) => Status::failed_precondition(*msg),
+        Some(err @ FlagrantError::VersionMismatch { .. }) => {
+            Status::failed_precondition(err.to_string())
+        }
         None => {
             tracing::error!(error = ?err, "Unexpected error");
             Status::internal("Unexpected error")
