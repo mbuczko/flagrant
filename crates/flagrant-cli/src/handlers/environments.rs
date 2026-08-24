@@ -141,8 +141,7 @@ pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
             drop(ctx);
 
             if let Some(name) = feature_name {
-                let args = [Arg("", 0), Arg(name.as_str(), 1)];
-                super::features::r#use(&args, session)?;
+                super::features::switch_to(&name, session)?;
             }
             return Ok(());
         }

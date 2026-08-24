@@ -63,7 +63,7 @@ pub struct Connection {
     /// Positional index that maps 1-based display index → VariantRef.
     /// Invalidated whenever pending ops change.
     pub variant_index: Vec<VariantRef>,
-    /// Identity currently in context (set by `IDENTITY use`).
+    /// Identity currently in context (set by `USE @<identity>`).
     pub identity: Option<IdentityWithTraits>,
     /// Staged patch for the current identity.
     pub identity_patch: Option<IdentityPatch>,

@@ -227,7 +227,7 @@ fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
     let ctx = session.context.read().unwrap();
     ctx.segment
         .clone()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))
 }
 
 /// Predict the label the server will assign to the next new group.

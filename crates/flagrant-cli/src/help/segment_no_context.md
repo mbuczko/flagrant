@@ -1,1 +1,1 @@
-*Enter a segment context with `SEGMENT use <name>` to access commands operating on segment GROUPs and RULEs.*
+*Enter a segment context with `USE +<segment>` to access commands operating on segment GROUPs and RULEs.*

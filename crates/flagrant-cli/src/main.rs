@@ -94,10 +94,10 @@ fn prompter(session: &Session<Connection>) -> String {
     format!(
         "{}/{}{}{}{}\x1b[0m › ",
         ctx.project.name,
-        ctx.environment.name.purple(),
+        ctx.environment.name.bold(),
         feat.green(),
-        id.cyan(),
-        seg.yellow()
+        id.green(),
+        seg.green(),
     )
 }
 
@@ -207,15 +207,14 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Feature.op("delete", "feature", handlers::features::delete),
-        Command::Feature.op("use", "feature", handlers::features::r#use),
         // Context-gated hint must come before the unconditional one below - `find()` takes
         // the first match, and the unconditional entry (op: None) would otherwise shadow
         // any real op registered after it.
         Command::Feature.args_in_context(
-            "add · delete · describe · list · progressive · rename · show · server-side · status · tag · use",
+            "add · delete · describe · list · progressive · rename · show · server-side · status · tag",
             in_context!(feature_ctx),
         ),
-        Command::Feature.args("add · delete · list · show · use"),
+        Command::Feature.args("add · delete · list · show"),
         // Identities
         Command::Identity.op(
             "add",
@@ -226,7 +225,6 @@ fn main() -> anyhow::Result<()> {
         Command::Identity.op("show", "[identity]", handlers::identities::show),
         Command::Identity.op("delete", "identity", handlers::identities::delete),
         Command::Identity.op("drop!", "pattern", handlers::identities::drop_matching),
-        Command::Identity.op("use", "identity", handlers::identities::r#use),
         Command::Identity.op_in_context(
             "trait",
             "name=value|-name [...]",
@@ -236,10 +234,10 @@ fn main() -> anyhow::Result<()> {
         // Context-gated hint must come before the unconditional one below - see the
         // Feature block above for why.
         Command::Identity.args_in_context(
-            "add · delete · drop! · list · show · trait · use",
+            "add · delete · drop! · list · show · trait",
             in_context!(identity_ctx),
         ),
-        Command::Identity.args("add · delete · drop! · list · show · use"),
+        Command::Identity.args("add · delete · drop! · list · show"),
         // Variants
         Command::Variant.op_in_context(
             "add",
@@ -286,7 +284,6 @@ fn main() -> anyhow::Result<()> {
             in_context!(segment_ctx),
         ),
         Command::Segment.op("delete", "name", handlers::segments::delete),
-        Command::Segment.op("use", "name", handlers::segments::r#use),
         Command::Segment.op_in_context(
             "rename",
             "[name]",
@@ -296,10 +293,10 @@ fn main() -> anyhow::Result<()> {
         // Context-gated hint must come before the unconditional one below - see the
         // Feature block above for why.
         Command::Segment.args_in_context(
-            "add · delete · describe · list · rename · show · use",
+            "add · delete · describe · list · rename · show",
             in_context!(segment_ctx),
         ),
-        Command::Segment.args("add · delete · list · show · use"),
+        Command::Segment.args("add · delete · list · show"),
         // Groups (only in segment context)
         Command::Group.op_in_context(
             "add",
@@ -403,6 +400,13 @@ fn main() -> anyhow::Result<()> {
             in_context!(any_ctx),
         ),
         Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
+        // Unified context switch, replacing the old FEATURE/IDENTITY/SEGMENT use ops:
+        // a bare name is a feature, `@name` an identity, `+name` a segment, and
+        // `feature@identity` / `feature+segment` combine a feature switch with one.
+        Command::Use.no_op(
+            "feature | @identity | +segment",
+            handlers::context::r#use,
+        ),
         // Query resolved feature values for an identity, without mutating any context
         Command::Get.no_op("[feature][@identity]", handlers::tester::get),
         Command::GetAll.no_op("[@identity]", handlers::tester::get_all),

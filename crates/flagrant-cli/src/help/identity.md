@@ -6,4 +6,4 @@ An **identity** is a caller recognized across requests, identified by an arbitra
 - `IDENTITY list [trait|pattern]` - list up to 10 identities, optionally filtered
 - `IDENTITY show [identity]` - show an identity with its traits
 - `IDENTITY delete <identity>` - delete identities matching a pattern (`*` wildcard)
-- `IDENTITY use <identity>` - switch into an identity context
+- `USE @<identity>` - switch into an identity context
