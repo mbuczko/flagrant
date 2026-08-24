@@ -40,6 +40,9 @@ pub enum Command {
     Discard,
     Reset,
     Reload,
+    Get,
+    GetAll,
+    Use,
 }
 
 impl Command {

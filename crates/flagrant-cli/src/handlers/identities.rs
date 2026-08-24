@@ -1,16 +1,3 @@
-//! REPL command handlers for identity management.
-//!
-//! | Command                          | Handler           | Description                                         |
-//! |----------------------------------|-------------------|-----------------------------------------------------|
-//! | `IDENTITY add`                   | [`add`]           | Create or upsert an identity with optional traits.  |
-//! | `IDENTITY list`                  | [`list`]          | List up to 10 identities, optionally filtered.      |
-//! | `IDENTITY show`                  | [`show`]          | Print details of an identity with its traits.       |
-//! | `IDENTITY delete`                | [`delete`]        | Delete identities matching a pattern (`*` wildcard).|
-//! | `IDENTITY use`                   | [`r#use`]         | Switch into an identity context.                    |
-//! | `IDENTITY trait <name=value...>` | [`r#trait`]       | Stage trait value changes/removals.                 |
-//! | `OVERRIDE add [value]`           | [`set_override`]  | Pin the identity to a specific feature variant.     |
-//! | `OVERRIDE delete`                | [`unset_override`]| Unpin the identitfy from pinned feature variant.    |
-
 use std::ops::Deref;
 
 use anyhow::bail;
@@ -56,7 +43,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if in_context {
         let identity = ctx.identity.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-                "Not in an identity context. Set the context with: \"IDENTITY use\" command."
+                "Not in an identity context. Set the context with: \"USE @<identity>\" command."
             )
         })?;
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
@@ -172,8 +159,8 @@ pub fn drop_matching(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 ///
 /// Expected args: `<identity>`
 ///
-/// Switches into the named identity's context first if not already there (same as `IDENTITY
-/// use`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// Switches into the named identity's context first if not already there (same as
+/// `USE @<identity>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this identity is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -210,24 +197,12 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Switch into an identity context.
-///
-/// Expected args: `<identity>`
+/// Switch the session into an identity context by name.
 ///
 /// Fetches the identity and stores it in the session so that subsequent `IDENTITY
 /// trait` and `OVERRIDE` commands stage changes for it. Fails if there are
-/// uncommitted staged trait changes.
-pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(identity_str) = args.get(1) {
-        return switch_to(identity_str, session);
-    }
-    bail!("No identity provided.")
-}
-
-/// Switch the session into an identity context by name.
-///
-/// Shared entry point used by both `IDENTITY use` and the `FEATURE use feature@identity`
-/// shortcut. Fails if there are uncommitted staged trait changes.
+/// uncommitted staged trait changes. Shared entry point used by both the top-level
+/// `USE @identity` and the `USE feature@identity` shortcut.
 pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
 
@@ -280,7 +255,7 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let mut ctx = session.context.write().unwrap();
 
     if ctx.identity.is_none() {
-        bail!("Not in an identity context. Use `IDENTITY use <identity>` first.");
+        bail!("Not in an identity context. Use `USE @<identity>` first.");
     }
 
     let existing: Vec<String> = ctx
@@ -318,10 +293,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     // Gather everything under a read lock, including opening the editor if needed.
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY use ...\" to set a context.")
+        anyhow::anyhow!("Not in an identity context. Use \"USE @<identity>\" to set a context.")
     })?;
 
     let raw = match args.get(1) {
@@ -406,10 +381,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY use ...\" to set a context.")
+        anyhow::anyhow!("Not in an identity context. Use \"USE @<identity>\" to set a context.")
     })?;
 
     let feature_name = feature.name.clone();

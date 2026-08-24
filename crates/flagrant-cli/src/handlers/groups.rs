@@ -1,12 +1,3 @@
-//! REPL command handlers for segment group management.
-//!
-//! | Command                          | Handler      | Description                                          |
-//! |----------------------------------|--------------|------------------------------------------------------|
-//! | `GROUP add [--and|--and-not]`    | [`add`]      | Stage a new group on the current segment.            |
-//! | `GROUP show <label>`             | [`show`]     | Print details of a group with its rules.             |
-//! | `GROUP delete <label>`           | [`delete`]   | Stage a group deletion by label.                     |
-//! | `GROUP describe <label> [desc]`  | [`describe`] | Stage a group description change.                    |
-
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
@@ -236,7 +227,7 @@ fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
     let ctx = session.context.read().unwrap();
     ctx.segment
         .clone()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first."))
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))
 }
 
 /// Predict the label the server will assign to the next new group.

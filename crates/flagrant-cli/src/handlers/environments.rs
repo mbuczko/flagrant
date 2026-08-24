@@ -1,18 +1,3 @@
-//! REPL command handlers for environment management.
-//!
-//! Each public function corresponds to an `ENVIRONMENT <op>` command:
-//!
-//! | Command                  | Handler            | Description                                |
-//! |--------------------------|--------------------|--------------------------------------------|
-//! | `ENVIRONMENT add`        | [`add`]            | Create a new environment in the project.   |
-//! | `ENVIRONMENT list`       | [`list`]           | Print all environments in the project.     |
-//! | `ENVIRONMENT show`       | [`show`]           | Print details of an environment.           |
-//! | `ENVIRONMENT describe`   | [`describe`]       | Update an environment's description.       |
-//! | `ENVIRONMENT use`        | [`r#use`]          | Switch the active environment.             |
-//!
-//! Unlike `FEATURE`/`SEGMENT`, environment mutations apply immediately - there is no
-//! patch/`COMMIT`/`DISCARD` staging concept for environments.
-
 use anyhow::bail;
 use colored::Colorize;
 use flagrant_client::connection::{Connection, Resource};
@@ -22,7 +7,10 @@ use flagrant_types::{
     payload::{NewEnvironmentPayload, UpdateEnvironmentPayload},
 };
 
-use crate::{handlers::open_in_editor, printer::tabular::Tabular};
+use crate::{
+    handlers::open_in_editor,
+    printer::tabular::{Tabular, environment::list_with_current},
+};
 
 /// Create a new environment in the current project.
 ///
@@ -51,10 +39,11 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
 
-    Environment::list(
+    list_with_current(
         ctx.client
             .get::<Vec<Environment>>(res.subpath("/envs"))?
             .as_ref(),
+        Some(&ctx.environment.name),
     );
     Ok(())
 }
@@ -118,46 +107,42 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Switch the active environment by name.
+/// Switch the session into a different environment by name.
 ///
-/// Expects args: `<environment>`
-///
-/// Fetches the environment from the API and stores it in the session so that
-/// subsequent `FEATURE` commands operate within it.
-pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if let Some(name) = args.get(1) {
-        let mut ctx = session.context.write().unwrap();
-        if ctx
-            .feature_patch
-            .as_ref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false)
-        {
-            bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-        }
-        if ctx.has_identity_pending() {
-            bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
-        }
-        let res = ctx.project.as_base_resource();
-        let response = ctx
-            .client
-            .get::<Environment>(res.subpath(format!("/envs/{name}")));
-
-        if let Ok(env) = response {
-            println!("Switching environment → {}", env.name.bold());
-            let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
-            ctx.environment = env;
-            ctx.identity = None;
-            ctx.identity_patch = None;
-            drop(ctx);
-
-            if let Some(name) = feature_name {
-                let args = [Arg("", 0), Arg(name.as_str(), 1)];
-                super::features::r#use(&args, session)?;
-            }
-            return Ok(());
-        }
-        bail!("No such an environment.")
+/// Fetches the environment and stores it in the session so that subsequent `FEATURE`
+/// commands operate within it, clears identity context, and re-enters the previously
+/// active feature (if any) in the new environment. Fails if there are uncommitted staged
+/// changes. Shared entry point used by the top-level `USE /environment`.
+pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    if ctx
+        .feature_patch
+        .as_ref()
+        .map(|p| !p.is_empty())
+        .unwrap_or(false)
+    {
+        bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
     }
-    bail!("No environment name provided.");
+    if ctx.has_identity_pending() {
+        bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
+    }
+    let res = ctx.project.as_base_resource();
+    let response = ctx
+        .client
+        .get::<Environment>(res.subpath(format!("/envs/{env_name}")));
+
+    if let Ok(env) = response {
+        println!("Switching environment → {}", env.name.bold());
+        let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
+        ctx.environment = env;
+        ctx.identity = None;
+        ctx.identity_patch = None;
+        drop(ctx);
+
+        if let Some(name) = feature_name {
+            super::features::switch_to(&name, session)?;
+        }
+        return Ok(());
+    }
+    bail!("No such an environment.")
 }

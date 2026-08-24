@@ -4,6 +4,6 @@ Once you enter a feature context alongside a segment context, that segment can c
 
 - `SEGMENT add <name> [description]` - create a new segment and enter its context
 - `SEGMENT list [pattern]` - list all segments in the current project
-- `SEGMENT show [name]` - show segment details
-- `SEGMENT delete <name>` - delete a segment
-- `SEGMENT use <name>` - switch into a segment context
+- `SEGMENT show [segment]` - show segment details
+- `SEGMENT delete <segment>` - delete a segment
+- `USE +<segment>` - switch into a segment context

@@ -2,11 +2,11 @@ A **feature** is a named flag scoped to a project + environment (e.g. `prod`, `s
 
 **Identities** (callers recognized across requests) get distributed across a feature's variants according to those weights, and keep seeing the same variant on later requests unless something changes it: editing a weight (which may trigger migration of a portion of identities from one variant to the other) or identity-override which pins identity explicitly to given variant.
 
-- `FEATURE add <name> <value>` - create a new feature with a default (control) value
+- `FEATURE add <feature> <value>` - create a new feature with a default (control) value
+- `FEATURE delete <feature>` - delete a feature
+- `FEATURE show <feature>` - show feature details
 - `FEATURE list [status|tag|pattern]` - list features
-- `FEATURE show <name>` - show feature details
-- `FEATURE use <name>` - switch into a feature context
-- `FEATURE delete <name>` - delete a feature
+- `USE <feature>` - switch into a feature context
 
 ### Examples
 

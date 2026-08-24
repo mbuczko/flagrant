@@ -63,7 +63,7 @@ pub struct Connection {
     /// Positional index that maps 1-based display index → VariantRef.
     /// Invalidated whenever pending ops change.
     pub variant_index: Vec<VariantRef>,
-    /// Identity currently in context (set by `IDENTITY use`).
+    /// Identity currently in context (set by `USE @<identity>`).
     pub identity: Option<IdentityWithTraits>,
     /// Staged patch for the current identity.
     pub identity_patch: Option<IdentityPatch>,
@@ -209,11 +209,10 @@ impl Connection {
     }
 
     #[cfg(feature = "blocking")]
-    pub fn get_features(&self, identity: &str) -> Option<Vec<FeatureResponse>> {
+    pub fn get_features(&self, identity: &str) -> anyhow::Result<Vec<FeatureResponse>> {
         let path = self.env_resource().subpath("/features");
         self.client
             .get_with_identity(format!("/api/v1{path}"), Some(identity))
-            .ok()
     }
 }
 

@@ -1,17 +1,3 @@
-//! REPL command handlers for segment management.
-//!
-//! | Command                   | Handler            | Description                                                                 |
-//! |---------------------------|--------------------|-----------------------------------------------------------------------------|
-//! | `SEGMENT add`             | [`add`]            | Create a new segment and enter its context.                                 |
-//! | `SEGMENT list`            | [`list`]           | List all segments in the current project.                                   |
-//! | `SEGMENT show`            | [`show`]           | Print details of a segment.                                                 |
-//! | `SEGMENT delete`          | [`delete`]         | Delete a segment by name.                                                   |
-//! | `SEGMENT use`             | [`r#use`]          | Switch into a segment context.                                              |
-//! | `SEGMENT rename`          | [`rename`]         | Stage a segment name change.                                                |
-//! | `SEGMENT describe`        | [`describe`]       | Stage a segment description change.                                         |
-//! | `OVERRIDE add`            | [`set_override`]   | Stage variant weight overrides for the current feature within this segment. |
-//! | `OVERRIDE delete`         | [`unset_override`] | Remove staged weight overrides for the current feature within this segment. |
-
 use std::borrow::Cow;
 
 use anyhow::bail;
@@ -146,7 +132,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         None => {
             let ctx = session.context.read().unwrap();
             ctx.segment.clone().ok_or_else(|| {
-                anyhow::anyhow!("Not in a segment context. Use `SEGMENT use <name>` first.")
+                anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first.")
             })?
         }
     };
@@ -206,8 +192,8 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<name>`
 ///
-/// Switches into the named segment's context first if not already there (same as `SEGMENT
-/// use`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// Switches into the named segment's context first if not already there (same as
+/// `USE +<segment>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this segment is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -411,7 +397,7 @@ fn current_weights_for<'a>(
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
     })?;
 
     let environment_id = ctx.environment.id;
@@ -533,13 +519,13 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"FEATURE use ...\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
     })?;
     let feature_id = feature.id;
     let feature_name = feature.name.clone();
 
     if ctx.segment.is_none() {
-        bail!("Not in a segment context. Use \"SEGMENT use ...\" to set a context.");
+        bail!("Not in a segment context. Use \"USE +<segment>\" to set a context.");
     }
 
     let patch = ctx.get_or_init_segment_patch();
@@ -682,18 +668,9 @@ pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     Ok(())
 }
 
-/// Enter segment context by name. Clears any active identity context.
-///
-/// Expected args: `<name>`
-pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let Some(name) = args.get(1) else {
-        bail!("No segment name provided.");
-    };
-    switch_to(name, session)
-}
-
-/// Shared entry point used by both `SEGMENT use` and the `FEATURE use feature[segment]`
-/// shortcut. Clears any active identity context (mutually exclusive with segment context).
+/// Switch the session into a segment context by name. Clears any active identity
+/// context (mutually exclusive with segment context). Shared entry point used by both
+/// the top-level `USE +segment` and the `USE feature+segment` shortcut.
 pub(crate) fn switch_to(segment_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
 

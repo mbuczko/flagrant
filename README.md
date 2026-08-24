@@ -38,18 +38,21 @@ or
 myproject/prod → ui_theme + beta_testers › ...
 ```
 
-Combine them in two steps:
+A single `USE` command handles all of it - what it switches to depends on the target's leading character: a bare name is a feature, `@name` an identity, `+name` a segment, `/name` an environment:
 
 ```
-FEATURE use <feature>
-IDENTITY use <identity>   # or: SEGMENT use <name>
+USE feature
+USE @identity
+USE +segment
+USE /environment
 ```
 
-or in one, via a shortcut on `FEATURE use`:
+Combine a feature switch with an identity/segment switch in one step by putting both in the same target. Note, an environment switch stands alone, and re-enters the previously active feature in the new environment:
 
 ```
-FEATURE use <feature>@<identity>
-FEATURE use <feature>+<segment>
+USE feature@identity
+USE feature+segment
+USE /environment
 ```
 
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
@@ -67,7 +70,7 @@ Values and weights are shared across environments differently depending on which
 Enter a feature's context with:
 
 ```
-FEATURE use <feature>
+USE <feature>
 ```
 
 The prompt then shows the active feature, and these become available:
@@ -124,7 +127,7 @@ An **identity** is a caller recognized across requests, identified by an arbitra
 Enter an identity's context with:
 
 ```
-IDENTITY use <identity>
+USE @<identity>
 ```
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
@@ -139,7 +142,7 @@ A **segment** is a project-scoped, rule-based group of identities - useful for r
 Enter a segment's context with:
 
 ```
-SEGMENT use <name>
+USE +<segment>
 ```
 
 (mutually exclusive with an identity context - entering one clears the other). Inside the context:
@@ -162,7 +165,7 @@ All staged changes across every active context - feature edits, identity/segment
 
 Every `COMMIT` that changes a feature - directly, or indirectly through a segment/identity override that touches it - automatically records a numbered **snapshot** of that feature's full state: its variants, any segment overrides (including the overriding segment's own rules, so it can be recreated if that segment is later deleted), and any pinned identity overrides. There's nothing to stage - it's just a side effect of committing, one snapshot per affected feature per commit, versions never reused even across restores.
 
-Snapshots require a feature context (`FEATURE use <feature>`):
+Snapshots require a feature context (`USE <feature>`):
 
 - `SNAPSHOT list` to see every version recorded for the feature, most recent first
 - `SNAPSHOT show <version>` to inspect exactly what a version captured
@@ -172,6 +175,13 @@ Snapshots require a feature context (`FEATURE use <feature>`):
 `COMMIT` itself takes an optional trailing comment (`COMMIT [comment]`), recorded on whichever snapshot(s) that commit produces.
 
 Restoring is itself a commit, not a rewrite of history - it produces a brand-new snapshot matching the target version's state, so version numbers only ever go up. It reproduces variants (recreating one under a new id if it was deleted since), segment overrides (recreating the segment from its stored definition if it was deleted - though a still-existing segment's *rules* are left untouched, since rewriting them would silently change behaviour for every other feature that segment also overrides), and pinned identity overrides. Anything not part of the target version - like an override added after that point - is cleared rather than left behind. Organic (non-pinned) identity assignments are always cleared and left to redistribute on the next request, never restored.
+
+### Querying resolved values
+
+`GET` and `GETALL` hit the same identity-facing evaluation endpoint SDKs use - read-only, nothing to stage or commit. Either takes its feature/identity from the current context if omitted, or explicitly overrides it:
+
+- `GET [feature][@identity]` - resolve one feature's value for an identity.
+- `GETALL [@identity]` - resolve every feature's value for an identity.
 
 ## What's next
 
