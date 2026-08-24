@@ -21,14 +21,16 @@ impl Tabular for FeatureResponse {
                 } else {
                     format!("{} OFF", "●".red())
                 };
+                let srv = if f.is_srv { "ON" } else { "OFF" }.to_string();
                 let (typ, val) = f.value.decompose();
-                [f.name.clone(), state, typ.to_string(), val.to_string()]
+                [f.name.clone(), state, srv, typ.to_string(), val.to_string()]
             })
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
             .add_column_named_with_align("NAME".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("STATUS".into(), Layout::Fixed(8), Align::Left)
+            .add_column_named_with_align("SERVER-SIDE".into(), Layout::Fixed(13), Align::Left)
             .add_column_named_with_align("TYPE".into(), Layout::Fixed(6), Align::Left)
             .add_column_named_wrapping_with_align(
                 "VALUE".into(),

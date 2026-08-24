@@ -545,6 +545,7 @@ pub struct FeatureResponse {
     pub name: String,
     pub value: VariantValue,
     pub is_enabled: bool,
+    pub is_srv: bool,
 }
 
 impl Feature {

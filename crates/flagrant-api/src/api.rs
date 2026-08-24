@@ -107,6 +107,7 @@ pub async fn resolve_features(
                     name: f.name,
                     value: f.value,
                     is_enabled: f.is_enabled,
+                    is_srv: f.is_srv,
                 })
                 .collect();
             return Ok(response);
@@ -150,6 +151,7 @@ pub async fn resolve_features(
                 name: v.feature_name,
                 value: v.feature_value?,
                 is_enabled: v.is_enabled,
+                is_srv: v.is_srv,
             })
         })
         .collect::<Vec<_>>();
