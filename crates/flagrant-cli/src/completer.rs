@@ -18,15 +18,7 @@ impl AutoCompleter for ArgCompleter<'_> {
         match command.to_uppercase().as_ref() {
             "ENVIRONMENT" => {
                 let ctx = self.session.context.read().unwrap();
-                let res = ctx.project.as_base_resource();
-
-                // Auto-complete environment name
-                Ok(ctx
-                    .client
-                    .get::<Vec<Environment>>(res.subpath(format!("/envs?prefix={prefix}")))?
-                    .into_iter()
-                    .map(|c| c.name)
-                    .collect::<Vec<_>>())
+                complete_environments(&ctx, prefix)
             }
             "IDENTITY" => {
                 let op: &str = &args[1];
@@ -157,7 +149,12 @@ impl AutoCompleter for ArgCompleter<'_> {
             "USE" if arg_n == 1 => {
                 let ctx = self.session.context.read().unwrap();
 
-                Ok(if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
+                Ok(if let Some(env_prefix) = prefix.strip_prefix('/') {
+                    complete_environments(&ctx, env_prefix)?
+                        .into_iter()
+                        .map(|v| format!("/{v}"))
+                        .collect::<Vec<_>>()
+                } else if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
                     complete_identities(&ctx, identity_prefix)?
                         .into_iter()
                         .map(|v| format!("{feature_part}@{v}"))
@@ -225,16 +222,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                         .collect(),
                     "add" if arg_n == 5 => match args.get(3).map(|a| a.as_ref()) {
                         Some("identity") => complete_identities(&ctx, prefix)?,
-                        Some("environment") => {
-                            let project_res = ctx.project.as_base_resource();
-                            ctx.client
-                                .get::<Vec<Environment>>(
-                                    project_res.subpath(format!("/envs?prefix={prefix}")),
-                                )?
-                                .into_iter()
-                                .map(|e| e.name)
-                                .collect()
-                        }
+                        Some("environment") => complete_environments(&ctx, prefix)?,
                         _ => vec![],
                     },
                     _ => vec![],
@@ -290,6 +278,21 @@ fn complete_features(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<Strin
         .get::<Vec<Feature>>(ctx.env_resource().subpath(format!("/features?prefix={prefix}")))?
         .into_iter()
         .map(|c| c.name)
+        .collect())
+}
+
+/// Completes environment names (bare, unformatted) matching `prefix`, scoped to the
+/// current project. Shared by every command completing an environment token.
+fn complete_environments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
+    Ok(ctx
+        .client
+        .get::<Vec<Environment>>(
+            ctx.project
+                .as_base_resource()
+                .subpath(format!("/envs?prefix={prefix}")),
+        )?
+        .into_iter()
+        .map(|e| e.name)
         .collect())
 }
 

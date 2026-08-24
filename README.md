@@ -38,19 +38,21 @@ or
 myproject/prod → ui_theme + beta_testers › ...
 ```
 
-A single `USE` command handles all of it - what it switches to depends on the target's leading character: a bare name is a feature, `@name` an identity, `+name` a segment:
+A single `USE` command handles all of it - what it switches to depends on the target's leading character: a bare name is a feature, `@name` an identity, `+name` a segment, `/name` an environment:
 
 ```
 USE feature
 USE @identity
 USE +segment
+USE /environment
 ```
 
-Combine a feature switch with an identity/segment switch in one step by putting both in the same target:
+Combine a feature switch with an identity/segment switch in one step by putting both in the same target. Note, an environment switch stands alone, and re-enters the previously active feature in the new environment:
 
 ```
 USE feature@identity
 USE feature+segment
+USE /environment
 ```
 
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.

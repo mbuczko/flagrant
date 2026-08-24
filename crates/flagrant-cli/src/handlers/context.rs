@@ -1,6 +1,7 @@
 //! `USE` - the unified context-switching command, replacing the old separate
-//! `FEATURE use`, `IDENTITY use`, and `SEGMENT use`. Dispatches on the target token's
-//! leading character:
+//! `FEATURE use`, `IDENTITY use`, `SEGMENT use`, and `ENVIRONMENT use`. Dispatches on
+//! the target token's leading character:
+//! - `/environment` -> switch environment (doesn't combine with anything else)
 //! - `@identity` -> identity context
 //! - `+segment` -> segment context
 //! - anything else -> feature context, optionally combined with `@identity` or
@@ -14,15 +15,21 @@ use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 
-use crate::handlers::{features, identities, segments};
+use crate::handlers::{environments, features, identities, segments};
 
-/// Expected args: `<feature>[@identity|+segment] | @identity | +segment`
+/// Expected args: `<feature>[@identity|+segment] | @identity | +segment | /environment`
 pub fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let Some(target) = args.first() else {
         bail!(
-            "Nothing to use. Usage: USE <feature@identity | feature+segment | @identity | +segment>"
+            "Nothing to use. Usage: USE <feature@identity | feature+segment | @identity | +segment | /environment>"
         );
     };
+    let target: &str = target;
+
+    if let Some(env_name) = target.strip_prefix('/') {
+        return environments::switch_to(env_name, session);
+    }
+
     let (feature, identity, segment) = split_use_target(target);
 
     if let Some(feature) = feature {

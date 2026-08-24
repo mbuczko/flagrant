@@ -157,7 +157,6 @@ fn main() -> anyhow::Result<()> {
     let commands = vec![
         // Environments
         Command::Environment.op("add", "environment base", handlers::environments::add),
-        Command::Environment.op("use", "environment", handlers::environments::r#use),
         Command::Environment.op("list", "", handlers::environments::list),
         Command::Environment.op("show", "[name]", handlers::environments::show),
         Command::Environment.op(
@@ -165,7 +164,7 @@ fn main() -> anyhow::Result<()> {
             "[description]",
             handlers::environments::describe,
         ),
-        Command::Environment.args("add · describe · list · show · use"),
+        Command::Environment.args("add · describe · list · show"),
         // Features
         Command::Feature.op("list", "status|tag|[pattern]", handlers::features::list),
         Command::Feature.op("add", "feature value", handlers::features::add),
@@ -400,11 +399,12 @@ fn main() -> anyhow::Result<()> {
             in_context!(any_ctx),
         ),
         Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
-        // Unified context switch, replacing the old FEATURE/IDENTITY/SEGMENT use ops:
-        // a bare name is a feature, `@name` an identity, `+name` a segment, and
-        // `feature@identity` / `feature+segment` combine a feature switch with one.
+        // Unified context switch, replacing the old FEATURE/IDENTITY/SEGMENT/ENVIRONMENT
+        // use ops: a bare name is a feature, `@name` an identity, `+name` a segment,
+        // `/name` an environment, and `feature@identity` / `feature+segment` combine a
+        // feature switch with one.
         Command::Use.no_op(
-            "feature | @identity | +segment",
+            "feature | @identity | +segment | /environment",
             handlers::context::r#use,
         ),
         // Query resolved feature values for an identity, without mutating any context

@@ -165,8 +165,8 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Fetches the feature and stores it in the session so that subsequent session-aware
 /// commands, like `VARIANT` or `SET` operate on it. Fails if there are uncommitted
 /// staged changes. Shared entry point used by both the top-level `USE <feature>` and
-/// `ENVIRONMENT use` (to re-enter the previously active feature after switching
-/// environments).
+/// `environments::switch_to` (`USE /environment`, to re-enter the previously active
+/// feature after switching environments).
 pub(crate) fn switch_to(feature_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
 
