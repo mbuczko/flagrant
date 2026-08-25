@@ -416,7 +416,7 @@ fn main() -> anyhow::Result<()> {
         // Identity overrides (only in identity context)
         Command::Override.op_in_context(
             "add",
-            "[value]",
+            "[variant-index]",
             handlers::identities::set_override,
             in_context!(identity_ctx),
         ),

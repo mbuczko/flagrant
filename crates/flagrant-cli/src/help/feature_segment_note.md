@@ -2,6 +2,6 @@ You are inside feature **{feature}** + segment **{segment}** - `OVERRIDE add`/`O
 
 ### Examples
 
-- `OVERRIDE add` - open `$EDITOR` to edit all variant weights for this feature+segment
+- `OVERRIDE add` - open an interactive menu to adjust variant weights for this feature+segment
 - `OVERRIDE add 1 30` - set variant #1's weight to 30% for this segment
 - `OVERRIDE delete` - remove all segment-scoped weight overrides for this feature
