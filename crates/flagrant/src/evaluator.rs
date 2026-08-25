@@ -300,6 +300,7 @@ mod tests {
             project_id: 1,
             name: "seg".to_string(),
             description: None,
+            version: 1,
             groups,
         }
     }

@@ -469,13 +469,10 @@ fn build_override_editor_content(
         } else {
             ""
         };
+        let (typ, val) = e.value.decompose();
         content.push_str(&format!(
-            "# variant {} ({}%){}{}\n{}\n\n",
-            idx,
-            e.weight,
-            staged,
-            current,
-            e.value.bare()
+            "# variant {} ({}%){}{}\n{}::{}\n\n",
+            idx, e.weight, staged, current, typ, val
         ));
     }
 
@@ -486,12 +483,10 @@ fn build_override_editor_content(
         } else {
             ""
         };
+        let (typ, val) = e.value.decompose();
         content.push_str(&format!(
-            "# default value ({}%){}{}\n{}",
-            e.weight,
-            staged,
-            current,
-            e.value.bare()
+            "# default value ({}%){}{}\n{}::{}",
+            e.weight, staged, current, typ, val
         ));
     }
 

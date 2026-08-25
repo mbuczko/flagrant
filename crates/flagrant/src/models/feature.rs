@@ -399,6 +399,10 @@ pub async fn patch(
         rollout::deactivate(&mut tx, feature.id).await?;
     }
 
+    SQLFeatures::bump_feature_version(&mut *tx, params![feature.id])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not bump feature version", e))?;
+
     tx.commit().await?;
     get_by_id(conn, environment, feature.id).await.map(Some)
 }
@@ -477,6 +481,7 @@ pub(crate) fn row_to_feature(row: SqliteRow, environment: &Environment) -> Featu
     }
     Feature {
         id: row.get("feature_id"),
+        version: row.get("version"),
         project_id: row.get("project_id"),
         name: row.get("name"),
         description: row.get("description"),

@@ -41,6 +41,7 @@ pub fn init<T>(
     session: &Session<T>,
     commands: &[ReplCommand<T>],
     help: Option<(char, HelpHandler<T>)>,
+    shortcut: Option<(char, &str)>,
 ) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper<T>, DefaultHistory> = Editor::new()?;
     let prompter = helper.prompter;
@@ -52,6 +53,13 @@ pub fn init<T>(
     loop {
         match rl.readline(prompter(session).as_str()) {
             Ok(line) => {
+                let line = match shortcut {
+                    Some((trigger, prefix)) if line.starts_with(trigger) => {
+                        format!("{prefix} {line}")
+                    }
+                    _ => line,
+                };
+
                 if let Some((trigger, handler)) = help
                     && let Some(rest) = line.strip_prefix(trigger)
                 {

@@ -1,10 +1,7 @@
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{
-    Comparator, SegmentRule, Subject,
-    payload::{SegmentPatch, SegmentPatchOp},
-};
+use flagrant_types::{Comparator, Subject, payload::SegmentPatchOp};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -21,18 +18,17 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             "Missing group label. Expected: RULE add <group-label> <subject> <comparator> <value>"
         )
     })?;
-    let subject_str = args.get(2).ok_or_else(|| {
+    let subject = parse_subject(args.get(2).ok_or_else(|| {
         anyhow::anyhow!("Missing subject. Expected: identity, environment, trait:<name>")
-    })?;
-    let comparator_str = args
-        .get(3)
-        .ok_or_else(|| anyhow::anyhow!("Missing comparator."))?;
+    })?)?;
+    let comparator = parse_comparator(
+        args.get(3)
+            .ok_or_else(|| anyhow::anyhow!("Missing comparator."))?,
+    )?;
     let value = args
         .get(4)
         .ok_or_else(|| anyhow::anyhow!("Missing value."))?;
 
-    let subject = parse_subject(subject_str)?;
-    let comparator = parse_comparator(comparator_str)?;
     comparator
         .validate_value(value)
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -177,6 +173,7 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     effective_comparator
         .validate_value(&value)
         .map_err(|e| anyhow::anyhow!(e))?;
+
     println!("Staged: rule #{index} in [{label}] value = {value}");
 
     let mut ctx = session.context.write().unwrap();
@@ -221,6 +218,7 @@ pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
     comparator
         .validate_value(&effective_value)
         .map_err(|e| anyhow::anyhow!(e))?;
+
     println!("Staged: rule #{index} in [{label}] comparator = {comparator}");
 
     let mut ctx = session.context.write().unwrap();
@@ -275,31 +273,8 @@ fn resolve_rule(
         .get(index - 1)
         .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{label}]."))?;
 
-    let (comparator, value) = effective_rule_state(rule, ctx.segment_patch.as_ref());
+    let (comparator, value) = effective::effective_rule(rule, ctx.segment_patch.as_ref());
     Ok((label.to_string(), index, rule.id, comparator, value))
-}
-
-/// Returns the rule's comparator/value after applying any staged `SetRuleComparator` /
-/// `SetRuleValue` ops for it, so edits can be layered on top of previously staged ones.
-fn effective_rule_state(rule: &SegmentRule, patch: Option<&SegmentPatch>) -> (Comparator, String) {
-    let mut comparator = rule.comparator.clone();
-    let mut value = rule.value.clone();
-
-    for op in patch.into_iter().flat_map(|p| &p.ops) {
-        match op {
-            SegmentPatchOp::SetRuleComparator {
-                rule_id,
-                comparator: c,
-            } if *rule_id == rule.id => {
-                comparator = c.clone();
-            }
-            SegmentPatchOp::SetRuleValue { rule_id, value: v } if *rule_id == rule.id => {
-                value = v.clone();
-            }
-            _ => {}
-        }
-    }
-    (comparator, value)
 }
 
 /// Builds editor content listing every available comparator (from `Comparator::iter()`,

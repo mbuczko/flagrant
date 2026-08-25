@@ -9,10 +9,12 @@
 
 Identity and segment context are mutually exclusive - switching into one clears the other. Fails if there are uncommitted staged changes in whatever context is being left. Switching environment also clears identity context, and re-enters the previously active feature (if any) in the new environment.
 
+`/<environment>` typed directly at the prompt is a shortcut for `USE /<environment>` - it's rewritten into the full `USE /...` command before completion and dispatch, so it behaves identically (live environment-name completion, same switch logic). Typing a bare `/` switches the prompt into environment-selection mode (autocompleting every environment); pressing Enter with no environment name typed prints the list of available environments instead of switching, mirroring how a bare `?` lists available help topics.
+
 ### Examples
 
 - `USE ui_theme` - enter the `ui_theme` feature context
 - `USE @alice` - enter identity `alice`'s context
 - `USE +beta_testers` - enter the `beta_testers` segment context
-- `USE /staging` - switch into the `staging` environment
 - `USE ui_theme@alice` - enter `ui_theme`'s feature context together with `alice`'s identity one
+- `USE /staging` - switch into the `staging` environment (same as `/staging`)

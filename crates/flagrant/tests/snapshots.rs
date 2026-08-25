@@ -25,6 +25,7 @@ async fn commit_creates_snapshot_with_incrementing_version(mut conn: PoolConnect
         comment: Some("first".to_owned()),
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 description: Some("v1 description".to_owned()),
                 ..Default::default()
@@ -44,6 +45,7 @@ async fn commit_creates_snapshot_with_incrementing_version(mut conn: PoolConnect
         comment: Some("second".to_owned()),
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 description: Some("v2 description".to_owned()),
                 ..Default::default()
@@ -77,6 +79,7 @@ async fn restore_reproduces_variants_and_weights(mut conn: PoolConnection<Sqlite
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
                     value: VariantValue::Text("variant-a".to_owned()),
@@ -105,6 +108,7 @@ async fn restore_reproduces_variants_and_weights(mut conn: PoolConnection<Sqlite
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::SetWeight {
                     id: variant_a_id,
@@ -164,6 +168,7 @@ async fn restore_recreates_deleted_variant_under_new_id(mut conn: PoolConnection
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
                     value: VariantValue::Text("variant-a".to_owned()),
@@ -192,6 +197,7 @@ async fn restore_recreates_deleted_variant_under_new_id(mut conn: PoolConnection
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Delete { id: old_variant_id }],
                 ..Default::default()
@@ -247,6 +253,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![VariantPatchOp::Add {
                     value: VariantValue::Text("variant-a".to_owned()),
@@ -303,6 +310,7 @@ async fn restore_restores_pinned_identity_override(mut conn: PoolConnection<Sqli
         comment: None,
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 variants: vec![
                     VariantPatchOp::Delete { id: variant_a_id },
@@ -400,6 +408,7 @@ async fn segment_weight_only_commit_cascades_snapshot_to_overridden_feature(
         identity: None,
         segment: Some(SegmentCommitPart {
             id: seg.id,
+            version: None,
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,
@@ -475,6 +484,7 @@ async fn combined_feature_and_segment_commit_produces_one_snapshot(
         comment: Some("combined".to_owned()),
         feature: Some(FeatureCommitPart {
             id: feature.id,
+            version: None,
             patch: FeaturePatch {
                 description: Some("updated".to_owned()),
                 ..Default::default()
@@ -483,6 +493,7 @@ async fn combined_feature_and_segment_commit_produces_one_snapshot(
         identity: None,
         segment: Some(SegmentCommitPart {
             id: seg.id,
+            version: None,
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,
@@ -686,6 +697,7 @@ async fn restore_clears_segment_override_added_after_the_target_snapshot(
         identity: None,
         segment: Some(SegmentCommitPart {
             id: seg.id,
+            version: None,
             patch: SegmentPatch {
                 ops: vec![SegmentPatchOp::SetFeatureOverride {
                     feature_id: feature.id,

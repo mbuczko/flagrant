@@ -26,6 +26,11 @@ mod printer;
 /// can't drift out of sync.
 const HELP_TRIGGER: char = '?';
 
+/// First-character shortcut for switching environments - `/dev` is rewritten into
+/// `USE /dev` before completion and dispatch, so it behaves exactly like typing the
+/// full `USE /dev` command (live environment-name completion, same switch logic).
+const ENV_TRIGGER: char = '/';
+
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
 struct Args {
@@ -59,12 +64,12 @@ fn print_banner() {
         "CLI-driven feature flagging".dimmed()
     );
     println!();
+    println!("  {} for help", HELP_TRIGGER.to_string().green());
     println!(
-        "  {} for help (BACKSPACE to escape help mode)",
-        HELP_TRIGGER.to_string().green()
+        "  {} for environment switch",
+        ENV_TRIGGER.to_string().cyan()
     );
-
-    println!();
+    println!("  ⌫ to escape help/environment prompt\n");
 }
 
 fn prompter(session: &Session<Connection>) -> String {
@@ -447,7 +452,10 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
-    let overlays = vec![(HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m")];
+    let overlays = vec![
+        (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
+        (ENV_TRIGGER, "\x1b[36menvironment> \x1b[0m"),
+    ];
     let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
     let helper = ReplHelper {
@@ -471,7 +479,8 @@ fn main() -> anyhow::Result<()> {
                 .collect()
         })
         .with_arg_completer(&arg_completer)
-        .with_help_topics(HELP_TRIGGER, help_topics),
+        .with_help_topics(HELP_TRIGGER, help_topics)
+        .with_shortcut(ENV_TRIGGER, "USE"),
     };
 
     readline::init(
@@ -479,6 +488,7 @@ fn main() -> anyhow::Result<()> {
         &session,
         &commands,
         Some((HELP_TRIGGER, help::show)),
+        Some((ENV_TRIGGER, "USE")),
     )?;
 
     Ok(())

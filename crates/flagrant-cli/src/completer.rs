@@ -264,7 +264,10 @@ impl AutoCompleter for ArgCompleter<'_> {
 fn complete_identities(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
         .client
-        .get::<Vec<IdentityWithTraits>>(ctx.env_resource().subpath(format!("/identities?prefix={prefix}")))?
+        .get::<Vec<IdentityWithTraits>>(
+            ctx.env_resource()
+                .subpath(format!("/identities?prefix={prefix}")),
+        )?
         .into_iter()
         .map(|i| i.value)
         .collect())
@@ -275,7 +278,10 @@ fn complete_identities(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<Str
 fn complete_features(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
         .client
-        .get::<Vec<Feature>>(ctx.env_resource().subpath(format!("/features?prefix={prefix}")))?
+        .get::<Vec<Feature>>(
+            ctx.env_resource()
+                .subpath(format!("/features?prefix={prefix}")),
+        )?
         .into_iter()
         .map(|c| c.name)
         .collect())
@@ -301,7 +307,10 @@ fn complete_environments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<S
 fn complete_segments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
         .client
-        .get::<Vec<Segment>>(ctx.project_resource().subpath(format!("/segments?prefix={prefix}")))?
+        .get::<Vec<Segment>>(
+            ctx.project_resource()
+                .subpath(format!("/segments?prefix={prefix}")),
+        )?
         .into_iter()
         .map(|s| s.name)
         .collect())
