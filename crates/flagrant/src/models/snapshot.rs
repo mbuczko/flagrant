@@ -29,16 +29,9 @@ pub async fn capture(
     let state = build_state(conn, project, environment, feature).await?;
     let state_json = serde_json::to_string(&state)?;
 
-    let (version,) = SQLSnapshots::fetch_next_snapshot_version::<_, (i32,)>(
-        &mut *conn,
-        params![feature.id, environment.id],
-    )
-    .await
-    .map_err(|e| FlagrantError::QueryFailed("Could not compute next snapshot version", e))?;
-
     let snapshot = SQLSnapshots::insert_snapshot::<_, Snapshot>(
         conn,
-        params![feature.id, environment.id, version, comment, state_json],
+        params![feature.id, environment.id, comment, state_json],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not insert snapshot", e))?;

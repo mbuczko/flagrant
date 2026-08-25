@@ -1,15 +1,15 @@
--- :name fetch_next_snapshot_version :<> :1
--- :doc Returns the next version number for a (feature, environment) pair - MAX(version)+1,
--- or 1 if no snapshot exists yet. Mirrors the MAX(N)+1 pattern already used for segment
--- group labels: versions are never reused, even across restores.
-SELECT COALESCE(MAX(version), 0) + 1
-FROM feature_snapshots
-WHERE feature_id = $1 AND environment_id = $2
-
 -- :name insert_snapshot :<> :1
--- :doc Inserts a new snapshot row and returns it in full.
+-- :doc Inserts a new snapshot row, computing its version as MAX(version)+1 for the
+-- (feature, environment) pair in the same statement as the insert - avoids a
+-- read-then-write race between two concurrent commits to the same feature+environment,
+-- which could otherwise both compute the same "next" version and collide on the
+-- UNIQUE(feature_id, environment_id, version) constraint.
 INSERT INTO feature_snapshots(feature_id, environment_id, version, comment, state)
-VALUES($1, $2, $3, $4, $5)
+VALUES(
+  $1, $2,
+  (SELECT COALESCE(MAX(version), 0) + 1 FROM feature_snapshots WHERE feature_id = $1 AND environment_id = $2),
+  $3, $4
+)
 RETURNING snapshot_id, feature_id, environment_id, version, comment, state, created_at
 
 -- :name fetch_snapshots_for_feature :<> :*
