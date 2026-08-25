@@ -54,6 +54,8 @@ USE feature@identity
 USE feature+segment
 ```
 
+`/environment` typed directly at the prompt is a shortcut for `USE /environment` - it switches the prompt into environment-selection mode with live autocompletion.
+
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Features & variants

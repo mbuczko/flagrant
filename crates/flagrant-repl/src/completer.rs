@@ -23,6 +23,10 @@ pub struct CommandLineCompleter<'a> {
     /// (e.g. a `?FEATURE` help overlay) - active only when the line starts with the
     /// trigger char, and offers no operation/argument completion.
     help: Option<(char, Vec<String>)>,
+    /// Trigger char that rewrites the line into `"{prefix} {line}"` before normal
+    /// command/op/argument completion - e.g. with `('/', "USE")`, typing `/dev` completes
+    /// exactly as if `USE /dev` had been typed, reusing `USE`'s existing argument completer.
+    shortcut: Option<(char, &'static str)>,
 }
 
 pub trait AutoCompleter {
@@ -158,11 +162,20 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
+    /// Registers a trigger char that rewrites the line into `"{command_prefix} {line}"`
+    /// before completion, so a leading trigger char can act as a shortcut for an
+    /// existing command without duplicating its argument-completion logic.
+    pub fn with_shortcut(mut self, trigger: char, command_prefix: &'static str) -> Self {
+        self.shortcut = Some((trigger, command_prefix));
+        self
+    }
+
     pub fn new(commands: CommandList<'a>) -> CommandLineCompleter<'a> {
         Self {
             commands,
             arg_completer: None,
             help: None,
+            shortcut: None,
         }
     }
 }
@@ -170,7 +183,30 @@ impl<'a> CommandLineCompleter<'a> {
 impl Completer for CommandLineCompleter<'_> {
     type Candidate = Pair;
 
-    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+    /// Rewrites the line into `"{prefix} {line}"` when it starts with the registered
+    /// shortcut trigger, delegates to `complete_inner`, then un-shifts the returned start
+    /// offset back into the original (unprefixed) line's coordinates. A no-op passthrough
+    /// when no shortcut is registered or the line doesn't start with its trigger.
+    fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
+        if let Some((trigger, prefix)) = self.shortcut
+            && line.starts_with(trigger)
+        {
+            let offset = prefix.len() + 1; // "{prefix} " length
+            let rewritten = format!("{prefix} {line}");
+            let (start, pairs) = self.complete_inner(&rewritten, pos + offset, ctx)?;
+            return Ok((start.saturating_sub(offset), pairs));
+        }
+        self.complete_inner(line, pos, ctx)
+    }
+}
+
+impl CommandLineCompleter<'_> {
+    fn complete_inner(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> Result<(usize, Vec<Pair>)> {
         if let Some((trigger, topics)) = &self.help
             && let Some(rest) = line.strip_prefix(*trigger)
         {
@@ -306,6 +342,38 @@ mod tests {
 
         let (_start, pairs) = completer.complete("?", 1, &ctx).unwrap();
         assert_eq!(pairs.len(), 2);
+    }
+
+    #[test]
+    fn shortcut_rewrites_line_and_unshifts_completion_offset() {
+        struct StubCompleter;
+        impl AutoCompleter for StubCompleter {
+            fn complete_by_prefix(
+                &self,
+                command: &str,
+                _args: &[Arg],
+                _arg_number: usize,
+                prefix: &str,
+            ) -> anyhow::Result<Vec<String>> {
+                assert_eq!(command, "USE");
+                Ok(vec![format!("{prefix}v")])
+            }
+        }
+
+        let op: Option<String> = None;
+        let commands: CommandList = vec![("USE".to_string(), &op, None)];
+        let stub = StubCompleter;
+        let completer = CommandLineCompleter::new(commands)
+            .with_arg_completer(&stub)
+            .with_shortcut('/', "USE");
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        // "/de" - as if the user had typed `/de` directly, with no literal "USE " prefix.
+        let (start, pairs) = completer.complete("/de", 3, &ctx).unwrap();
+        assert_eq!(start, 0);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].replacement, "/dev");
     }
 
     #[test]

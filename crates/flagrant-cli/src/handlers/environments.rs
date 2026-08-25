@@ -111,9 +111,14 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 ///
 /// Fetches the environment and stores it in the session so that subsequent `FEATURE`
 /// commands operate within it, clears identity context, and re-enters the previously
-/// active feature (if any) in the new environment. Fails if there are uncommitted staged
-/// changes. Shared entry point used by the top-level `USE /environment`.
+/// active feature (if any) in the new environment.
+///
+/// Fails if there are uncommitted staged changes.
 pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
+    if env_name.is_empty() {
+        return hint_available(session);
+    }
+
     let mut ctx = session.context.write().unwrap();
     if ctx
         .feature_patch
@@ -126,6 +131,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     if ctx.has_identity_pending() {
         bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
     }
+
     let res = ctx.project.as_base_resource();
     let response = ctx
         .client
@@ -133,6 +139,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
 
     if let Ok(env) = response {
         println!("Switching environment → {}", env.name.bold());
+
         let feature_name = ctx.feature.as_ref().map(|f| f.name.clone());
         ctx.environment = env;
         ctx.identity = None;
@@ -145,4 +152,21 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
         return Ok(());
     }
     bail!("No such an environment.")
+}
+
+/// Prints every environment name in the current project - shown when `/` (or
+/// `USE /`) is submitted with no environment name.
+fn hint_available(session: &Session<Connection>) -> anyhow::Result<()> {
+    let ctx = session.context.read().unwrap();
+    let res = ctx.project.as_base_resource();
+    let names = ctx
+        .client
+        .get::<Vec<Environment>>(res.subpath("/envs"))?
+        .into_iter()
+        .map(|e| e.name)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    println!("Available environments: {}", names.cyan());
+    Ok(())
 }
