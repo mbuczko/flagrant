@@ -267,7 +267,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Variant.op_in_context(
             "weight",
-            "index [+/-]weight",
+            "[index [+/-]weight]",
             handlers::variants::weight,
             in_context!(feature_ctx),
         ),

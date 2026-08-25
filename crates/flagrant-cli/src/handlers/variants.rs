@@ -11,7 +11,7 @@ use crate::{
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
-    printer::tabular::Tabular,
+    printer::{menu, tabular::Tabular},
 };
 
 /// Stage a new variant addition with a given weight and value.
@@ -198,22 +198,27 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 
 /// Stage a weight change for an existing variant identified by its display index.
 ///
-/// Expected args: `[+/-]<weight>`
+/// Expected args: `[index [+/-]weight]`
 ///
 /// Weight may be an absolute value (e.g. `30`) or a relative change prefixed with `+` or `-`
 /// (e.g. `+5` adds 5 to the current weight, `-3` subtracts 3). Refuses to change the control
 /// variant's weight (it is auto-adjusted) and rejects values that would push total non-control
 /// weight over 100%.
+///
+/// When called with no arguments at all, opens an interactive menu listing every
+/// non-control variant's weight instead.
 pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
-    let variant_ref = match args.get(1) {
-        Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
-        None => bail!("No variant index provided."),
+
+    let Some(idx_arg) = args.get(1) else {
+        return adjust_weights_interactively(&mut ctx);
     };
+
+    let variant_ref = index::resolve(idx_arg.parse::<usize>()?, &ctx)?;
     let new_weight: u8 = match args.get(2) {
         Some(w) if w.starts_with('+') || w.starts_with('-') => {
             let delta = w.parse::<i16>()?;
@@ -257,6 +262,45 @@ pub fn weight(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     stage::stage_weight(ctx.get_or_init_feature_patch(), &variant_ref, new_weight)?;
     index::rebuild(&mut ctx);
+    Ok(())
+}
+
+/// Interactive fallback for `weight` with no arguments - the same weight-adjustment menu
+/// segment overrides use ([`menu::adjust_weights`], via the shared row-builder
+/// [`effective::weight_menu_rows`]), pre-filled with every non-control variant's current
+/// effective weight, plus a trailing read-only row showing the control variant's
+/// auto-balanced remainder.
+/// On confirm, stages a weight update for every row whose value actually changed.
+fn adjust_weights_interactively(ctx: &mut Connection) -> anyhow::Result<()> {
+    let variants =
+        effective::effective_variants(ctx.feature.as_ref().unwrap(), ctx.feature_patch.as_ref());
+    let (non_control, mut rows, default_suffix) =
+        effective::weight_menu_rows(&variants, |v| v.weight);
+
+    if rows.is_empty() {
+        bail!("No non-control variants to adjust. Use `VARIANT add` first.");
+    }
+
+    let confirmed = menu::adjust_weights("Adjust variant weights", &mut rows, &default_suffix)?;
+    if !confirmed {
+        return Ok(());
+    }
+
+    let mut staged_pos = 0usize;
+    for (v, row) in non_control.iter().zip(rows.iter()) {
+        let variant_ref = match v.id {
+            Some(id) => VariantRef::Committed(id),
+            None => {
+                let r = VariantRef::Staged(staged_pos);
+                staged_pos += 1;
+                r
+            }
+        };
+        if row.weight != v.weight {
+            stage::stage_weight(ctx.get_or_init_feature_patch(), &variant_ref, row.weight)?;
+        }
+    }
+    index::rebuild(ctx);
     Ok(())
 }
 

@@ -388,10 +388,8 @@ fn current_weights_for<'a>(
 /// Stage variant weight overrides for the current feature within this segment.
 ///
 /// **Menu mode** (`OVERRIDE add` - no args):
-/// Opens an interactive menu listing every non-control variant's current weight. Up/Down
-/// moves between variants, Left/Right adjusts the highlighted one by 5 (clamped so the
-/// total never exceeds 100), Enter stages the result. A trailing, non-interactive row
-/// shows the control/default variant's auto-balanced remainder.
+/// Opens an interactive menu listing every non-control variant's current weight and
+/// allows adjusting the highlighted one by 5 (clamped so the total never exceeds 100).
 ///
 /// **Inline mode** (`OVERRIDE add <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
@@ -466,44 +464,19 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     } else {
         // Menu mode: prefer staged weights; fall back to committed weights from API.
         let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
-        let non_control: Vec<_> = variants
-            .iter()
-            .filter(|v| !v.is_control && !v.is_deleted)
-            .collect();
+        let (non_control, mut rows, default_suffix) = effective::weight_menu_rows(&variants, |v| {
+            v.id.and_then(|id| {
+                current_weights
+                    .iter()
+                    .find(|w| w.variant_id == id)
+                    .map(|w| w.weight)
+            })
+            .unwrap_or(0)
+        });
 
         if non_control.is_empty() {
             bail!("No non-control variants to override. Use `VARIANT add` first.");
         }
-
-        let mut rows: Vec<menu::WeightRow> = non_control
-            .iter()
-            .map(|v| {
-                let weight = v
-                    .id
-                    .and_then(|id| {
-                        current_weights
-                            .iter()
-                            .find(|w| w.variant_id == id)
-                            .map(|w| w.weight)
-                    })
-                    .unwrap_or(0);
-                let staged = if v.weight_modified || v.is_staged_add {
-                    " (staged)"
-                } else {
-                    ""
-                };
-                menu::WeightRow {
-                    suffix: format!("{}{staged}", v.value.bare_first_line()),
-                    weight,
-                }
-            })
-            .collect();
-
-        let default_suffix = variants
-            .iter()
-            .find(|v| v.is_control && !v.is_deleted)
-            .map(|v| format!("{} (default)", v.value.bare_first_line()))
-            .unwrap_or_else(|| "(default)".to_string());
 
         let confirmed = menu::adjust_weights("Adjust variant weights", &mut rows, &default_suffix)?;
         if !confirmed {

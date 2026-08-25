@@ -216,9 +216,7 @@ pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
                         (label, c)
                     })
                     .collect();
-                let default = options
-                    .iter()
-                    .position(|(_, c)| *c == effective_comparator);
+                let default = options.iter().position(|(_, c)| *c == effective_comparator);
                 menu::select("Choose a comparator", &options, default)?
                     .ok_or_else(|| anyhow::anyhow!("No comparator selected."))?
                     .to_string()

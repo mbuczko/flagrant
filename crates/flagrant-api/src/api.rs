@@ -124,27 +124,38 @@ pub async fn resolve_features(
         // Cache the unfiltered list (srv-only features included) so one entry serves
         // both privileged and unprivileged callers; filtering happens at read time.
         let cacheable: Vec<CachedFeature> = all_variants
-            .iter()
+            .into_iter()
             .filter_map(|v| {
                 Some(CachedFeature {
                     feature_id: v.feature_id,
-                    name: v.feature_name.clone(),
-                    value: v.feature_value.clone()?,
+                    name: v.feature_name,
+                    value: v.feature_value?,
                     is_srv: v.is_srv,
                     is_enabled: v.is_enabled,
                 })
             })
             .collect();
+
         cache.set(key, &cacheable).await;
+
+        let variants = cacheable
+            .into_iter()
+            .filter(|f| include_srv || !f.is_srv)
+            .map(|f| FeatureResponse {
+                feature_id: f.feature_id,
+                name: f.name,
+                value: f.value,
+                is_enabled: f.is_enabled,
+                is_srv: f.is_srv,
+            })
+            .collect();
+
+        return Ok(variants);
     }
 
     let variants = all_variants
         .into_iter()
-        // A valid token only ever *adds* srv-only features to the response - it never
-        // narrows the response to just those.
         .filter(|v| include_srv || !v.is_srv)
-        // get_identity_variants always distributes, so feature_value should always be Some.
-        // filter_map drops any entries where distribution unexpectedly produced None.
         .filter_map(|v| {
             Some(FeatureResponse {
                 feature_id: v.feature_id,

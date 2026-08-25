@@ -5,7 +5,7 @@ Once an identity lands on a variant it keeps seeing that same one on later reque
 - `VARIANT add <weight> <value>` — stage a new variant addition
 - `VARIANT show <index>` — print a variant's weight, full value, control status, and any identities explicitly pinned to it
 - `VARIANT value <index> <value>` — stage a value change for an existing variant
-- `VARIANT weight <index> [+/-]weight` — stage a weight change for an existing variant
+- `VARIANT weight [index [+/-]weight]` — stage a weight change for an existing variant; omit everything to adjust all of them in an interactive menu
 - `VARIANT delete <index>` — stage a variant deletion
 
 ### Examples

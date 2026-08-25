@@ -11,6 +11,8 @@ use flagrant_types::{
     },
 };
 
+use crate::printer::menu;
+
 /// A variant as it appears after applying any staged patch ops.
 ///
 /// Combines committed variants (with `SetValue`/`SetWeight` overrides applied) with
@@ -173,6 +175,46 @@ pub(crate) fn effective_variants(
     }
 
     result
+}
+
+/// Builds rows for the "adjust every non-control variant's weight" menu shared by
+/// `VARIANT weight` (adjusting the feature's own distribution) and segment `OVERRIDE add`
+/// (adjusting a segment's weight override) - the two only differ in where a row's initial
+/// weight comes from, supplied via `weight_for`. Returns the same non-control, non-deleted
+/// variants zipped 1:1 with the rows (so a caller can map a confirmed row back to its
+/// variant), plus the trailing menu row's label for the control/default variant's
+/// auto-balanced remainder.
+pub(crate) fn weight_menu_rows(
+    variants: &[EffectiveVariant],
+    weight_for: impl Fn(&EffectiveVariant) -> u8,
+) -> (Vec<&EffectiveVariant>, Vec<menu::WeightRow>, String) {
+    let non_control: Vec<&EffectiveVariant> = variants
+        .iter()
+        .filter(|v| !v.is_control && !v.is_deleted)
+        .collect();
+
+    let rows = non_control
+        .iter()
+        .map(|v| {
+            let staged = if v.value_modified || v.weight_modified || v.is_staged_add {
+                " (staged)"
+            } else {
+                ""
+            };
+            menu::WeightRow {
+                suffix: format!("{}{staged}", v.value.bare_first_line()),
+                weight: weight_for(v),
+            }
+        })
+        .collect();
+
+    let default_suffix = variants
+        .iter()
+        .find(|v| v.is_control && !v.is_deleted)
+        .map(|v| format!("{} (default)", v.value.bare_first_line()))
+        .unwrap_or_else(|| "(default)".to_string());
+
+    (non_control, rows, default_suffix)
 }
 
 /// Returns the effective tag list for `feature` after applying `patch`.
