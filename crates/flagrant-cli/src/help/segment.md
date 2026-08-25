@@ -6,4 +6,3 @@ Once you enter a feature context alongside a segment context, that segment can c
 - `SEGMENT list [pattern]` - list all segments in the current project
 - `SEGMENT show [segment]` - show segment details
 - `SEGMENT delete <segment>` - delete a segment
-- `USE +<segment>` - switch into a segment context

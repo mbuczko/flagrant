@@ -1,4 +1,4 @@
-You are inside feature **{feature}** + segment **{segment}** — `OVERRIDE add`/`OVERRIDE delete` let you override this feature's variant weights for identities matching this segment.
+You are inside feature **{feature}** + segment **{segment}** - `OVERRIDE add`/`OVERRIDE delete` let you override this feature's variant weights for identities matching this segment.
 
 ### Examples
 

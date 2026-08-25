@@ -7,9 +7,7 @@
 - `USE <feature>@<identity>` - switch into both at once
 - `USE <feature>+<segment>` - switch into both at once
 
-Identity and segment context are mutually exclusive - switching into one clears the other. Fails if there are uncommitted staged changes in whatever context is being left. Switching environment also clears identity context, and re-enters the previously active feature (if any) in the new environment.
-
-`/<environment>` typed directly at the prompt is a shortcut for `USE /<environment>` - it's rewritten into the full `USE /...` command before completion and dispatch, so it behaves identically (live environment-name completion, same switch logic). Typing a bare `/` switches the prompt into environment-selection mode (autocompleting every environment); pressing Enter with no environment name typed prints the list of available environments instead of switching, mirroring how a bare `?` lists available help topics.
+Identity and segment context are mutually exclusive - switching into one clears the other. Fails if there are uncommitted staged changes in whatever context is being left. Switching environment also clears identity context, and re-enters the previously active feature (if any) in the new environment. 
 
 ### Examples
 

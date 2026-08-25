@@ -56,20 +56,18 @@ struct Args {
 }
 
 fn print_banner() {
-    println!();
     println!(
-        "  {} {}{}",
+        "\n  {} {}{}",
         "Flagrant".bold(),
         "⚡".yellow(),
         "CLI-driven feature flagging".dimmed()
     );
-    println!();
-    println!("  {} for help", HELP_TRIGGER.to_string().green());
     println!(
-        "  {} for environment switch",
+        "\n  {} for environment switch",
         ENV_TRIGGER.to_string().cyan()
     );
-    println!("  ⌫ to escape help/environment prompt\n");
+    println!("  {} for help", HELP_TRIGGER.to_string().yellow());
+    println!("\n  Use ⌫ to escape help/environment prompt.\n");
 }
 
 fn prompter(session: &Session<Connection>) -> String {
