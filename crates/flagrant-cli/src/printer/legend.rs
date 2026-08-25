@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use colored::Colorize;
 use fancy_table::ansi;
-use terminal_size::{Width as TermWidth, terminal_size};
 
 /// Colors `text` red if `deleted`, green if `added`, yellow if `modified` (and neither of the
 /// above), or returns it unchanged otherwise - the green/red/yellow/plain scheme repeated
@@ -39,8 +38,8 @@ fn stage_legend() -> String {
 /// Resolves the same width `FancyTable`'s `Width::Percentage(100)` would (full terminal
 /// width, falling back to 80), so a legend line below a full-width table lines up with it.
 fn table_width() -> usize {
-    terminal_size()
-        .map(|(TermWidth(w), _)| w as usize)
+    crossterm::terminal::size()
+        .map(|(w, _)| w as usize)
         .unwrap_or(80)
         .max(3)
 }

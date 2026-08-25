@@ -5,20 +5,12 @@ use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
     Feature, IdentityVariant, IdentityWithTraits, TraitValue, VariantValue,
-    payload::{
-        FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload,
-        VariantPatchOp,
-    },
+    payload::{FeaturePatch, IdentityOverridePatch, IdentityTraitPayload, NewIdentityPayload},
 };
 
 use crate::{
-    handlers::{
-        internal::{
-            concat_values_for_arg, effectives as effective, extract_single_value, index, stage,
-        },
-        open_in_editor,
-    },
-    printer::tabular::Tabular,
+    handlers::internal::{concat_values_for_arg, effectives as effective, stage},
+    printer::{menu, tabular::Tabular},
 };
 
 /// Print details of an identity with its traits.
@@ -283,14 +275,13 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
 ///
 /// Expected args: `[variant-value]`
 ///
-/// When called without a value argument, opens `$EDITOR` pre-filled with all existing
-/// variants (shown as comments with weights) so the user can choose one. All comment
-/// lines (starting with `#`) are stripped before the value is used.
+/// When called without a value argument, opens an interactive menu listing all existing
+/// variants (with weights) to choose from.
 ///
-/// The entered value must match an existing variant exactly. To use an arbitrary value,
-/// first create a variant with `VARIANT add`.
+/// The value (typed inline or picked from the menu) must match an existing variant
+/// exactly - use `VARIANT add` first if it doesn't exist yet.
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    // Gather everything under a read lock, including opening the editor if needed.
+    // Gather everything under a read lock, including showing the menu if needed.
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
         anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
@@ -307,12 +298,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
                 .find(|iv| iv.feature_id == feature.id && iv.identity_id.is_some())
                 .and_then(|iv| iv.variant_id);
 
-            let content = build_override_editor_content(
-                feature,
-                ctx.feature_patch.as_ref(),
-                current_variant_id,
-            );
-            extract_single_value(&open_in_editor(&content)?)?
+            let (options, default) =
+                build_override_options(feature, ctx.feature_patch.as_ref(), current_variant_id);
+            menu::select("Pin identity to variant", &options, default)?
+                .ok_or_else(|| anyhow::anyhow!("No value provided."))?
         }
     };
 
@@ -325,38 +314,19 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 
     let parsed = raw.parse().unwrap_or_else(|_| VariantValue::build(&raw));
 
-    // Check whether the value matches an existing (or pending) variant.
-    let existing_value = {
-        let ctx = session.context.read().unwrap();
-        let feature = ctx.feature.as_ref().unwrap();
-        effective::effective_variants(feature, ctx.feature_patch.as_ref())
-            .into_iter()
-            .find(|v| !v.is_deleted && v.value == parsed)
-            .map(|v| v.value)
-    };
-
-    let variant_value = match existing_value {
-        Some(v) => v,
-        None => {
-            // No matching variant - stage a new one with 0% weight.
-            println!(
-                "No variant with value '{}' found. Staged new variant with 0% weight (run DISCARD to undo).",
-                parsed
-            );
-
-            let mut ctx = session.context.write().unwrap();
-
-            ctx.get_or_init_feature_patch()
-                .variants
-                .push(VariantPatchOp::Add {
-                    value: parsed.clone(),
-                    weight: 0,
-                });
-
-            index::rebuild(&mut ctx);
-            parsed
-        }
-    };
+    // The value must match an existing (or pending) variant - no more implicitly creating one.
+    let ctx = session.context.read().unwrap();
+    let feature = ctx.feature.as_ref().unwrap();
+    let variant_value = effective::effective_variants(feature, ctx.feature_patch.as_ref())
+        .into_iter()
+        .find(|v| !v.is_deleted && v.value == parsed)
+        .map(|v| v.value)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No variant with value '{parsed}' found. Use `VARIANT add` to create it first."
+            )
+        })?;
+    drop(ctx);
 
     // Stage the pin - replaces any existing override for this feature.
     let mut ctx = session.context.write().unwrap();
@@ -445,50 +415,47 @@ fn resolve_identity(
     )
 }
 
-fn build_override_editor_content(
+/// Builds the `OVERRIDE add` menu options - every existing variant, numbered and labeled
+/// with its distribution weight, value, staged/default/current markers, colon-aligned via
+/// [`menu::align_rows`]. Each option's value is already in `"{type}::{value}"` form, ready
+/// to be parsed downstream. Also returns the index of the identity's currently pinned
+/// variant, if any.
+fn build_override_options(
     feature: &Feature,
     patch: Option<&FeaturePatch>,
     current_variant_id: Option<i32>,
-) -> String {
+) -> (Vec<(String, String)>, Option<usize>) {
     let variants = effective::effective_variants(feature, patch);
-    let mut content = String::new();
+    let ordered = variants
+        .iter()
+        .filter(|e| !e.is_control && !e.is_deleted)
+        .chain(variants.iter().filter(|e| e.is_control && !e.is_deleted));
 
-    content.push_str(
-        "# Leave exactly ONE variant's value uncommented below (or type a brand new value)\n\
-         # to pin this identity to it. Comment out or delete the rest.\n\n",
-    );
+    let mut rows = Vec::new();
+    let mut values = Vec::new();
+    let mut default = None;
 
-    for (idx, e) in (1..).zip(variants.iter().filter(|e| !e.is_control && !e.is_deleted)) {
+    for (idx, e) in (1..).zip(ordered) {
+        let is_current = e.id.is_some() && e.id == current_variant_id;
+        if is_current {
+            default = Some(rows.len());
+        }
+        let marker = if e.is_control { " (default)" } else { "" };
         let staged = if e.value_modified || e.is_staged_add {
             " (staged)"
         } else {
             ""
         };
-        let current = if e.id.is_some() && e.id == current_variant_id {
-            " ← current"
-        } else {
-            ""
-        };
+        let current = if is_current { " ← current" } else { "" };
         let (typ, val) = e.value.decompose();
-        content.push_str(&format!(
-            "# variant {} ({}%){}{}\n{}::{}\n\n",
-            idx, e.weight, staged, current, typ, val
+
+        rows.push((
+            format!("variant #{idx} ({}%)", e.weight),
+            format!("{}{marker}{staged}{current}", e.value.bare_first_line()),
         ));
+        values.push(format!("{typ}::{val}"));
     }
 
-    for e in variants.iter().filter(|e| e.is_control && !e.is_deleted) {
-        let staged = if e.value_modified { " (staged)" } else { "" };
-        let current = if e.id.is_some() && e.id == current_variant_id {
-            " ← current"
-        } else {
-            ""
-        };
-        let (typ, val) = e.value.decompose();
-        content.push_str(&format!(
-            "# default value ({}%){}{}\n{}::{}",
-            e.weight, staged, current, typ, val
-        ));
-    }
-
-    content
+    let options = menu::align_rows(&rows).into_iter().zip(values).collect();
+    (options, default)
 }

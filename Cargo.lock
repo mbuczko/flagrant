@@ -959,6 +959,7 @@ dependencies = [
  "argh",
  "chrono",
  "colored",
+ "crossterm",
  "fancy-table",
  "flagrant-client",
  "flagrant-repl",
@@ -971,7 +972,6 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "termimad",
- "terminal_size",
 ]
 
 [[package]]
