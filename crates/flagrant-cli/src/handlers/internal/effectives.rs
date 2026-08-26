@@ -211,8 +211,8 @@ pub(crate) fn weight_menu_rows(
     let default_suffix = variants
         .iter()
         .find(|v| v.is_control && !v.is_deleted)
-        .map(|v| format!("{} (default)", v.value.bare_first_line()))
-        .unwrap_or_else(|| "(default)".to_string());
+        .map(|v| format!("{} (control)", v.value.bare_first_line()))
+        .unwrap_or_else(|| "(control)".to_string());
 
     (non_control, rows, default_suffix)
 }

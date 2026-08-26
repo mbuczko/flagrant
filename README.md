@@ -20,6 +20,8 @@ Flagrant also tries its best to be a real-world showcase for a few other librari
 
 As it's written in Rust, Flagrant comes with low-level resource utilisation and "_blazingly fast_" mode switched on by default 😃
 
+<video src="recordings/session.mov" controls></video>
+
 ## Concepts
 
 Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based `USE` commands: enter a context, stage changes, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).

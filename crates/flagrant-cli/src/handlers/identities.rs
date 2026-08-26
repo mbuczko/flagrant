@@ -423,7 +423,7 @@ fn build_override_options(
         if is_current {
             default = Some(rows.len());
         }
-        let marker = if e.is_control { " (default)" } else { "" };
+        let marker = if e.is_control { " (control)" } else { "" };
         let staged = if e.value_modified || e.is_staged_add {
             " (staged)"
         } else {
