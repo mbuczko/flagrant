@@ -20,7 +20,7 @@ Flagrant also tries its best to be a real-world showcase for a few other librari
 
 As it's written in Rust, Flagrant comes with low-level resource utilisation and "_blazingly fast_" mode switched on by default 😃
 
-<video src="recordings/session.mov" controls></video>
+[▶ Watch a demo session](recordings/session.mov)
 
 ## Concepts
 
