@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
+pub(crate) fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
     ctx.client

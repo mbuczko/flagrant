@@ -56,20 +56,18 @@ struct Args {
 }
 
 fn print_banner() {
-    println!();
     println!(
-        "  {} {}{}",
+        "\n  {} {}{}",
         "Flagrant".bold(),
         "⚡".yellow(),
         "CLI-driven feature flagging".dimmed()
     );
-    println!();
-    println!("  {} for help", HELP_TRIGGER.to_string().green());
     println!(
-        "  {} for environment switch",
+        "\n  {} for environment switch",
         ENV_TRIGGER.to_string().cyan()
     );
-    println!("  ⌫ to escape help/environment prompt\n");
+    println!("  {} for help", HELP_TRIGGER.to_string().yellow());
+    println!("\n  Use ⌫ to escape help/environment prompt.\n");
 }
 
 fn prompter(session: &Session<Connection>) -> String {
@@ -269,7 +267,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Variant.op_in_context(
             "weight",
-            "index [+/-]weight",
+            "[index [+/-]weight]",
             handlers::variants::weight,
             in_context!(feature_ctx),
         ),
@@ -418,7 +416,7 @@ fn main() -> anyhow::Result<()> {
         // Identity overrides (only in identity context)
         Command::Override.op_in_context(
             "add",
-            "[value]",
+            "[variant-index]",
             handlers::identities::set_override,
             in_context!(identity_ctx),
         ),

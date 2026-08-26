@@ -7,7 +7,11 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::{internal::stage, open_in_editor},
+    handlers::{
+        features::fetch_feature,
+        internal::{index, stage},
+        open_in_editor,
+    },
     printer::tabular::Tabular,
 };
 
@@ -141,6 +145,20 @@ pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
         "/features/{feature_id}/snapshots/{version}/restore"
     ));
     let snapshot: Snapshot = ctx.client.post(path, RestoreRequest { comment })?;
+    let feature_name = ctx.feature.as_ref().unwrap().name.clone();
+
+    drop(ctx);
+
+    // Restoring changes the feature server-side (tags, variants, version, ...) - refetch
+    // it so the session's cached context doesn't keep showing pre-restore state (which
+    // would also send a now-stale `version` on the next COMMIT, wrongly rejected as a
+    // conflict).
+    let feature = fetch_feature(&feature_name, session)?;
+    let mut ctx = session.context.write().unwrap();
+
+    ctx.feature = Some(feature);
+    index::rebuild(&mut ctx);
+
     drop(ctx);
 
     println!(

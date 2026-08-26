@@ -12,7 +12,6 @@ use crate::{
 ///
 /// Expected args: `[--and|--and-not] [description]`
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let segment = segment_from_ctx(session)?;
     let (connector, description) = match args.get(1).map(|a| a.as_ref()) {
         Some("--and") => (
             Some(GroupConnector::And),
@@ -27,13 +26,16 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let predicted_label = {
         let ctx = session.context.read().unwrap();
+        let segment = ctx.segment.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first.")
+        })?;
         let staged = ctx
             .segment_patch
             .as_ref()
             .map(|p| p.ops.as_slice())
             .unwrap_or_default();
 
-        predict_next_label(&segment, staged)
+        predict_next_label(segment, staged)
     };
 
     let connector_hint = match &connector {
@@ -83,15 +85,18 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<label>` (e.g. "group-1")
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let segment = segment_from_ctx(session)?;
     let Some(label) = args.get(1) else {
         bail!("No group label provided. Use: `GROUP delete <label>` (e.g. group-1 as the label).");
     };
     let label: &str = label;
 
     let mut ctx = session.context.write().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
-    let eff = effective::effective_segment(&segment, patch);
+    let eff = effective::effective_segment(segment, patch);
 
     // Staged-add groups are appended to `eff.groups` in the same order their `AddGroup` ops
     // appear in `ops`, so the Nth staged-add group found here is always the Nth `AddGroup`
@@ -221,13 +226,6 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         patch.ops.push(op);
     }
     Ok(())
-}
-
-fn segment_from_ctx(session: &Session<Connection>) -> anyhow::Result<Segment> {
-    let ctx = session.context.read().unwrap();
-    ctx.segment
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))
 }
 
 /// Predict the label the server will assign to the next new group.

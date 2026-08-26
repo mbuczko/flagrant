@@ -13,7 +13,10 @@ use crate::{
         internal::{effectives as effective, index, stage},
         open_in_editor,
     },
-    printer::tabular::{Tabular, segment::SegmentContext},
+    printer::{
+        menu,
+        tabular::{Tabular, segment::SegmentContext},
+    },
 };
 
 fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Segment> {
@@ -384,9 +387,9 @@ fn current_weights_for<'a>(
 
 /// Stage variant weight overrides for the current feature within this segment.
 ///
-/// **Editor mode** (`OVERRIDE add` - no args):
-/// Opens an editor pre-filled with all non-control variants. Lines starting with `#`
-/// are comments; each non-comment line is parsed as a weight (0–100) in display order.
+/// **Menu mode** (`OVERRIDE add` - no args):
+/// Opens an interactive menu listing every non-control variant's current weight and
+/// allows adjusting the highlighted one by 5 (clamped so the total never exceeds 100).
 ///
 /// **Inline mode** (`OVERRIDE add <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
@@ -459,25 +462,45 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         }
         Some(weights)
     } else {
-        // Editor mode: prefer staged weights; fall back to committed weights from API.
-        let content = build_segment_override_editor_content(
-            feature,
-            ctx.feature_patch.as_ref(),
-            &current_weights,
-        );
-        let edited = open_in_editor(&content)?;
+        // Menu mode: prefer staged weights; fall back to committed weights from API.
         let variants = effective::effective_variants(feature, ctx.feature_patch.as_ref());
-        let non_control: Vec<_> = variants
-            .iter()
-            .filter(|v| !v.is_control && !v.is_deleted)
-            .collect();
-        let parsed = parse_segment_override_content(&edited, &non_control, &current_weights)?;
+        let (non_control, mut rows, default_suffix) = effective::weight_menu_rows(&variants, |v| {
+            v.id.and_then(|id| {
+                current_weights
+                    .iter()
+                    .find(|w| w.variant_id == id)
+                    .map(|w| w.weight)
+            })
+            .unwrap_or(0)
+        });
 
-        // Skip staging if nothing changed.
-        if weights_equal(&parsed, &current_weights) {
+        if non_control.is_empty() {
+            bail!("No non-control variants to override. Use `VARIANT add` first.");
+        }
+
+        let confirmed = menu::adjust_weights("Adjust variant weights", &mut rows, &default_suffix)?;
+        if !confirmed {
             None
         } else {
-            Some(parsed)
+            let mut parsed = Vec::with_capacity(non_control.len());
+            for (v, row) in non_control.iter().zip(rows.iter()) {
+                let variant_id = v.id.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Segment overrides require committed variants. Commit the variant first."
+                    )
+                })?;
+                parsed.push(SegmentVariantWeight {
+                    variant_id,
+                    weight: row.weight,
+                });
+            }
+
+            // Skip staging if nothing changed.
+            if weights_equal(&parsed, &current_weights) {
+                None
+            } else {
+                Some(parsed)
+            }
         }
     };
 
@@ -543,102 +566,6 @@ pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::R
 
     println!("Staged: unset segment override for '{feature_name}'");
     Ok(())
-}
-
-fn build_segment_override_editor_content(
-    feature: &Feature,
-    patch: Option<&FeaturePatch>,
-    current_weights: &[SegmentVariantWeight],
-) -> String {
-    let variants = effective::effective_variants(feature, patch);
-    let mut content = String::new();
-
-    content.push_str(
-        "# Set this segment's weight override by editing the number on the line below each\n\
-         # variant (0-100). The default value's weight auto-adjusts to whatever remains, so\n\
-         # the numbers below must not sum to more than 100.\n\n",
-    );
-
-    for (idx, ev) in (1..).zip(variants.iter().filter(|v| !v.is_control && !v.is_deleted)) {
-        let staged_weight = ev.id.and_then(|id| {
-            current_weights
-                .iter()
-                .find(|w| w.variant_id == id)
-                .map(|w| w.weight)
-        });
-        let weight = staged_weight.unwrap_or(0);
-        let staged = if ev.weight_modified || ev.is_staged_add {
-            " (staged)"
-        } else {
-            ""
-        };
-        content.push_str(&format!(
-            "# variant {idx}: {} (currently at {}%){}\n{weight}\n\n",
-            ev.value.bare_first_line(),
-            ev.weight,
-            staged
-        ));
-    }
-
-    let default_value = variants
-        .iter()
-        .find(|v| v.is_control && !v.is_deleted)
-        .map(|v| v.value.bare_first_line().to_string())
-        .unwrap_or_default();
-
-    content.push_str(&format!(
-        "# default value ({default_value}) auto-adjusts to the remainder (= 100 - sum of above)"
-    ));
-    content
-}
-
-fn parse_segment_override_content(
-    text: &str,
-    non_control: &[&effective::EffectiveVariant],
-    current_weights: &[SegmentVariantWeight],
-) -> anyhow::Result<Vec<SegmentVariantWeight>> {
-    let weight_lines: Vec<&str> = text
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
-        .collect();
-
-    if weight_lines.len() != non_control.len() {
-        bail!(
-            "Expected {} weight(s), got {}. Each non-control variant needs one line.",
-            non_control.len(),
-            weight_lines.len()
-        );
-    }
-
-    let mut result = Vec::with_capacity(non_control.len());
-    let mut sum: u32 = 0;
-
-    for (ev, line) in non_control.iter().zip(weight_lines.iter()) {
-        let weight: u8 = line.trim().parse().map_err(|_| {
-            anyhow::anyhow!("Invalid weight '{}': must be an integer 0–100", line.trim())
-        })?;
-        sum += weight as u32;
-        if sum > 100 {
-            bail!("Weights sum to more than 100.");
-        }
-        // Keep the variant_id from the committed variant; staged adds can't be used here.
-        let variant_id = ev
-            .id
-            .ok_or_else(|| anyhow::anyhow!("Staged (uncommitted) variants cannot be overridden by a segment. Commit the variant first."))?;
-
-        result.push(SegmentVariantWeight { variant_id, weight });
-    }
-
-    // Include any current_weights entries that map to variants not in non_control
-    // (shouldn't normally happen, but guards against stale state).
-    let known_ids: std::collections::HashSet<i32> = result.iter().map(|w| w.variant_id).collect();
-    for cw in current_weights {
-        if !known_ids.contains(&cw.variant_id) {
-            result.push(cw.clone());
-        }
-    }
-
-    Ok(result)
 }
 
 fn weights_equal(a: &[SegmentVariantWeight], b: &[SegmentVariantWeight]) -> bool {

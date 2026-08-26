@@ -5,8 +5,8 @@ use flagrant_types::{Comparator, Subject, payload::SegmentPatchOp};
 use strum::IntoEnumIterator;
 
 use crate::{
-    handlers::internal::{effectives as effective, extract_single_value, open_in_editor},
-    printer::tabular::Tabular,
+    handlers::internal::{effectives as effective, open_in_editor},
+    printer::{menu, tabular::Tabular},
 };
 
 /// Stage a rule addition on a group in the current segment.
@@ -196,10 +196,9 @@ pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 ///
 /// Expected args: `<group-label> <rule-index> [comparator]`
 ///
-/// If the comparator argument is omitted, opens `$EDITOR` listing every available
-/// comparator (the current one marked explicitly) so one can be chosen by leaving it as
-/// the only uncommented line. The chosen comparator must match one of the available
-/// comparators; if it's `in`/`not-in`, the rule's effective value must parse as a JSON array.
+/// If the comparator argument is omitted, opens an interactive menu listing every
+/// available comparator (the current one marked explicitly) to choose from. If it's
+/// `in`/`not-in`, the rule's effective value must parse as a JSON array.
 pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (label, index, rule_id, effective_comparator, effective_value) =
         resolve_rule(args, session)?;
@@ -207,9 +206,20 @@ pub fn comparator(args: &[Arg], session: &Session<Connection>) -> anyhow::Result
         match args.get(3) {
             Some(c) => c.to_string(),
             None => {
-                let content = build_comparator_editor_content(&effective_comparator);
-                let edited = open_in_editor(&content)?;
-                extract_single_value(&edited)?
+                let options: Vec<(String, Comparator)> = Comparator::iter()
+                    .map(|c| {
+                        let label = if c == effective_comparator {
+                            format!("{c} (current)")
+                        } else {
+                            c.to_string()
+                        };
+                        (label, c)
+                    })
+                    .collect();
+                let default = options.iter().position(|(_, c)| *c == effective_comparator);
+                menu::select("Choose a comparator", &options, default)?
+                    .ok_or_else(|| anyhow::anyhow!("No comparator selected."))?
+                    .to_string()
             }
         }
         .trim(),
@@ -275,24 +285,6 @@ fn resolve_rule(
 
     let (comparator, value) = effective::effective_rule(rule, ctx.segment_patch.as_ref());
     Ok((label.to_string(), index, rule.id, comparator, value))
-}
-
-/// Builds editor content listing every available comparator (from `Comparator::iter()`,
-/// so a new variant can't be missed here), one per line, with the current one marked
-/// explicitly. The user selects a comparator by leaving exactly one line uncommented
-/// (mirroring the `OVERRIDE add` variant picker).
-fn build_comparator_editor_content(current: &Comparator) -> String {
-    let mut content = String::new();
-    content.push_str(
-        "# Leave exactly ONE comparator uncommented below to select it.\n\
-         # Comment out or delete the rest.\n\n",
-    );
-
-    for cmp in Comparator::iter() {
-        let marker = if &cmp == current { " (current)" } else { "" };
-        content.push_str(&format!("# {cmp}{marker}\n{cmp}\n\n"));
-    }
-    content
 }
 
 fn parse_subject(s: &str) -> anyhow::Result<Subject> {
