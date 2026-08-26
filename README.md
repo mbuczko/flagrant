@@ -136,7 +136,7 @@ USE @<identity>
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
 - `IDENTITY trait <name=value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country=pl -org`
-- `OVERRIDE add [value]` / `OVERRIDE delete` see Overrides below
+- `OVERRIDE add [variant-index]` / `OVERRIDE delete` see Overrides below
 
 ### Segments
 
@@ -150,16 +150,23 @@ USE +<segment>
 
 (mutually exclusive with an identity context - entering one clears the other). Inside the context:
 
-- `GROUP add [--and|--and-not] [description]` to add a rule group
-- `RULE add <group-label> <identity|trait|environment> <comparator> <value>` to add a condition to a group
-- `GROUP delete <label>` / `RULE delete <group-label> <rule-index>` to remove them
+- `GROUP add [--and|--and-not] [description]` to add a rule to the group
+- `GROUP delete <label>` / `RULE delete <group-label> <rule-index>` to remove group / rule from the group
+- `RULE add <group-label> <identity|trait|environment> <comparator> <value>` to add a new rule to a group
+
+Available rule comparators:
+- `exactly_matches` / `does_not_match` - value must/must not match the subject (eg. `environment exactly_matches prod`)
+- `contains` / `does_not_contain` - value must/must not be a substring of the subject (eg. `identity contains test`)
+- `greater_than`/ `greater_equal_than` - subject must be greater/greater-or-equal then numerical value 
+- `lower_than`/ `lower_equal_than` - subject must be lower/lower-or-equal than numerical value
+- `in`, `not_in` - subject must/must not be one of the elements of value - this requires `<value>` to be a JSON array, e.g. `["pro", "enterprise"]`
 
 ### Overrides
 
 Overrides bypass a feature's normal weighted distribution for a specific identity or a whole segment. Both require a feature + identity/segment context (see [Context composition](#context-composition)):
 
-- **Identity override**: `OVERRIDE add [value]` pins that one identity to a specific variant of the feature, regardless of its weight-based assignment. Omit the value to open an editor listing every variant (marking the identity's current one), and pick from there. `OVERRIDE delete` releases the pin, freeing the identity to be redistributed on its next request.
-- **Segment override**: `OVERRIDE add [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit the arguments to open an editor for setting weights across all variants at once. `OVERRIDE delete` removes it, falling back to the feature's normal weights for that segment's identities.
+- **Identity override**: `OVERRIDE add [variant-index]` pins that one identity to a specific variant of the feature (by its display index, same numbering as `FEATURE show`), regardless of its weight-based assignment. Omit the index to pick from an interactive menu instead, listing every variant with the identity's current one marked. `OVERRIDE delete` releases the pin, freeing the identity to be redistributed on its next request.
+- **Segment override**: `OVERRIDE add [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit both arguments to open an interactive menu instead: navigate variants with the arrow keys and adjust each one's weight up/down by 5% at a time, with the control variant's weight auto-balancing live as you go. `OVERRIDE delete` removes it, falling back to the feature's normal weights for that segment's identities.
 - **Bulk clearing** (feature context only, no identity/segment context needed): `UNSET distribution <pattern>` clears the variant assignment for every identity whose value matches `pattern` (`*` as a wildcard), without deleting the identities or their traits - handy for forcing a whole cohort to be redistributed in case of emergency.
 
 All staged changes across every active context - feature edits, identity/segment overrides, trait changes - are applied together with `COMMIT`, or dropped together with `DISCARD`.
