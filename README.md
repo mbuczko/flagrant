@@ -155,8 +155,8 @@ USE +<segment>
 - `RULE add <group-label> <identity|trait|environment> <comparator> <value>` to add a new rule to a group
 
 Available rule comparators:
-- `exactly_matches` / `does_not_match` - value must/must not match the subject (eg. `environment exactly_matches prod`)
-- `contains` / `does_not_contain` - value must/must not be a substring of the subject (eg. `identity contains test`)
+- `exactly_matches` / `does_not_match` - value must (not) match the subject (eg. `environment exactly_matches prod`)
+- `contains` / `does_not_contain` - value must (not) be a substring of the subject (eg. `identity contains test`)
 - `greater_than`/ `greater_equal_than` - subject must be greater/greater-or-equal then numerical value 
 - `lower_than`/ `lower_equal_than` - subject must be lower/lower-or-equal than numerical value
 - `in`, `not_in` - subject must/must not be one of the elements of value - this requires `<value>` to be a JSON array, e.g. `["pro", "enterprise"]`

@@ -22,5 +22,5 @@ listen = "unix:/tmp/flagrant/grpc.sock"
 [projects.demo.envs.dev]
 srv-token = "dev-srv-token"
 
-[projects.demo.envs.base]
-srv-token = "base-srv-token"
+[projects.demo.envs.prod]
+srv-token = "prod-srv-token"
