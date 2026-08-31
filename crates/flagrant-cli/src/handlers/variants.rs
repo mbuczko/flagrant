@@ -87,24 +87,35 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// (possibly multi-line) value, whether it's the control variant, and any identities
 /// explicitly pinned to it.
 ///
-/// Expected args: `<index>`
+/// Expected args: `[index]`
+///
+/// When the index is omitted, opens an interactive menu listing every variant to
+/// choose from instead.
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
+    let feature = ctx.feature.as_ref().unwrap();
+    let eff = effective::effective_variants(feature, ctx.feature_patch.as_ref());
+
     let index: usize = match args.get(1) {
         Some(idx) => idx.parse()?,
-        None => bail!("No variant index provided."),
+        None => {
+            let options = variant_menu_options(&eff, true);
+            if options.is_empty() {
+                bail!("No variants to show. Use `VARIANT add` first.");
+            }
+            menu::select("Show which variant", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No variant selected."))?
+        }
     };
 
     // Validates the index against the current variant index (built the same way by
     // `index::rebuild`), mirroring the range check used by value/weight/delete.
     index::resolve(index, &ctx)?;
 
-    let feature = ctx.feature.as_ref().unwrap();
-    let eff = effective::effective_variants(feature, ctx.feature_patch.as_ref());
     let variant = eff
         .iter()
         .filter(|e| !e.is_deleted)
@@ -118,6 +129,34 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     variant.display(None, &(index, identities));
     Ok(())
+}
+
+/// Builds the variant's options menu: one row per non-deleted effective variant,
+/// numbered to match variant index in feature context.
+///
+/// When `include_control` is `false`, the control variant is skipped entirely - it's
+/// managed automatically and can't be deleted, so `VARIANT delete` excludes it rather
+/// than offering a choice that will always fail. Numbering still accounts for it (it
+/// keeps its normal `variant #N`), so the numbers shown always match `FEATURE show`.
+fn variant_menu_options(
+    eff: &[effective::EffectiveVariant],
+    include_control: bool,
+) -> Vec<(String, usize)> {
+    let mut rows = Vec::new();
+    let mut indices = Vec::new();
+
+    for (idx, e) in (1..).zip(eff.iter().filter(|e| !e.is_deleted)) {
+        if e.is_control && !include_control {
+            continue;
+        }
+        let marker = if e.is_control { " (control)" } else { "" };
+        rows.push((
+            format!("variant #{idx} ({}%)", e.weight),
+            format!("{}{marker}", e.value.bare_first_line()),
+        ));
+        indices.push(idx);
+    }
+    menu::align_rows(&rows).into_iter().zip(indices).collect()
 }
 
 /// Fetches identity values explicitly pinned to the given committed variant.
@@ -306,7 +345,10 @@ fn adjust_weights_interactively(ctx: &mut Connection) -> anyhow::Result<()> {
 
 /// Stage a deletion for the variant at the given display index.
 ///
-/// Expected args: `<index>`
+/// Expected args: `[index]`
+///
+/// When the index is omitted, opens an interactive menu listing every variant to
+/// choose from instead.
 ///
 /// For committed variants, clears any pending SetValue/SetWeight ops for that id and
 /// appends a Delete op. For staged additions, there's nothing committed to delete - the
@@ -320,7 +362,21 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     let variant_ref = match args.get(1) {
         Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
-        None => bail!("No variant index provided."),
+        None => {
+            let eff = effective::effective_variants(
+                ctx.feature.as_ref().unwrap(),
+                ctx.feature_patch.as_ref(),
+            );
+            let options = variant_menu_options(&eff, false);
+
+            if options.is_empty() {
+                bail!("No non-control variants to delete. Use `VARIANT add` first.");
+            }
+
+            let index = menu::select("Delete which variant", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No variant selected."))?;
+            index::resolve(index, &ctx)?
+        }
     };
 
     if let VariantRef::Committed(id) = &variant_ref {

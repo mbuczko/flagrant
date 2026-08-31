@@ -1,17 +1,8 @@
 use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
-use flagrant_types::Subject;
 
 use super::Tabular;
 use crate::{handlers::internal::effectives::EffectiveRule, printer::legend};
-
-pub(super) fn subject_label(subject: &Subject) -> String {
-    match subject {
-        Subject::Identity => "identity".to_string(),
-        Subject::Trait(name) => format!("trait:{name}"),
-        Subject::Environment => "environment".to_string(),
-    }
-}
 
 impl Tabular for EffectiveRule {
     type Patch = ();
@@ -26,19 +17,19 @@ impl Tabular for EffectiveRule {
 
         let (subject_s, comparator_s, value_s) = if rule.is_deleted {
             (
-                subject_label(&rule.subject).red(),
+                rule.subject.to_string().red(),
                 rule.comparator.to_string().red(),
                 rule.value.red(),
             )
         } else if rule.is_staged_add {
             (
-                subject_label(&rule.subject).green(),
+                rule.subject.to_string().green(),
                 rule.comparator.to_string().green(),
                 rule.value.as_str().green(),
             )
         } else {
             (
-                subject_label(&rule.subject).bright_blue(),
+                rule.subject.to_string().bright_blue(),
                 if rule.comparator_modified {
                     rule.comparator.to_string().yellow()
                 } else {

@@ -249,13 +249,13 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Variant.op_in_context(
             "delete",
-            "index",
+            "[index]",
             handlers::variants::delete,
             in_context!(feature_ctx),
         ),
         Command::Variant.op_in_context(
             "show",
-            "index",
+            "[index]",
             handlers::variants::show,
             in_context!(feature_ctx),
         ),
@@ -285,7 +285,7 @@ fn main() -> anyhow::Result<()> {
             handlers::segments::describe,
             in_context!(segment_ctx),
         ),
-        Command::Segment.op("delete", "name", handlers::segments::delete),
+        Command::Segment.op("delete", "[name]", handlers::segments::delete),
         Command::Segment.op_in_context(
             "rename",
             "[name]",
@@ -320,7 +320,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Group.op_in_context(
             "delete",
-            "label",
+            "[label]",
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
@@ -340,7 +340,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Rule.op_in_context(
             "delete",
-            "group-label rule-index",
+            "[group-label [rule-index]]",
             handlers::rules::delete,
             in_context!(segment_ctx),
         ),

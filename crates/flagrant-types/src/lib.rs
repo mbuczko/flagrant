@@ -238,6 +238,18 @@ pub enum Subject {
     Environment,
 }
 
+/// Single source of truth for `Subject`'s string form - used by the `Encode` impl below
+/// (DB storage) and by the CLI (rule display, menu labels), so both always agree.
+impl fmt::Display for Subject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Identity => write!(f, "identity"),
+            Self::Trait(name) => write!(f, "trait:{name}"),
+            Self::Environment => write!(f, "environment"),
+        }
+    }
+}
+
 /// `strum(serialize = ...)` below is the single source of truth for this enum's string
 /// form - `Display`/`FromStr` (used by the `Encode`/`Decode` impls below, and by the CLI's
 /// `Comparator::iter()`-driven parsing/display) all derive from it, so DB storage, the API
@@ -315,12 +327,7 @@ impl Encode<'_, Sqlite> for Subject {
         &self,
         buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'_>,
     ) -> Result<IsNull, sqlx::error::BoxDynError> {
-        let s = match self {
-            Self::Identity => "identity".to_string(),
-            Self::Trait(name) => format!("trait:{name}"),
-            Self::Environment => "environment".to_string(),
-        };
-        Encode::<Sqlite>::encode(s, buf)
+        Encode::<Sqlite>::encode(self.to_string(), buf)
     }
 }
 impl<'r> Decode<'r, Sqlite> for Subject {

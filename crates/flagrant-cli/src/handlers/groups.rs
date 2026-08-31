@@ -5,7 +5,7 @@ use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
 use crate::{
     handlers::{internal::effectives as effective, open_in_editor},
-    printer::tabular::Tabular,
+    printer::{menu, tabular::Tabular},
 };
 
 /// Stage a group addition for the current segment.
@@ -83,13 +83,11 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage a group deletion for the current segment.
 ///
-/// Expected args: `<label>` (e.g. "group-1")
+/// Expected args: `[label]` (e.g. "group-1")
+///
+/// When the label is omitted, opens an interactive menu listing every group in the
+/// current segment to choose from instead.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let Some(label) = args.get(1) else {
-        bail!("No group label provided. Use: `GROUP delete <label>` (e.g. group-1 as the label).");
-    };
-    let label: &str = label;
-
     let mut ctx = session.context.write().unwrap();
     let segment = ctx
         .segment
@@ -97,6 +95,19 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
+
+    let label = match args.get(1) {
+        Some(label) => label.to_string(),
+        None => {
+            let options = group_menu_options(&eff);
+            if options.is_empty() {
+                bail!("No groups to delete. Use `GROUP add` first.");
+            }
+            menu::select("Delete which group", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No group selected."))?
+        }
+    };
+    let label: &str = &label;
 
     // Staged-add groups are appended to `eff.groups` in the same order their `AddGroup` ops
     // appear in `ops`, so the Nth staged-add group found here is always the Nth `AddGroup`
@@ -226,6 +237,23 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         patch.ops.push(op);
     }
     Ok(())
+}
+
+/// Builds the `GROUP delete` menu options: one row per non-deleted effective group,
+/// labeled with its label and description (if any), colon-aligned.
+fn group_menu_options(eff: &effective::EffectiveSegment) -> Vec<(String, String)> {
+    let mut rows = Vec::new();
+    let mut labels = Vec::new();
+
+    for g in eff.groups.iter().filter(|g| !g.is_deleted) {
+        rows.push((
+            format!("[{}]", g.label),
+            g.description.clone().unwrap_or_default(),
+        ));
+        labels.push(g.label.clone());
+    }
+
+    menu::align_rows(&rows).into_iter().zip(labels).collect()
 }
 
 /// Predict the label the server will assign to the next new group.

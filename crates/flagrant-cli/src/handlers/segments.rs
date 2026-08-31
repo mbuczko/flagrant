@@ -193,16 +193,47 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage deletion of a segment by name.
 ///
-/// Expected args: `<name>`
+/// Expected args: `[name]`
+///
+/// When the name is omitted, opens an interactive menu listing every segment in the
+/// current project to choose from instead (the in-context segment, if any, is marked
+/// and pre-selected).
 ///
 /// Switches into the named segment's context first if not already there (same as
 /// `USE +<segment>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this segment is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let Some(name) = args.get(1) else {
-        bail!("No segment name provided.");
+    let name = match args.get(1) {
+        Some(name) => name.to_string(),
+        None => {
+            let ctx = session.context.read().unwrap();
+            let res = ctx.project_resource();
+            let segments = ctx
+                .client
+                .get::<Vec<Segment>>(res.subpath("/segments?pattern="))?;
+
+            if segments.is_empty() {
+                bail!("No segments to delete. Use `SEGMENT add` first.");
+            }
+
+            let current_name = ctx.segment.as_ref().map(|s| s.name.as_str());
+            let mut rows = Vec::new();
+            let mut default = None;
+
+            for s in &segments {
+                if Some(s.name.as_str()) == current_name {
+                    default = Some(rows.len());
+                }
+                rows.push((s.name.clone(), s.name.clone()));
+            }
+            drop(ctx);
+
+            menu::select("Delete which segment", &rows, default)?
+                .ok_or_else(|| anyhow::anyhow!("No segment selected."))?
+        }
     };
+    let name = name.as_str();
 
     let already_in_context = session
         .context
@@ -210,7 +241,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .unwrap()
         .segment
         .as_ref()
-        .is_some_and(|s| s.name == name.as_ref());
+        .is_some_and(|s| s.name == name);
 
     if !already_in_context {
         stage::ensure_no_pending(session)?;
