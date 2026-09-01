@@ -83,7 +83,7 @@ pub fn main() -> anyhow::Result<()> {
     }
     IDX.store(args.named_idents, Ordering::SeqCst);
 
-    if named.len() > 0 {
+    if !named.is_empty() {
         println!(
             "Seeded {} {} named identities for manual testing.",
             named.len(),

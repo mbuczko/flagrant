@@ -175,11 +175,7 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
         .iter()
         .map(|w| {
             let marker = if w.is_control { "★" } else { "" };
-            format!(
-                "{marker}{} → {}",
-                w.value.bare_first_line(),
-                format!("{}%", w.weight)
-            )
+            format!("{marker}{} → {}%", w.value.bare_first_line(), w.weight)
         })
         .collect()
 }

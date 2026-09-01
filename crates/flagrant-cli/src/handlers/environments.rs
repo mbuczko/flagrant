@@ -8,7 +8,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::open_in_editor,
+    handlers::prompt_line,
     printer::tabular::{Tabular, environment::list_with_current},
 };
 
@@ -73,15 +73,18 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `[description]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the environment's current description so
-/// it can be edited interactively; leaving it blank clears the description.
+/// If omitted, prompts inline pre-filled with the environment's current description so
+/// it can be edited in place. Leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let desc = match args.get(1) {
         Some(d) => Some(d.to_string()),
         None => {
             let current = ctx.environment.description.as_deref().unwrap_or_default();
-            let edited = open_in_editor(current)?;
+            let Some(edited) = prompt_line("New description", current)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             let new_desc = (!edited.is_empty()).then_some(edited);
 
             if new_desc.as_deref() == ctx.environment.description.as_deref() {

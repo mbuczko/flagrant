@@ -11,7 +11,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         internal::{effectives as effective, index, stage},
-        open_in_editor,
+        prompt_line,
     },
     printer::{
         menu,
@@ -193,16 +193,47 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage deletion of a segment by name.
 ///
-/// Expected args: `<name>`
+/// Expected args: `[name]`
+///
+/// When the name is omitted, opens an interactive menu listing every segment in the
+/// current project to choose from instead (the in-context segment, if any, is marked
+/// and pre-selected).
 ///
 /// Switches into the named segment's context first if not already there (same as
 /// `USE +<segment>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this segment is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let Some(name) = args.get(1) else {
-        bail!("No segment name provided.");
+    let name = match args.get(1) {
+        Some(name) => name.to_string(),
+        None => {
+            let ctx = session.context.read().unwrap();
+            let res = ctx.project_resource();
+            let segments = ctx
+                .client
+                .get::<Vec<Segment>>(res.subpath("/segments?pattern="))?;
+
+            if segments.is_empty() {
+                bail!("No segments to delete. Use `SEGMENT add` first.");
+            }
+
+            let current_name = ctx.segment.as_ref().map(|s| s.name.as_str());
+            let mut rows = Vec::new();
+            let mut default = None;
+
+            for s in &segments {
+                if Some(s.name.as_str()) == current_name {
+                    default = Some(rows.len());
+                }
+                rows.push((s.name.clone(), s.name.clone()));
+            }
+            drop(ctx);
+
+            menu::select("Delete which segment", &rows, default)?
+                .ok_or_else(|| anyhow::anyhow!("No segment selected."))?
+        }
     };
+    let name = name.as_str();
 
     let already_in_context = session
         .context
@@ -210,7 +241,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
         .unwrap()
         .segment
         .as_ref()
-        .is_some_and(|s| s.name == name.as_ref());
+        .is_some_and(|s| s.name == name);
 
     if !already_in_context {
         stage::ensure_no_pending(session)?;
@@ -242,9 +273,9 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `[name]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
-/// name so it can be edited interactively. Unlike the description, the name can't be
-/// cleared - an empty result is rejected.
+/// If omitted, prompts inline pre-filled with the segment's current (or already-staged)
+/// name so it can be edited in place. Unlike the description, the name can't be cleared -
+/// an empty result is rejected.
 pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -266,7 +297,10 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
                 })
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().name.as_str());
 
-            let edited = open_in_editor(current)?;
+            let Some(edited) = prompt_line("New name", current)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             if edited == current {
                 println!("No changes made.");
                 return Ok(());
@@ -299,8 +333,8 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `[description]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
-/// description so it can be edited interactively; leaving it blank clears the description.
+/// If omitted, prompts inline pre-filled with the segment's current (or already-staged)
+/// description so it can be edited in place; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -322,7 +356,10 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 })
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().description.as_deref());
 
-            let edited = open_in_editor(current.unwrap_or(""))?;
+            let Some(edited) = prompt_line("New description", current.unwrap_or(""))? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             let new_desc = (!edited.is_empty()).then_some(edited);
 
             if new_desc.as_deref() == current {
