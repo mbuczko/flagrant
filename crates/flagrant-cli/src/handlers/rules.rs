@@ -66,7 +66,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage a rule deletion by 1-based index within a group.
 ///
-/// Expected args: `[group-label [rule-index]]`
+/// Expected args: `[group-label] [rule-index]`
 ///
 /// When the group label is omitted, opens an interactive menu listing every group in
 /// the current segment to choose from. When the rule index is omitted (with or without
