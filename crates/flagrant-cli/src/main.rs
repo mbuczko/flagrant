@@ -334,7 +334,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Rule.op_in_context(
             "show",
-            "group-label rule-index",
+            "[group-label [rule-index]]",
             handlers::rules::show,
             in_context!(segment_ctx),
         ),
@@ -346,13 +346,13 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Rule.op_in_context(
             "value",
-            "group-label rule-index [value]",
+            "[group-label [rule-index]] [value]",
             handlers::rules::value,
             in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
             "comparator",
-            "group-label rule-index [comparator]",
+            "[group-label [rule-index]] [comparator]",
             handlers::rules::comparator,
             in_context!(segment_ctx),
         ),

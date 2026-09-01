@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use flagrant_types::{
-    Comparator, Feature, GroupConnector, IdentityWithTraits, Segment, SegmentRule, Subject,
-    TraitValue, VariantValue,
+    Comparator, Feature, GroupConnector, IdentityWithTraits, Segment, Subject, TraitValue,
+    VariantValue,
     payload::{
         FeaturePatch, IdentityPatch, SegmentPatch, SegmentPatchOp, TagPatchOp, TraitPatchOp,
         VariantPatchOp,
@@ -564,30 +564,4 @@ pub(crate) fn effective_segment(
         description_modified,
         groups,
     }
-}
-
-/// Returns the rule's comparator/value after applying any staged `SetRuleComparator` /
-/// `SetRuleValue` ops for it, so edits can be layered on top of previously staged ones.
-pub(crate) fn effective_rule(
-    rule: &SegmentRule,
-    patch: Option<&SegmentPatch>,
-) -> (Comparator, String) {
-    let mut comparator = rule.comparator.clone();
-    let mut value = rule.value.clone();
-
-    for op in patch.into_iter().flat_map(|p| &p.ops) {
-        match op {
-            SegmentPatchOp::SetRuleComparator {
-                rule_id,
-                comparator: c,
-            } if *rule_id == rule.id => {
-                comparator = c.clone();
-            }
-            SegmentPatchOp::SetRuleValue { rule_id, value: v } if *rule_id == rule.id => {
-                value = v.clone();
-            }
-            _ => {}
-        }
-    }
-    (comparator, value)
 }

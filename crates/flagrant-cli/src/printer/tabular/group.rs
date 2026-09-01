@@ -189,7 +189,7 @@ fn rule_line(
             if rule.value_modified {
                 rule.value.as_str().yellow()
             } else {
-                rule.value.as_str().green()
+                rule.value.as_str().white()
             },
             true,
         )
