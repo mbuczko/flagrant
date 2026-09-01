@@ -5,7 +5,11 @@ use flagrant_types::{
     payload::{RestoreRequest, UpdateSnapshotCommentPayload},
 };
 
-use crate::{errors::ServiceError, extractors::DbConnection};
+use crate::{
+    errors::ServiceError,
+    extractors::DbConnection,
+    handlers::features::{FeatureId, resolve_feature_id},
+};
 
 /// Lists every snapshot for a feature within an environment, most recent first.
 #[utoipa::path(
@@ -14,7 +18,7 @@ use crate::{errors::ServiceError, extractors::DbConnection};
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
+        ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
         (status = 200, description = "Snapshots for this feature, most recent first", body = Vec<Snapshot>)
@@ -23,10 +27,11 @@ use crate::{errors::ServiceError, extractors::DbConnection};
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<Vec<Snapshot>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
 
     let snapshots = snapshot::list(&mut conn, feature_id, env.id).await?;
     Ok(Json(snapshots))
@@ -39,7 +44,7 @@ pub async fn list(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("feature_id" = String, Path, description = "Feature ID or name"),
         ("version" = i32, Path, description = "Snapshot version")
     ),
     responses(
@@ -49,10 +54,11 @@ pub async fn list(
 )]
 pub async fn fetch(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id, version)): Path<(String, String, i32, i32)>,
+    Path((project_name, env_name, feature_id, version)): Path<(String, String, FeatureId, i32)>,
 ) -> Result<Json<Snapshot>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
 
     let snapshot = snapshot::get_by_version(&mut conn, feature_id, env.id, version).await?;
     Ok(Json(snapshot))
@@ -66,7 +72,7 @@ pub async fn fetch(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("feature_id" = String, Path, description = "Feature ID or name"),
         ("version" = i32, Path, description = "Snapshot version")
     ),
     request_body = UpdateSnapshotCommentPayload,
@@ -77,11 +83,12 @@ pub async fn fetch(
 )]
 pub async fn update_comment(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id, version)): Path<(String, String, i32, i32)>,
+    Path((project_name, env_name, feature_id, version)): Path<(String, String, FeatureId, i32)>,
     Json(payload): Json<UpdateSnapshotCommentPayload>,
 ) -> Result<Json<Snapshot>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
 
     let snapshot =
         snapshot::set_comment(&mut conn, feature_id, env.id, version, payload.comment).await?;
@@ -98,7 +105,7 @@ pub async fn update_comment(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("feature_id" = String, Path, description = "Feature ID or name"),
         ("version" = i32, Path, description = "Snapshot version to restore to")
     ),
     request_body = RestoreRequest,
@@ -109,12 +116,15 @@ pub async fn update_comment(
 )]
 pub async fn restore(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id, version)): Path<(String, String, i32, i32)>,
+    Path((project_name, env_name, feature_id, version)): Path<(String, String, FeatureId, i32)>,
     Json(payload): Json<RestoreRequest>,
 ) -> Result<Json<Snapshot>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
-    let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
+    let feature = match feature_id {
+        FeatureId::Id(id) => feature::get_by_id(&mut conn, &env, id).await?,
+        FeatureId::Name(name) => feature::get_by_name(&mut conn, &env, &name).await?,
+    };
 
     let snapshot = snapshot::restore(
         &mut conn,

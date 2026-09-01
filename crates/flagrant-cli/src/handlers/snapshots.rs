@@ -56,7 +56,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .iter()
         .map(|s| {
             [
-                format!("v{}", s.version),
+                s.version.to_string(),
                 s.comment.clone().unwrap_or_default(),
                 s.created_at.to_string(),
             ]
@@ -64,7 +64,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
         .collect();
 
     FancyTable::create(FancyTableOpts::default())
-        .add_column_named_with_align("VERSION".into(), Layout::Fixed(10), Align::Left)
+        .add_column_named_with_align("VERSION".into(), Layout::Fixed(9), Align::Left)
         .add_column_named_with_align("COMMENT".into(), Layout::Expandable(50), Align::Left)
         .add_column_named_with_align("CREATED AT".into(), Layout::Fixed(22), Align::Left)
         .width(Width::Percentage(100))

@@ -3,8 +3,11 @@ use axum::{
     extract::{Path, Query},
 };
 use flagrant::models::{environment, feature, identity, project, rollout, segment};
-use flagrant_types::{Feature, FeatureOverride, RolloutStatus, payload::NewFeaturePayload};
+use flagrant_types::{
+    Environment, Feature, FeatureOverride, RolloutStatus, payload::NewFeaturePayload,
+};
 use serde::Deserialize;
+use sqlx::SqliteConnection;
 use utoipa::IntoParams;
 
 use crate::{errors::ServiceError, extractors::DbConnection};
@@ -49,6 +52,20 @@ impl<'de> Deserialize<'de> for FeatureId {
             Ok(id) => Ok(FeatureId::Id(id)),
             Err(_) => Ok(FeatureId::Name(s)),
         }
+    }
+}
+
+/// Resolves a `FeatureId` path segment (numeric id or feature name) to the feature's id -
+/// shared by every route under `/features/{feature_id}/...` that only needs the id, not
+/// the full [`Feature`].
+pub(crate) async fn resolve_feature_id(
+    conn: &mut SqliteConnection,
+    env: &Environment,
+    feature_id: FeatureId,
+) -> Result<i32, ServiceError> {
+    match feature_id {
+        FeatureId::Id(id) => Ok(id),
+        FeatureId::Name(name) => Ok(feature::get_by_name(conn, env, &name).await?.id),
     }
 }
 
@@ -174,7 +191,7 @@ pub async fn list(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
+        ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
         (status = 200, description = "Feature deleted successfully")
@@ -183,10 +200,11 @@ pub async fn list(
 )]
 pub async fn delete(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
 
     feature::delete(&mut conn, &env, &feature).await?;
@@ -200,7 +218,7 @@ pub async fn delete(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
+        ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
         (status = 200, description = "Explicit variant overrides for this feature", body = Vec<FeatureOverride>)
@@ -209,10 +227,11 @@ pub async fn delete(
 )]
 pub async fn get_overrides(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<Vec<FeatureOverride>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
     let mut overrides = identity::list_overrides(&mut conn, env.id, feature_id).await?;
     let seg_overrides = segment::list_overrides_for_feature(&mut conn, env.id, feature_id).await?;
     overrides.extend(
@@ -234,7 +253,7 @@ pub async fn get_overrides(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
+        ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
         (status = 200, description = "Live progressive-rollout status, or null if none configured", body = Option<RolloutStatus>)
@@ -243,10 +262,11 @@ pub async fn get_overrides(
 )]
 pub async fn get_rollout_status(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<Option<RolloutStatus>>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
     let status = rollout::get_status(&mut conn, &env, feature_id).await?;
     Ok(Json(status))
 }
@@ -267,7 +287,7 @@ pub(crate) struct ClearDistributionParams {
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID"),
+        ("feature_id" = String, Path, description = "Feature ID or name"),
         ClearDistributionParams
     ),
     responses(
@@ -277,11 +297,12 @@ pub(crate) struct ClearDistributionParams {
 )]
 pub async fn clear_distribution(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
     Query(params): Query<ClearDistributionParams>,
 ) -> Result<Json<()>, ServiceError> {
     let project = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &project, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
     let like_pattern = params.pattern.replace('*', "%");
 
     identity::clear_distribution_for_feature(&mut conn, &env, feature_id, &like_pattern).await?;
