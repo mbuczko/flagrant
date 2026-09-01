@@ -9,5 +9,3 @@ You are inside a **feature context** - these are also available:
 - `FEATURE progressive sample <n>` - stage the minimum number of distributed identities required before the schedule starts advancing
 - `FEATURE progressive delete` - stage removing the progressive rollout entirely (clears the schedule and every environment's progression)
 - `FEATURE progressive status` - show the live progression status (applied immediately, not staged)
-
-*Note: leaving off the trailing argument (e.g. `name` in `FEATURE rename`) opens your `$EDITOR` so you can edit the value interactively.*
