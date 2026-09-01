@@ -95,8 +95,8 @@ pub async fn resolve_features(
         .map(|_| FeatureCache::key(&project_name, &env_name, &identity_value));
 
     #[cfg(feature = "redis")]
-    if let (Some(cache), Some(key)) = (&state.cache, &cache_key) {
-        if let Some(cached) = cache.get(key).await {
+    if let (Some(cache), Some(key)) = (&state.cache, &cache_key)
+        && let Some(cached) = cache.get(key).await {
             let response = cached
                 .into_iter()
                 // A valid token only ever adds srv-only features to the response - it never
@@ -112,7 +112,6 @@ pub async fn resolve_features(
                 .collect();
             return Ok(response);
         }
-    }
 
     let project = project::get_by_name(conn, project_name).await?;
     let env = environment::get_by_name(conn, &project, env_name).await?;

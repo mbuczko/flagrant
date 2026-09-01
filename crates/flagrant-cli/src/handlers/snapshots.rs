@@ -1,3 +1,4 @@
+use anyhow::bail;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Width};
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
@@ -10,9 +11,9 @@ use crate::{
     handlers::{
         features::fetch_feature,
         internal::{index, stage},
-        open_in_editor,
+        prompt_line,
     },
-    printer::tabular::Tabular,
+    printer::{menu, tabular::Tabular},
 };
 
 fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
@@ -97,13 +98,49 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// immediately (not staged) - like `IDENTITY delete`/`SEGMENT delete`, a past snapshot
 /// isn't "the current entity in context" to stage a patch against and COMMIT later.
 ///
-/// Expected args: `<version> [comment]` - with no comment given, opens `$EDITOR`
-/// pre-filled with the current comment, same as `FEATURE describe`/`SEGMENT describe`.
+/// Expected args: `[version] [comment]`
+///
+/// When the version is omitted, opens an interactive menu listing every snapshot
+/// recorded for the current feature to choose from instead. When the comment is
+/// omitted, prompts for it inline, pre-filled with the current comment.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let feature_id = current_feature_id(session)?;
-    let version = parse_version(args, "SNAPSHOT describe <version> [comment]")?;
-
     let ctx = session.context.read().unwrap();
+
+    let version: i32 = match args.get(1) {
+        Some(v) => v
+            .to_string()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Version must be a number."))?,
+        None => {
+            let path = ctx
+                .env_resource()
+                .subpath(format!("/features/{feature_id}/snapshots"));
+            let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+
+            if snapshots.is_empty() {
+                bail!("No snapshots recorded yet for this feature.");
+            }
+
+            let rows: Vec<(String, String)> = snapshots
+                .iter()
+                .map(|s| {
+                    (
+                        format!("v{} ({})", s.version, s.created_at),
+                        s.comment.clone().unwrap_or_default(),
+                    )
+                })
+                .collect();
+            let options: Vec<(String, i32)> = menu::align_rows(&rows)
+                .into_iter()
+                .zip(snapshots.iter().map(|s| s.version))
+                .collect();
+
+            menu::select("Describe which snapshot", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No snapshot selected."))?
+        }
+    };
+
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots/{version}"));
@@ -112,7 +149,13 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         Some(c) => c.to_string(),
         None => {
             let current: Snapshot = ctx.client.get(path.clone())?;
-            open_in_editor(current.comment.as_deref().unwrap_or(""))?
+            let Some(edited) =
+                prompt_line("New comment", current.comment.as_deref().unwrap_or(""))?
+            else {
+                println!("Cancelled.");
+                return Ok(());
+            };
+            edited
         }
     };
 

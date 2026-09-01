@@ -11,7 +11,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         internal::{effectives as effective, index, stage},
-        open_in_editor,
+        prompt_line,
     },
     printer::{
         menu,
@@ -273,9 +273,9 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `[name]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
-/// name so it can be edited interactively. Unlike the description, the name can't be
-/// cleared - an empty result is rejected.
+/// If omitted, prompts inline pre-filled with the segment's current (or already-staged)
+/// name so it can be edited in place. Unlike the description, the name can't be cleared -
+/// an empty result is rejected.
 pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -297,7 +297,10 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
                 })
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().name.as_str());
 
-            let edited = open_in_editor(current)?;
+            let Some(edited) = prompt_line("New name", current)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             if edited == current {
                 println!("No changes made.");
                 return Ok(());
@@ -330,8 +333,8 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `[description]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the segment's current (or already-staged)
-/// description so it can be edited interactively; leaving it blank clears the description.
+/// If omitted, prompts inline pre-filled with the segment's current (or already-staged)
+/// description so it can be edited in place; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -353,7 +356,10 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 })
                 .unwrap_or_else(|| ctx.segment.as_ref().unwrap().description.as_deref());
 
-            let edited = open_in_editor(current.unwrap_or(""))?;
+            let Some(edited) = prompt_line("New description", current.unwrap_or(""))? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             let new_desc = (!edited.is_empty()).then_some(edited);
 
             if new_desc.as_deref() == current {

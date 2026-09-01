@@ -4,7 +4,7 @@ use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
 use crate::{
-    handlers::{internal::effectives as effective, open_in_editor},
+    handlers::{internal::effectives as effective, prompt_line},
     printer::{menu, tabular::Tabular},
 };
 
@@ -159,56 +159,53 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
 /// Stage a group description change.
 ///
-/// Expected args: `<label> [description]`
+/// Expected args: `[label] [description]`
 ///
-/// If the description is omitted, opens `$EDITOR` pre-filled with the group's current (or
-/// already-staged) description so it can be edited interactively; leaving it blank clears
-/// the description.
+/// When the label is omitted, opens an interactive menu listing every group in the
+/// current segment to choose from instead. When the description is omitted, prompts for
+/// it inline, pre-filled with the group's current (or already-staged) description;
+/// leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let Some(label) = args.get(1) else {
-        bail!("No group label provided. Use: `GROUP describe <label> [description]`.");
-    };
-    let label: &str = label;
-
     let mut ctx = session.context.write().unwrap();
-
-    if !ctx
+    let segment = ctx
         .segment
         .as_ref()
-        .is_some_and(|s| s.groups.iter().any(|g| g.label == label))
-    {
-        bail!("Group '{label}' not found in current segment.");
-    }
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(segment, patch);
+
+    let label = match args.get(1) {
+        Some(label) => label.to_string(),
+        None => {
+            let options = group_menu_options(&eff);
+            if options.is_empty() {
+                bail!("No groups to describe. Use `GROUP add` first.");
+            }
+            menu::select("Describe which group", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No group selected."))?
+        }
+    };
+
+    let label: &str = &label;
+    let current: Option<String> = eff
+        .groups
+        .iter()
+        .find(|g| g.label == label && !g.is_deleted)
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found in current segment."))?
+        .description
+        .clone();
 
     let desc = match args.get(2) {
         Some(d) => Some(d.to_string()),
         None => {
-            let current: Option<&str> = ctx
-                .segment_patch
-                .as_ref()
-                .and_then(|p| {
-                    p.ops.iter().find_map(|op| match op {
-                        SegmentPatchOp::SetGroupDescription {
-                            label: l,
-                            description,
-                        } if l == label => Some(description.as_deref()),
-                        _ => None,
-                    })
-                })
-                .unwrap_or_else(|| {
-                    ctx.segment
-                        .as_ref()
-                        .unwrap()
-                        .groups
-                        .iter()
-                        .find(|g| g.label == label)
-                        .and_then(|g| g.description.as_deref())
-                });
-
-            let edited = open_in_editor(current.unwrap_or(""))?;
+            let Some(edited) = prompt_line("New description", current.as_deref().unwrap_or(""))?
+            else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             let new_desc = (!edited.is_empty()).then_some(edited);
 
-            if new_desc.as_deref() == current {
+            if new_desc == current {
                 println!("No changes made.");
                 return Ok(());
             }

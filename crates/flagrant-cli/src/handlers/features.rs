@@ -11,7 +11,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         internal::{concat_values_for_arg, index, stage},
-        open_in_editor,
+        prompt_line,
     },
     printer::tabular::{
         Tabular,
@@ -40,8 +40,8 @@ fn fetch_overrides(feature_id: i32, session: &Session<Connection>) -> Vec<Featur
 /// Expected args: `<feature> [value] [description]`
 ///
 /// `value` is parsed as a typed [`VariantValue`] (e.g. `json::{banner: true}`, `text::hi`);
-/// if omitted, an editor is opened to enter the value interactively. The feature is
-/// created inactive and in a disabled state.
+/// if omitted, prompts for it inline. The feature is created inactive and in a disabled
+/// state.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         stage::ensure_no_pending(session)?;
@@ -51,7 +51,13 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             let res = ctx.env_resource();
             let val = match args.get(2) {
                 Some(a) => a.to_string(),
-                None => open_in_editor("")?,
+                None => match prompt_line("New value", "")? {
+                    Some(v) => v,
+                    None => {
+                        println!("Cancelled.");
+                        return Ok(());
+                    }
+                },
             };
 
             let parsed = val.parse().unwrap_or_else(|_| VariantValue::build(&val));
@@ -83,8 +89,8 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `[name]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the feature's current (or already-staged)
-/// name so it can be edited interactively.
+/// If omitted, prompts inline pre-filled with the feature's current (or already-staged)
+/// name so it can be edited in place.
 pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -101,7 +107,10 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
                 .and_then(|p| p.name.as_deref())
                 .unwrap_or_else(|| ctx.feature.as_ref().unwrap().name.as_str());
 
-            let edited = open_in_editor(current)?;
+            let Some(edited) = prompt_line("New name", current)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
             if edited == current {
                 println!("No changes made.");
                 return Ok(());
@@ -123,8 +132,8 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Expected args: `[description]`
 ///
-/// If omitted, opens `$EDITOR` pre-filled with the feature's current (or already-staged)
-/// description so it can be edited interactively; leaving it blank clears the description.
+/// If omitted, prompts inline pre-filled with the feature's current (or already-staged)
+/// description so it can be edited in place; leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -141,7 +150,10 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
                 .and_then(|p| p.description.as_deref())
                 .unwrap_or_else(|| ctx.feature.as_ref().unwrap().description.as_str());
 
-            let edited = open_in_editor(current)?;
+            let Some(edited) = prompt_line("New description", current)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
 
             if edited == current {
                 println!("No changes made.");

@@ -9,7 +9,7 @@ use flagrant_types::{
 use crate::{
     handlers::{
         internal::{effectives as effective, index, stage},
-        open_in_editor,
+        prompt_line,
     },
     printer::{menu, tabular::Tabular},
 };
@@ -18,10 +18,9 @@ use crate::{
 ///
 /// Expects args: `<weight> [value]`
 ///
-/// If value is omitted, opens `$EDITOR` for interactive input. Fails if the
-/// new weight would push total non-control weight over 100%, or if the value is typed
-/// (explicitly via `json::...`, or auto-detected from a leading `{`) as `json` but doesn't
-/// actually parse as valid JSON.
+/// If value is omitted, prompts for it inline. Fails if the new weight would push total
+/// non-control weight over 100%, or if the value is typed (explicitly via `json::...`, or
+/// auto-detected from a leading `{`) as `json` but doesn't actually parse as valid JSON.
 pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -34,7 +33,13 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     };
     let value = match args.get(2) {
         Some(v) => v.to_string(),
-        None => open_in_editor("")?,
+        None => match prompt_line("New value", "")? {
+            Some(v) => v,
+            None => {
+                println!("Cancelled.");
+                return Ok(());
+            }
+        },
     };
 
     if !(0..=100).contains(&weight) {
@@ -171,25 +176,46 @@ fn fetch_pinned_identities(variant_id: i32, session: &Session<Connection>) -> Ve
 
 /// Stage a value change for an existing variant identified by its display index.
 ///
-/// Expected args: `[value]`
+/// Expected args: `[index] [value]`
 ///
-/// If the value argument is omitted, opens `$EDITOR` pre-filled with the current
-/// value so the user can edit it interactively.
+/// When the index is omitted, opens an interactive menu listing every variant to choose
+/// from instead. When the value is omitted, prompts for it inline, pre-filled with the
+/// variant's current value.
 pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
         bail!("Not within a feature context.");
     }
+
     let variant_ref = match args.get(1) {
         Some(idx) => index::resolve(idx.parse::<usize>()?, &ctx)?,
-        None => bail!("No variant index provided."),
+        None => {
+            let eff = effective::effective_variants(
+                ctx.feature.as_ref().unwrap(),
+                ctx.feature_patch.as_ref(),
+            );
+            let options = variant_menu_options(&eff, true);
+            if options.is_empty() {
+                bail!("No variants to modify. Use `VARIANT add` first.");
+            }
+            let index = menu::select("Change value of which variant", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No variant selected."))?;
+            index::resolve(index, &ctx)?
+        }
     };
+
+    let current = current_variant_value(&variant_ref, &ctx);
     let raw = match args.get(2) {
         Some(v) => v.to_string(),
-        None => open_in_editor(current_variant_value(&variant_ref, &ctx).decompose().1)?,
+        None => match prompt_line("New value", current.decompose().1)? {
+            Some(v) => v,
+            None => {
+                println!("Cancelled.");
+                return Ok(());
+            }
+        },
     };
-    let current = current_variant_value(&variant_ref, &ctx);
     let vv = raw
         .parse::<VariantValue>()
         .unwrap_or_else(|_| current.clone_with(raw.trim()));

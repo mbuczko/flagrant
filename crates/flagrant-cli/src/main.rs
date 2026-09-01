@@ -261,7 +261,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Variant.op_in_context(
             "value",
-            "index value",
+            "[index] [value]",
             handlers::variants::value,
             in_context!(feature_ctx),
         ),
@@ -314,7 +314,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Group.op_in_context(
             "describe",
-            "label [description]",
+            "[label] [description]",
             handlers::groups::describe,
             in_context!(segment_ctx),
         ),
@@ -375,7 +375,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Snapshot.op_in_context(
             "describe",
-            "version [comment]",
+            "[version] [comment]",
             handlers::snapshots::describe,
             in_context!(feature_ctx),
         ),

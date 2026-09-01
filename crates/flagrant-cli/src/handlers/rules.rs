@@ -5,7 +5,7 @@ use flagrant_types::{Comparator, SegmentRule, Subject, payload::SegmentPatchOp};
 use strum::IntoEnumIterator;
 
 use crate::{
-    handlers::internal::{effectives as effective, open_in_editor},
+    handlers::internal::{effectives as effective, prompt_line},
     printer::{menu, tabular::Tabular},
 };
 
@@ -170,7 +170,13 @@ fn rule_delete_menu_options(
         .filter(|(_, (_, er))| !er.is_deleted)
         .map(|(i, (r, _))| {
             (
-                format!("rule #{} : {} {} {}", i + 1, r.subject, r.comparator, r.value),
+                format!(
+                    "rule #{} : {} {} {}",
+                    i + 1,
+                    r.subject,
+                    r.comparator,
+                    r.value
+                ),
                 (i + 1, r.id),
             )
         })
@@ -220,15 +226,21 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<group-label> <rule-index> [value]`
 ///
-/// If the value argument is omitted, opens `$EDITOR` pre-filled with the rule's current
-/// (or already-staged) value so it can be edited interactively. If the rule's effective
-/// comparator is `in`/`not-in`, the value must parse as a JSON array.
+/// If the value argument is omitted, prompts for it inline, pre-filled with the rule's
+/// current (or already-staged) value. If the rule's effective comparator is `in`/`not-in`,
+/// the value must parse as a JSON array.
 pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (label, index, rule_id, effective_comparator, effective_value) =
         resolve_rule(args, session)?;
     let value = match args.get(3) {
         Some(v) => v.to_string(),
-        None => open_in_editor(&effective_value)?,
+        None => match prompt_line("New value", &effective_value)? {
+            Some(v) => v,
+            None => {
+                println!("Cancelled.");
+                return Ok(());
+            }
+        },
     }
     .trim()
     .to_string();
