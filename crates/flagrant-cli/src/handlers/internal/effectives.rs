@@ -86,6 +86,8 @@ pub(crate) struct EffectiveGroup {
     pub is_deleted: bool,
     /// True when a staged `SetGroupDescription` op changed the committed description.
     pub description_modified: bool,
+    /// True when a staged `SetGroupConnector` op changed the committed connector.
+    pub connector_modified: bool,
 }
 
 pub(crate) struct EffectiveSegment {
@@ -396,6 +398,16 @@ pub(crate) fn effective_segment(
         })
         .collect();
 
+    let group_connector_overrides: HashMap<&str, &GroupConnector> = ops
+        .iter()
+        .filter_map(|op| match op {
+            SegmentPatchOp::SetGroupConnector { label, connector } => {
+                Some((label.as_str(), connector))
+            }
+            _ => None,
+        })
+        .collect();
+
     let mut staged_rules_by_label: HashMap<&str, Vec<&SegmentPatchOp>> = HashMap::new();
     for op in ops {
         if let SegmentPatchOp::AddRule { group_label, .. } = op {
@@ -420,6 +432,7 @@ pub(crate) fn effective_segment(
                         !rule_is_deleted && rule_value_overrides.contains_key(&r.id);
                     let comparator_modified =
                         !rule_is_deleted && rule_comparator_overrides.contains_key(&r.id);
+
                     EffectiveRule {
                         subject: r.subject.clone(),
                         comparator: rule_comparator_overrides
@@ -472,14 +485,25 @@ pub(crate) fn effective_segment(
                 g.description.clone()
             };
 
+            let connector_modified =
+                !is_deleted && group_connector_overrides.contains_key(g.label.as_str());
+            let connector = if connector_modified {
+                group_connector_overrides
+                    .get(g.label.as_str())
+                    .map(|c| (*c).clone())
+            } else {
+                g.connector.clone()
+            };
+
             EffectiveGroup {
                 label: g.label.clone(),
                 description,
-                connector: g.connector.clone(),
+                connector,
                 rules,
                 is_staged_add: false,
                 is_deleted,
                 description_modified,
+                connector_modified,
             }
         })
         .collect();
@@ -545,14 +569,28 @@ pub(crate) fn effective_segment(
             };
             effective_count += 1;
 
+            // A later `SetGroupDescription`/`SetGroupConnector` op in the same patch,
+            // targeting this group's predicted label, overlays on top of the `AddGroup`
+            // op's own initial value - so `GROUP describe`/`GROUP joiner` behave the same
+            // whether the group is already committed or still staged.
+            let description = match group_desc_overrides.get(label.as_str()) {
+                Some(d) => d.map(|s| s.to_string()),
+                None => group_desc.clone(),
+            };
+            let connector = match group_connector_overrides.get(label.as_str()) {
+                Some(c) => Some((*c).clone()),
+                None => effective_connector,
+            };
+
             groups.push(EffectiveGroup {
                 label,
-                description: group_desc.clone(),
-                connector: effective_connector,
+                description,
+                connector,
                 rules,
                 is_staged_add: true,
                 is_deleted: false,
                 description_modified: false,
+                connector_modified: false,
             });
         }
     }

@@ -77,6 +77,8 @@ impl Tabular for Segment {
                     sym.red()
                 } else if group.is_staged_add {
                     sym.green()
+                } else if group.connector_modified {
+                    sym.yellow()
                 } else {
                     sym.bright_cyan()
                 };
@@ -180,7 +182,7 @@ fn overridden_variant_parts(weights: &[OverriddenVariant]) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn format_connector(connector: &GroupConnector) -> &'static str {
+pub(crate) fn format_connector(connector: &GroupConnector) -> &'static str {
     match connector {
         GroupConnector::And => "⊕ AND",
         GroupConnector::AndNot => "⊖ AND NOT",

@@ -232,7 +232,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 Ok(match op {
                     "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
-                    "delete" | "describe" | "show" if arg_n == 2 => {
+                    "delete" | "describe" | "rejoin" | "show" if arg_n == 2 => {
                         filter_by_prefix(&["group-"], prefix)
                     }
                     _ => vec![],

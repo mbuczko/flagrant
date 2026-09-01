@@ -324,7 +324,16 @@ fn main() -> anyhow::Result<()> {
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
-        Command::Group.args_in_context("add · delete · describe · show", in_context!(segment_ctx)),
+        Command::Group.op_in_context(
+            "rejoin",
+            "[label] [and|and-not]",
+            handlers::groups::rejoin,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.args_in_context(
+            "add · delete · describe · rejoin · show",
+            in_context!(segment_ctx),
+        ),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",

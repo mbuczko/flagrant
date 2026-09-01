@@ -5,7 +5,10 @@ use flagrant_types::{GroupConnector, Segment, payload::SegmentPatchOp};
 
 use crate::{
     handlers::{internal::effectives as effective, prompt_line},
-    printer::{menu, tabular::Tabular},
+    printer::{
+        menu,
+        tabular::{Tabular, segment::format_connector},
+    },
 };
 
 /// Stage a group addition for the current segment.
@@ -246,6 +249,120 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         patch.ops.push(op);
     }
     Ok(())
+}
+
+/// Stage a group connector (joiner) change.
+///
+/// Expected args: `[label] [and|and-not]`
+///
+/// When the label is omitted, opens an interactive menu listing every group in the
+/// current segment that isn't the first group to choose from instead - the first group
+/// has no connector, so it's never offered. When the connector is omitted, opens an
+/// interactive menu listing `and`/`and-not` (the current one marked explicitly).
+pub fn rejoin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let mut ctx = session.context.write().unwrap();
+    let segment = ctx
+        .segment
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(segment, patch);
+
+    let label = match args.get(1) {
+        Some(label) => label.to_string(),
+        None => {
+            let options = joiner_menu_options(&eff);
+            if options.is_empty() {
+                bail!("No groups with a joiner to change. The first group has none.");
+            }
+            menu::select("Change joiner of which group", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No group selected."))?
+        }
+    };
+
+    let label: &str = &label;
+    let current = eff
+        .groups
+        .iter()
+        .find(|g| g.label == label && !g.is_deleted)
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found in current segment."))?
+        .connector
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("The first group has no joiner to change."))?;
+
+    let connector = match args.get(2) {
+        Some(c) => parse_connector(c)?,
+        None => {
+            let options: Vec<(String, GroupConnector)> =
+                [GroupConnector::And, GroupConnector::AndNot]
+                    .into_iter()
+                    .map(|c| {
+                        let label = if c == current {
+                            format!("{} (current)", format_connector(&c))
+                        } else {
+                            format_connector(&c).to_string()
+                        };
+                        (label, c)
+                    })
+                    .collect();
+
+            let default = options.iter().position(|(_, c)| *c == current);
+            menu::select("Choose a joiner", &options, default)?
+                .ok_or_else(|| anyhow::anyhow!("No joiner selected."))?
+        }
+    };
+
+    println!(
+        "Staged: [{label}] joiner = {}",
+        format_connector(&connector)
+    );
+
+    let op = SegmentPatchOp::SetGroupConnector {
+        label: label.to_string(),
+        connector,
+    };
+    let patch = ctx.get_or_init_segment_patch();
+
+    if let Some(existing) = patch
+        .ops
+        .iter_mut()
+        .find(|o| matches!(o, SegmentPatchOp::SetGroupConnector { label: l, .. } if l == label))
+    {
+        *existing = op;
+    } else {
+        patch.ops.push(op);
+    }
+    Ok(())
+}
+
+/// Parses a joiner token (`and`/`and-not`, also accepting the underscore alias).
+fn parse_connector(s: &str) -> anyhow::Result<GroupConnector> {
+    match s.to_lowercase().as_str() {
+        "and" => Ok(GroupConnector::And),
+        "and-not" | "and_not" => Ok(GroupConnector::AndNot),
+        _ => bail!("Unknown joiner '{s}'. Expected: and, and-not"),
+    }
+}
+
+/// Builds the `GROUP joiner` group-picker menu options: one row per non-deleted effective
+/// group that isn't the first group (identified by having no connector).
+fn joiner_menu_options(eff: &effective::EffectiveSegment) -> Vec<(String, String)> {
+    let mut rows = Vec::new();
+    let mut labels = Vec::new();
+
+    for g in eff
+        .groups
+        .iter()
+        .filter(|g| !g.is_deleted && g.connector.is_some())
+    {
+        rows.push((
+            format!("[{}]", g.label),
+            g.description.clone().unwrap_or_default(),
+        ));
+        labels.push(g.label.clone());
+    }
+
+    menu::align_rows(&rows).into_iter().zip(labels).collect()
 }
 
 /// Builds the `GROUP delete` menu options: one row per non-deleted effective group,

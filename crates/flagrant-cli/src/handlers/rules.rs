@@ -357,7 +357,13 @@ fn resolve_rule(
         RuleRef::Committed(rule_id)
     };
 
-    Ok((label, index, target, rule.comparator.clone(), rule.value.clone()))
+    Ok((
+        label,
+        index,
+        target,
+        rule.comparator.clone(),
+        rule.value.clone(),
+    ))
 }
 
 fn parse_subject(s: &str) -> anyhow::Result<Subject> {

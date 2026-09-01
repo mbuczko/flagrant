@@ -33,6 +33,8 @@ impl Tabular for EffectiveGroup {
             sym.red().to_string()
         } else if group.is_staged_add {
             sym.green().to_string()
+        } else if group.connector_modified {
+            sym.yellow().to_string()
         } else if sym.len() >= 10 {
             sym.dimmed().to_string()
         } else {
@@ -77,7 +79,8 @@ impl Tabular for EffectiveGroup {
 pub(super) fn group_body_lines(group: &EffectiveGroup, force_deleted: bool) -> (Vec<String>, bool) {
     let is_deleted = group.is_deleted || force_deleted;
     let mut lines: Vec<String> = Vec::new();
-    let mut staged = is_deleted || group.is_staged_add || group.description_modified;
+    let mut staged =
+        is_deleted || group.is_staged_add || group.description_modified || group.connector_modified;
 
     let label_colored = if is_deleted {
         group.label.red()

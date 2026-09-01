@@ -183,7 +183,11 @@ pub(crate) fn stage_rule_value(patch: &mut SegmentPatch, target: &RuleRef, value
 
 /// Stages a `SetRuleComparator` op for a committed rule, or updates the comparator of a
 /// staged `AddRule` op in place.
-pub(crate) fn stage_rule_comparator(patch: &mut SegmentPatch, target: &RuleRef, comparator: Comparator) {
+pub(crate) fn stage_rule_comparator(
+    patch: &mut SegmentPatch,
+    target: &RuleRef,
+    comparator: Comparator,
+) {
     match target {
         RuleRef::Committed(rule_id) => {
             let op = SegmentPatchOp::SetRuleComparator {
@@ -216,7 +220,9 @@ pub(crate) fn stage_rule_comparator(patch: &mut SegmentPatch, target: &RuleRef, 
 pub(crate) fn discard_rule(patch: &mut SegmentPatch, target: &RuleRef) {
     match target {
         RuleRef::Committed(rule_id) => {
-            patch.ops.push(SegmentPatchOp::DeleteRule { rule_id: *rule_id });
+            patch
+                .ops
+                .push(SegmentPatchOp::DeleteRule { rule_id: *rule_id });
         }
         RuleRef::Staged {
             group_label,
@@ -234,7 +240,11 @@ pub(crate) fn discard_rule(patch: &mut SegmentPatch, target: &RuleRef) {
 /// staged rules to a group's effective rule list in the same order their `AddRule` ops
 /// appear in `ops`, so `position` (computed by `rules::resolve_rule`) and the op found here
 /// always agree.
-fn staged_add_rule_op_index(patch: &SegmentPatch, group_label: &str, position: usize) -> Option<usize> {
+fn staged_add_rule_op_index(
+    patch: &SegmentPatch,
+    group_label: &str,
+    position: usize,
+) -> Option<usize> {
     let mut add_count = 0;
     patch.ops.iter().position(|op| {
         matches!(op, SegmentPatchOp::AddRule { group_label: gl, .. } if gl == group_label) && {

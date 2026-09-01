@@ -208,6 +208,12 @@ pub enum SegmentPatchOp {
         label: String,
         description: Option<String>,
     },
+    /// Changes a non-head group's connector (AND/AND NOT). Rejected for the segment's
+    /// first group, which has no connector by definition.
+    SetGroupConnector {
+        label: String,
+        connector: GroupConnector,
+    },
     AddRule {
         group_label: String,
         subject: Subject,

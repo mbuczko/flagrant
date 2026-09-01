@@ -25,7 +25,10 @@ pub enum VariantRef {
 #[derive(Debug, Clone)]
 pub enum RuleRef {
     Committed(i32),
-    Staged { group_label: String, position: usize },
+    Staged {
+        group_label: String,
+        position: usize,
+    },
 }
 
 /// An environment reference used to build the connection URL - either a

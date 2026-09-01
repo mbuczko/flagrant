@@ -302,6 +302,28 @@ pub async fn set_group_description(
     Ok(())
 }
 
+/// Changes a non-head group's connector. Callers must ensure `group_id` doesn't belong to
+/// the segment's first (head) group - it has no connector by definition, enforced the same
+/// way at creation (`add_group`) and after deletion (`delete_group`'s
+/// `clear_initial_group_connector`).
+///
+/// Flipping AND/AND NOT changes which identities the segment matches, so - like
+/// `add_group`/`delete_group` - this reconciles every scope the segment currently
+/// overrides.
+pub async fn set_group_connector(
+    conn: &mut SqliteConnection,
+    segment_id: i32,
+    group_id: i32,
+    connector: GroupConnector,
+) -> anyhow::Result<()> {
+    SQLSegments::update_group_connector::<_>(&mut *conn, params![group_id, connector])
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not update group connector", e))?;
+
+    reconcile_rules_changed(conn, segment_id).await?;
+    Ok(())
+}
+
 /// Applies a batch of staged operations to a segment and returns the updated segment.
 ///
 /// Each op is executed immediately against the DB; the in-memory `segment` is kept in
@@ -375,6 +397,22 @@ pub async fn patch(
 
                 set_group_description(conn, group.id, description.clone()).await?;
                 group.description = description;
+            }
+            SegmentPatchOp::SetGroupConnector { label, connector } => {
+                if segment.groups.first().is_some_and(|g| g.label == label) {
+                    return Err(FlagrantError::BadRequest(
+                        "The first group has no connector to change",
+                    )
+                    .into());
+                }
+                let group = segment
+                    .groups
+                    .iter_mut()
+                    .find(|g| g.label == label)
+                    .ok_or_else(|| FlagrantError::NotFound("Group not found"))?;
+
+                set_group_connector(conn, segment.id, group.id, connector.clone()).await?;
+                group.connector = Some(connector);
             }
             SegmentPatchOp::AddRule {
                 group_label,

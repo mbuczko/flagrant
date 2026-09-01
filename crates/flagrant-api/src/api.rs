@@ -96,22 +96,23 @@ pub async fn resolve_features(
 
     #[cfg(feature = "redis")]
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key)
-        && let Some(cached) = cache.get(key).await {
-            let response = cached
-                .into_iter()
-                // A valid token only ever adds srv-only features to the response - it never
-                // narrows the response to just those.
-                .filter(|f| include_srv || !f.is_srv)
-                .map(|f| FeatureResponse {
-                    feature_id: f.feature_id,
-                    name: f.name,
-                    value: f.value,
-                    is_enabled: f.is_enabled,
-                    is_srv: f.is_srv,
-                })
-                .collect();
-            return Ok(response);
-        }
+        && let Some(cached) = cache.get(key).await
+    {
+        let response = cached
+            .into_iter()
+            // A valid token only ever adds srv-only features to the response - it never
+            // narrows the response to just those.
+            .filter(|f| include_srv || !f.is_srv)
+            .map(|f| FeatureResponse {
+                feature_id: f.feature_id,
+                name: f.name,
+                value: f.value,
+                is_enabled: f.is_enabled,
+                is_srv: f.is_srv,
+            })
+            .collect();
+        return Ok(response);
+    }
 
     let project = project::get_by_name(conn, project_name).await?;
     let env = environment::get_by_name(conn, &project, env_name).await?;
