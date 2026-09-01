@@ -132,8 +132,8 @@ async fn segment_override_writes_into_variant_weights_alongside_organic_weights(
 
 /// Creating a new variant for a feature that's already segment-overridden should seed that
 /// variant into the overriding segment at 0% weight - materializing it there (so it shows
-/// up in listings/the editor) without disturbing the segment's control-variant remainder,
-/// since a 0-weight row doesn't change the sum it's computed from.
+/// up in listings/menu) without disturbing the segment's control-variant remainder, since
+/// a 0-weight row doesn't change the sum it's computed from.
 #[sqlx::test]
 async fn creating_a_variant_seeds_it_into_overriding_segments_at_zero_weight(
     mut conn: PoolConnection<Sqlite>,

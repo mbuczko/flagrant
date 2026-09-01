@@ -339,10 +339,11 @@ pub fn server_side(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
 
 /// Stage adding or removing one or more tags on the current feature.
 ///
-/// Expected args: `tag1 [tag2 ...]`
+/// Expected args: `[tag1 [tag2 ...]]`
 ///
 /// Tags are separated by whitespace. Prefix a tag with `-` to remove it instead of
-/// adding it (e.g. `FEATURE tag experimental -ui`).
+/// adding it (e.g. `FEATURE tag experimental -ui`). If no tags are given, prompts for
+/// them inline instead.
 pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
@@ -350,7 +351,18 @@ pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
     }
 
-    let ops = parse_tag_ops(&args[1..]);
+    let ops = if args.len() > 1 {
+        parse_tag_ops(&args[1..])
+    } else {
+        let Some(input) = prompt_line("Tags (space/comma-separated, prefix with - to remove)", "")?
+        else {
+            println!("Cancelled.");
+            return Ok(());
+        };
+        let tokens: Vec<Arg> = input.split_whitespace().map(|t| Arg(t, 0)).collect();
+        parse_tag_ops(&tokens)
+    };
+
     if ops.is_empty() {
         bail!("No tags provided.");
     }

@@ -198,7 +198,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "tag",
-            "tag1 [tag2 ...]",
+            "[tag1 [tag2 ...]]",
             handlers::features::tag,
             in_context!(feature_ctx),
         ),
