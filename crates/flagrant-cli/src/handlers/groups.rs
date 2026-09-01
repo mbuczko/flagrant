@@ -58,12 +58,11 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Print details of a single group, overlaying any staged changes.
 ///
-/// Expected args: `<label>`
+/// Expected args: `[label]`
+///
+/// When the label is omitted, opens an interactive menu listing every group in the
+/// current segment to choose from instead.
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    let label = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("No group label provided. Use: `GROUP show <label>`."))?;
-
     let ctx = session.context.read().unwrap();
     let segment = ctx
         .segment
@@ -71,10 +70,23 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
+
+    let label = match args.get(1) {
+        Some(label) => label.to_string(),
+        None => {
+            let options = group_menu_options(&eff);
+            if options.is_empty() {
+                bail!("No groups to show. Use `GROUP add` first.");
+            }
+            menu::select("Show which group", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No group selected."))?
+        }
+    };
+
     let group = eff
         .groups
         .iter()
-        .find(|g| g.label == label.as_ref())
+        .find(|g| g.label == label)
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
 
     group.display(None, &());

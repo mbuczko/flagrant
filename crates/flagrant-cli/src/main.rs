@@ -308,7 +308,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Group.op_in_context(
             "show",
-            "label",
+            "[label]",
             handlers::groups::show,
             in_context!(segment_ctx),
         ),
