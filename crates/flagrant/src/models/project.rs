@@ -30,7 +30,7 @@ pub async fn create_with_environment(
             let env = environment::create(
                 conn,
                 &project,
-                environment_name.unwrap_or_else(|| "base".to_string()),
+                environment_name.unwrap_or_else(|| "dev".to_string()),
                 None,
                 None,
             )

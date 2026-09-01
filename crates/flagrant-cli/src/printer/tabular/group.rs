@@ -2,7 +2,6 @@ use colored::Colorize;
 use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Overflow, TitleAlign, Width};
 
 use super::Tabular;
-use super::rule::subject_label;
 use super::segment::format_connector;
 use crate::{
     handlers::internal::effectives::{EffectiveGroup, EffectiveRule},
@@ -121,7 +120,7 @@ pub(super) fn group_body_lines(group: &EffectiveGroup, force_deleted: bool) -> (
         let max_subject = group
             .rules
             .iter()
-            .map(|r| subject_label(&r.subject).len())
+            .map(|r| r.subject.to_string().len())
             .max()
             .unwrap_or(0);
 
@@ -156,7 +155,7 @@ fn rule_line(
     group_deleted: bool,
     max_subject: usize,
 ) -> (String, bool) {
-    let subject = subject_label(&rule.subject);
+    let subject = rule.subject.to_string();
     let cmp = rule.comparator.to_string();
 
     let (pipe, idx_str, subject_s, cmp_s, val_s, staged) = if group_deleted || rule.is_deleted {

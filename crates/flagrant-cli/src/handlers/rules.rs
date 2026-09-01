@@ -1,11 +1,11 @@
 use anyhow::bail;
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
-use flagrant_types::{Comparator, Subject, payload::SegmentPatchOp};
+use flagrant_types::{Comparator, SegmentRule, Subject, payload::SegmentPatchOp};
 use strum::IntoEnumIterator;
 
 use crate::{
-    handlers::internal::{effectives as effective, open_in_editor},
+    handlers::internal::{effectives as effective, prompt_line},
     printer::{menu, tabular::Tabular},
 };
 
@@ -66,38 +66,70 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
 /// Stage a rule deletion by 1-based index within a group.
 ///
-/// Expected args: `<group-label> <rule-index>`
+/// Expected args: `[group-label] [rule-index]`
+///
+/// When the group label is omitted, opens an interactive menu listing every group in
+/// the current segment to choose from. When the rule index is omitted (with or without
+/// an explicit group label), opens an interactive menu listing that group's rules
+/// instead (rules already staged for deletion are skipped).
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let segment = ctx
         .segment
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Not in a segment context."))?;
-    let label = args
-        .get(1)
-        .ok_or_else(|| anyhow::anyhow!("Missing group label."))?;
-    let index_str = args
-        .get(2)
-        .ok_or_else(|| anyhow::anyhow!("Missing rule index."))?;
+    let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
+    let eff = effective::effective_segment(segment, patch);
 
-    let index: usize = index_str.parse::<usize>().map_err(|_| {
-        anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
-    })?;
-
-    if index == 0 {
-        bail!("Rule index is 1-based; use 1 for the first rule.");
-    }
+    let label = match args.get(1) {
+        Some(label) => label.to_string(),
+        None => {
+            let options = rule_group_menu_options(&eff);
+            if options.is_empty() {
+                bail!("No groups with rules to delete. Use `GROUP add` first.");
+            }
+            menu::select("Delete a rule from which group", &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No group selected."))?
+        }
+    };
 
     let group = segment
         .groups
         .iter()
-        .find(|g| g.label == label.as_ref())
+        .find(|g| g.label == label)
         .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
-    let rule_id = group
-        .rules
-        .get(index - 1)
-        .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{}].", label))?
-        .id;
+    let eff_group = eff
+        .groups
+        .iter()
+        .find(|g| g.label == label)
+        .ok_or_else(|| anyhow::anyhow!("Group '{label}' not found."))?;
+
+    let (index, rule_id) = match args.get(2) {
+        Some(index_str) => {
+            let index: usize = index_str.parse::<usize>().map_err(|_| {
+                anyhow::anyhow!("Rule index must be a positive integer, got '{index_str}'.")
+            })?;
+
+            if index == 0 {
+                bail!("Rule index is 1-based; use 1 for the first rule.");
+            }
+
+            let rule_id = group
+                .rules
+                .get(index - 1)
+                .ok_or_else(|| anyhow::anyhow!("No rule at index {index} in [{}].", label))?
+                .id;
+            (index, rule_id)
+        }
+        None => {
+            let options = rule_delete_menu_options(&group.rules, &eff_group.rules);
+            if options.is_empty() {
+                bail!("No rules to delete in [{label}]. Use `RULE add` first.");
+            }
+            menu::select(&format!("Delete which rule from [{label}]"), &options, None)?
+                .ok_or_else(|| anyhow::anyhow!("No rule selected."))?
+        }
+    };
 
     drop(ctx);
 
@@ -108,6 +140,47 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 
     println!("Staged: delete rule #{index} from [{}]", label);
     Ok(())
+}
+
+/// Builds the `RULE delete` group-picker menu options: one row per non-deleted,
+/// non-staged-add effective group - a staged-add group has no committed rules to
+/// delete yet, so it's excluded.
+fn rule_group_menu_options(eff: &effective::EffectiveSegment) -> Vec<(String, String)> {
+    eff.groups
+        .iter()
+        .filter(|g| !g.is_deleted && !g.is_staged_add)
+        .map(|g| (format!("[{}]", g.label), g.label.clone()))
+        .collect()
+}
+
+/// Builds the `RULE delete` rule-picker menu options for a single group: one row per
+/// committed rule not already staged for deletion, labeled with its 1-based index,
+/// subject, comparator and value. `committed_rules` and `eff_rules` must come from the
+/// same group (`effective_segment` preserves committed order before appending staged
+/// adds, so they line up by position). Returns `(1-based index, rule id)` pairs so a
+/// selection round-trips exactly like typing the index.
+fn rule_delete_menu_options(
+    committed_rules: &[SegmentRule],
+    eff_rules: &[effective::EffectiveRule],
+) -> Vec<(String, (usize, i32))> {
+    committed_rules
+        .iter()
+        .zip(eff_rules.iter())
+        .enumerate()
+        .filter(|(_, (_, er))| !er.is_deleted)
+        .map(|(i, (r, _))| {
+            (
+                format!(
+                    "rule #{} : {} {} {}",
+                    i + 1,
+                    r.subject,
+                    r.comparator,
+                    r.value
+                ),
+                (i + 1, r.id),
+            )
+        })
+        .collect()
 }
 
 /// Print details of a single rule within a group, overlaying any staged changes.
@@ -153,15 +226,21 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 ///
 /// Expected args: `<group-label> <rule-index> [value]`
 ///
-/// If the value argument is omitted, opens `$EDITOR` pre-filled with the rule's current
-/// (or already-staged) value so it can be edited interactively. If the rule's effective
-/// comparator is `in`/`not-in`, the value must parse as a JSON array.
+/// If the value argument is omitted, prompts for it inline, pre-filled with the rule's
+/// current (or already-staged) value. If the rule's effective comparator is `in`/`not-in`,
+/// the value must parse as a JSON array.
 pub fn value(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let (label, index, rule_id, effective_comparator, effective_value) =
         resolve_rule(args, session)?;
     let value = match args.get(3) {
         Some(v) => v.to_string(),
-        None => open_in_editor(&effective_value)?,
+        None => match prompt_line("New value", &effective_value)? {
+            Some(v) => v,
+            None => {
+                println!("Cancelled.");
+                return Ok(());
+            }
+        },
     }
     .trim()
     .to_string();

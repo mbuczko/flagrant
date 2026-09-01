@@ -13,5 +13,5 @@ pub mod variants;
 
 pub(crate) mod internal;
 
-pub(crate) use internal::open_in_editor;
+pub(crate) use internal::prompt_line;
 pub(crate) use internal::stage::{commit, discard, reset};

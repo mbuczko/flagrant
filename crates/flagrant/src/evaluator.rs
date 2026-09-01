@@ -16,29 +16,13 @@ use sqlx::SqliteConnection;
 use crate::models::segment;
 
 /// A borrowed view of just the identity data the evaluator needs (value + traits).
-///
-/// Deliberately not `flagrant_types::IdentityWithTraits`: that type owns its `value: String`,
-/// which would force callers to clone it on every evaluation. This runs on the
-/// feature-resolution hot path (once per undistributed feature per request), so callers
-/// build this from data they already hold, borrowed for the duration of one evaluation.
 pub struct IdentityContext<'a> {
     pub value: &'a str,
     pub traits: &'a [IdentityTrait],
 }
 
-/// The value a rule's subject resolves to, for comparison against `SegmentRule.value`.
-///
-/// Distinct from `flagrant_types::TraitValue` on purpose: `TraitValue` is the domain type
-/// for an identity trait's stored value. `Identity`/`Environment` subjects don't resolve to
-/// a trait at all - they read the identity's own value / the environment's name - so
-/// wrapping them in `TraitValue` would misrepresent them as trait data. `ActualValue` is the
-/// evaluator's own "comparable value" shape; a `Trait(name)` subject converts the identity's
-/// `TraitValue` into one.
-///
-/// Borrows rather than owns (so `Str(&'a str)`, not `Str(String)`) so resolving a subject
-/// never needs to clone the identity's value, the environment's name, or a trait's string -
-/// everything it points at already lives in `Environment`/`IdentityContext`/`SegmentRule`
-/// for at least as long as one rule evaluation.
+/// The value a rule's subject (trait, environment, identity) resolves to for
+/// comparison against `SegmentRule.value`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ActualValue<'a> {
     Str(&'a str),
@@ -91,6 +75,7 @@ fn segment_matches(
     identity: &IdentityContext<'_>,
 ) -> bool {
     let mut acc: Option<bool> = None;
+
     for group in &segment.groups {
         let group_match = group_matches(group, environment, identity);
         acc = Some(match &acc {

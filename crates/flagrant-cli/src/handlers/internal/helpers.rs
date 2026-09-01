@@ -37,23 +37,17 @@ pub(crate) fn concat_values_for_arg(arg_name: &str, cmd_args: &[Arg]) -> String 
         .join(",")
 }
 
-/// Opens `$EDITOR` (falling back to `vi`) pre-filled with `content` and returns the
-/// trimmed result after the editor exits. The temp file is removed automatically.
-pub(crate) fn open_in_editor(content: &str) -> anyhow::Result<String> {
-    use std::io::Write;
+/// Prompts inline for a single line of free-text input, pre-filled with `current` so it
+/// can be edited in place.
+///
+/// Returns `Ok(None)` if the user cancels (Ctrl-C/Ctrl-D).
+pub(crate) fn prompt_line(prompt: &str, current: &str) -> anyhow::Result<Option<String>> {
+    let mut rl = rustyline::DefaultEditor::new()?;
 
-    let mut tmp = tempfile::NamedTempFile::new()?;
-    tmp.write_all(content.as_bytes())?;
-
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_owned());
-    let status = std::process::Command::new(&editor)
-        .arg(tmp.path())
-        .status()?;
-
-    if !status.success() {
-        anyhow::bail!("Editor exited with non-zero status.");
+    match rl.readline_with_initial(&format!("{prompt}: "), (current, "")) {
+        Ok(line) => Ok(Some(line.trim().to_string())),
+        Err(rustyline::error::ReadlineError::Interrupted)
+        | Err(rustyline::error::ReadlineError::Eof) => Ok(None),
+        Err(e) => Err(e.into()),
     }
-
-    let edited = std::fs::read_to_string(tmp.path())?;
-    Ok(edited.trim().to_owned())
 }
