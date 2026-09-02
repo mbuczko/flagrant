@@ -35,7 +35,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if in_context {
         let identity = ctx.identity.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-                "Not in an identity context. Set the context with: \"USE @<identity>\" command."
+                "Not in an identity context. Set the context with: \"/IDENTITY <identity>\" command."
             )
         })?;
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
@@ -152,7 +152,7 @@ pub fn drop_matching(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 /// Expected args: `<identity>`
 ///
 /// Switches into the named identity's context first if not already there (same as
-/// `USE @<identity>`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// `/IDENTITY <identity>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this identity is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -193,8 +193,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 ///
 /// Fetches the identity and stores it in the session so that subsequent `IDENTITY
 /// trait` and `OVERRIDE` commands stage changes for it. Fails if there are
-/// uncommitted staged trait changes. Shared entry point used by both the top-level
-/// `USE @identity` and the `USE feature@identity` shortcut.
+/// uncommitted staged trait changes.
 pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
 
@@ -247,7 +246,7 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let mut ctx = session.context.write().unwrap();
 
     if ctx.identity.is_none() {
-        bail!("Not in an identity context. Use `USE @<identity>` first.");
+        bail!("Not in an identity context. Use `/IDENTITY <identity>` first.");
     }
 
     let existing: Vec<String> = ctx
@@ -282,10 +281,12 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     // Gather everything under a read lock, including showing the menu if needed.
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in an identity context. Use \"USE @<identity>\" to set a context.")
+        anyhow::anyhow!(
+            "Not in an identity context. Use \"/IDENTITY <identity>\" to set a context."
+        )
     })?;
 
     let effectives = effective::effective_variants(feature, ctx.feature_patch.as_ref());
@@ -339,10 +340,12 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in an identity context. Use \"USE @<identity>\" to set a context.")
+        anyhow::anyhow!(
+            "Not in an identity context. Use \"/IDENTITY <identity>\" to set a context."
+        )
     })?;
 
     let feature_name = feature.name.clone();

@@ -468,7 +468,7 @@ fn environment_name(session: &Session<Connection>, environment_id: i32) -> Strin
         .unwrap_or_else(|_| format!("#{environment_id}"))
 }
 
-/// Resets both feature and identity contexts, clearing all state.
+/// Resets feature, identity, and segment contexts, clearing all state.
 ///
 /// Refuses to run if there are any uncommitted staged changes - run `COMMIT` or
 /// `DISCARD` first to avoid losing work.

@@ -8,10 +8,10 @@ use flagrant_repl::session::Session;
 use termimad::MadSkin;
 
 pub const TOPICS: &[&str] = &[
-    "USE", "FEATURE", "SEGMENT", "IDENTITY", "VARIANT", "GROUP", "RULE", "SNAPSHOT",
+    "CONTEXT", "FEATURE", "SEGMENT", "IDENTITY", "VARIANT", "GROUP", "RULE", "SNAPSHOT",
 ];
 
-const USE: &str = include_str!("help/use.md");
+const CONTEXT: &str = include_str!("help/context.md");
 
 const FEATURE: &str = include_str!("help/feature.md");
 const FEATURE_IN_CONTEXT: &str = include_str!("help/feature_in_context.md");
@@ -44,7 +44,7 @@ pub fn show(topic: &str, session: &Session<Connection>) -> anyhow::Result<()> {
 
     let text = match topic.as_str() {
         "" => format!("Available help topics: {}", topic_list()),
-        "USE" => USE.to_string(),
+        "CONTEXT" => CONTEXT.to_string(),
         "FEATURE" => feature_help(&ctx),
         "SEGMENT" => segment_help(&ctx),
         "IDENTITY" => identity_help(&ctx),

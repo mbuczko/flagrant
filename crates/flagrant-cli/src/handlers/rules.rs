@@ -69,10 +69,9 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let ctx = session.context.read().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let segment = ctx.segment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
+    })?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
 

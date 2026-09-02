@@ -42,7 +42,6 @@ pub enum Command {
     Reload,
     Get,
     GetAll,
-    Use,
 }
 
 impl Command {

@@ -30,7 +30,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let predicted_label = {
         let ctx = session.context.read().unwrap();
         let segment = ctx.segment.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first.")
+            anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
         })?;
         let staged = ctx
             .segment_patch
@@ -104,10 +104,9 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// current segment to choose from instead.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let segment = ctx.segment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
+    })?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
 
@@ -182,10 +181,9 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
 /// leaving it blank clears the description.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let segment = ctx.segment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
+    })?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
 
@@ -261,10 +259,9 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// interactive menu listing `and`/`and-not` (the current one marked explicitly).
 pub fn rejoin(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
-    let segment = ctx
-        .segment
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not in a segment context. Use `USE +<segment>` first."))?;
+    let segment = ctx.segment.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
+    })?;
     let patch = ctx.segment_patch.as_ref().filter(|p| !p.is_empty());
     let eff = effective::effective_segment(segment, patch);
 
