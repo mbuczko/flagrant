@@ -5,7 +5,7 @@ members = [ "crates/*" ]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.25"
+version = "0.0.26"
 description = "CLI powered feature-flagging"
 repository = "https://github.com/mbuczko/flagrant"
 authors = ["Michal Buczko <michal@buczko.pl>"]
