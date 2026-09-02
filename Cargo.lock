@@ -439,7 +439,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2562,8 +2562,8 @@ checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
 
 [[package]]
 name = "rustyline"
-version = "15.0.0"
-source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#83cb98b6dbb2fecceb1aee739aa828a9947b7604"
+version = "15.0.2"
+source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#fa695f3e381810d728adcabeba7c82b9c0995f99"
 dependencies = [
  "bitflags 2.13.1",
  "cfg-if",
@@ -2585,7 +2585,7 @@ dependencies = [
 [[package]]
 name = "rustyline-derive"
 version = "0.11.0"
-source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#83cb98b6dbb2fecceb1aee739aa828a9947b7604"
+source = "git+https://github.com/mbuczko/rustyline?branch=feat%2Fprompt-overlays#fa695f3e381810d728adcabeba7c82b9c0995f99"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3935,7 +3935,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

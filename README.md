@@ -40,7 +40,7 @@ or
 myproject/prod → ui_theme + beta_testers › ...
 ```
 
-Typing `/` at the prompt switches it into a `context>` overlay for switching context, or clearing it - both the command keyword and (where applicable) its name argument tab-complete:
+Typing `/` at the prompt switches it into a `context>` overlay for changing a context, or clearing it - both the command keyword and (where applicable) its name argument tab-complete:
 
 ```
 /FEATURE feature

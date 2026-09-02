@@ -82,6 +82,8 @@ pub fn init<T>(
                     }) {
                         if let Err(error) = (cmd.handler)(&slices[1..], session) {
                             eprintln!("{error}");
+                        } else {
+                            rl.escape_overlay();
                         }
                     } else {
                         eprintln!("Command or its arguments not supported");
