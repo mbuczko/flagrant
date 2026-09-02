@@ -18,6 +18,19 @@ pub enum VariantRef {
     Staged(usize),
 }
 
+/// A reference to a segment rule, addressed differently depending on whether it's already
+/// committed. A committed rule is addressed by its DB id, like [`VariantRef::Committed`].
+/// A staged (not yet committed) rule has no id yet, so it's addressed by its group label
+/// plus its position (0-based) among that group's staged `AddRule` ops (in `ops` order).
+#[derive(Debug, Clone)]
+pub enum RuleRef {
+    Committed(i32),
+    Staged {
+        group_label: String,
+        position: usize,
+    },
+}
+
 /// An environment reference used to build the connection URL - either a
 /// numeric id or a name, both of which the API resolves interchangeably.
 #[derive(Debug, Clone)]

@@ -1,1 +1,1 @@
-*Enter a feature context with `USE <feature>` to access actions modifying feature properties.*
+*Enter a feature context with `/FEATURE <feature>` to access actions modifying feature properties.*

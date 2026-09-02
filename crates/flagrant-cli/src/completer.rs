@@ -144,30 +144,6 @@ impl AutoCompleter for ArgCompleter<'_> {
                     _ => vec![],
                 })
             }
-            // Auto-complete the `USE` target: `@identity`, `+segment`, a bare feature
-            // name, or `feature@identity` / `feature+segment` combining them.
-            "USE" if arg_n == 1 => {
-                let ctx = self.session.context.read().unwrap();
-
-                Ok(if let Some(env_prefix) = prefix.strip_prefix('/') {
-                    complete_environments(&ctx, env_prefix)?
-                        .into_iter()
-                        .map(|v| format!("/{v}"))
-                        .collect::<Vec<_>>()
-                } else if let Some((feature_part, identity_prefix)) = prefix.split_once('@') {
-                    complete_identities(&ctx, identity_prefix)?
-                        .into_iter()
-                        .map(|v| format!("{feature_part}@{v}"))
-                        .collect::<Vec<_>>()
-                } else if let Some((feature_part, segment_prefix)) = prefix.split_once('+') {
-                    complete_segments(&ctx, segment_prefix)?
-                        .into_iter()
-                        .map(|v| format!("{feature_part}+{v}"))
-                        .collect::<Vec<_>>()
-                } else {
-                    complete_features(&ctx, prefix)?
-                })
-            }
             // Auto-complete feature name, or `feature@identity`, for the `GET` test
             // command - same `@` split as `USE` above.
             "GET" if arg_n == 1 => {
@@ -232,7 +208,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 let op: &str = &args[1];
                 Ok(match op {
                     "add" if arg_n == 2 => filter_by_prefix(&["--and", "--and-not"], prefix),
-                    "delete" | "describe" | "show" if arg_n == 2 => {
+                    "delete" | "describe" | "rejoin" | "show" if arg_n == 2 => {
                         filter_by_prefix(&["group-"], prefix)
                     }
                     _ => vec![],
@@ -254,6 +230,38 @@ impl AutoCompleter for ArgCompleter<'_> {
                     _ => vec![],
                 })
             }
+            _ => Ok(vec![]),
+        }
+    }
+}
+
+/// Argument completer for the `/`-triggered context overlay's own command list
+/// (`ENVIRONMENT`/`FEATURE`/`IDENTITY`/`SEGMENT`, each taking a single name argument at
+/// `arg_n == 1`) - kept separate from `ArgCompleter` since those same command names
+/// already have their own `arg_n`-keyed sub-op completions registered above for the main
+/// command set, which a bare-name completion at the same position would otherwise
+/// collide with.
+pub struct ContextArgCompleter<'a> {
+    pub session: &'a Session<Connection>,
+}
+
+impl AutoCompleter for ContextArgCompleter<'_> {
+    fn complete_by_prefix(
+        &self,
+        command: &str,
+        _args: &[Arg],
+        arg_n: usize,
+        prefix: &str,
+    ) -> anyhow::Result<Vec<String>> {
+        if arg_n != 1 {
+            return Ok(vec![]);
+        }
+        let ctx = self.session.context.read().unwrap();
+        match command.to_uppercase().as_str() {
+            "ENVIRONMENT" => complete_environments(&ctx, prefix),
+            "FEATURE" => complete_features(&ctx, prefix),
+            "IDENTITY" => complete_identities(&ctx, prefix),
+            "SEGMENT" => complete_segments(&ctx, prefix),
             _ => Ok(vec![]),
         }
     }

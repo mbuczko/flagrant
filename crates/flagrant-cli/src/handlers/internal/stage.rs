@@ -1,16 +1,17 @@
-//! Staging helpers for building up a [`FeaturePatch`] or [`IdentityPatch`] before
-//! they are committed to the API.
+//! Staging helpers for building up a [`FeaturePatch`], [`IdentityPatch`], or
+//! [`SegmentPatch`] before they are committed to the API.
 
 use std::borrow::Cow;
 
 use anyhow::bail;
-use flagrant_client::connection::{Connection, VariantRef};
+use flagrant_client::connection::{Connection, RuleRef, VariantRef};
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Environment, TraitValue, VariantValue,
+    Comparator, Environment, TraitValue, VariantValue,
     payload::{
         CommitPayload, CommitResult, FeatureCommitPart, FeaturePatch, IdentityCommitPart,
-        IdentityPatch, SegmentCommitPart, TagPatchOp, TraitPatchOp, VariantPatchOp,
+        IdentityPatch, SegmentCommitPart, SegmentPatch, SegmentPatchOp, TagPatchOp, TraitPatchOp,
+        VariantPatchOp,
     },
 };
 
@@ -148,6 +149,127 @@ pub(crate) fn discard_feature_patch(pending: &mut FeaturePatch, variant_ref: &Va
             }
         }
     }
+}
+
+/// Stages a `SetRuleValue` op for a committed rule, or updates the value of a staged
+/// `AddRule` op in place.
+pub(crate) fn stage_rule_value(patch: &mut SegmentPatch, target: &RuleRef, value: String) {
+    match target {
+        RuleRef::Committed(rule_id) => {
+            let op = SegmentPatchOp::SetRuleValue {
+                rule_id: *rule_id,
+                value,
+            };
+            if let Some(existing) = patch.ops.iter_mut().find(
+                |o| matches!(o, SegmentPatchOp::SetRuleValue { rule_id: rid, .. } if rid == rule_id),
+            ) {
+                *existing = op;
+            } else {
+                patch.ops.push(op);
+            }
+        }
+        RuleRef::Staged {
+            group_label,
+            position,
+        } => {
+            if let Some(op) = staged_add_rule_op_mut(patch, group_label, *position)
+                && let SegmentPatchOp::AddRule { value: v, .. } = op
+            {
+                *v = value;
+            }
+        }
+    }
+}
+
+/// Stages a `SetRuleComparator` op for a committed rule, or updates the comparator of a
+/// staged `AddRule` op in place.
+pub(crate) fn stage_rule_comparator(
+    patch: &mut SegmentPatch,
+    target: &RuleRef,
+    comparator: Comparator,
+) {
+    match target {
+        RuleRef::Committed(rule_id) => {
+            let op = SegmentPatchOp::SetRuleComparator {
+                rule_id: *rule_id,
+                comparator,
+            };
+            if let Some(existing) = patch.ops.iter_mut().find(
+                |o| matches!(o, SegmentPatchOp::SetRuleComparator { rule_id: rid, .. } if rid == rule_id),
+            ) {
+                *existing = op;
+            } else {
+                patch.ops.push(op);
+            }
+        }
+        RuleRef::Staged {
+            group_label,
+            position,
+        } => {
+            if let Some(op) = staged_add_rule_op_mut(patch, group_label, *position)
+                && let SegmentPatchOp::AddRule { comparator: c, .. } = op
+            {
+                *c = comparator;
+            }
+        }
+    }
+}
+
+/// Discards a rule: stages a `DeleteRule` op for a committed rule, or discards the pending
+/// `AddRule` op outright for a staged addition.
+pub(crate) fn discard_rule(patch: &mut SegmentPatch, target: &RuleRef) {
+    match target {
+        RuleRef::Committed(rule_id) => {
+            patch
+                .ops
+                .push(SegmentPatchOp::DeleteRule { rule_id: *rule_id });
+        }
+        RuleRef::Staged {
+            group_label,
+            position,
+        } => {
+            if let Some(i) = staged_add_rule_op_index(patch, group_label, *position) {
+                patch.ops.remove(i);
+            }
+        }
+    }
+}
+
+/// Finds the index into `patch.ops` of the `AddRule` op at `position` (0-based, among this
+/// group's staged rules, in `ops` order) for `group_label`. `effective_segment` appends
+/// staged rules to a group's effective rule list in the same order their `AddRule` ops
+/// appear in `ops`, so `position` (computed by `rules::resolve_rule`) and the op found here
+/// always agree.
+fn staged_add_rule_op_index(
+    patch: &SegmentPatch,
+    group_label: &str,
+    position: usize,
+) -> Option<usize> {
+    let mut add_count = 0;
+    patch.ops.iter().position(|op| {
+        matches!(op, SegmentPatchOp::AddRule { group_label: gl, .. } if gl == group_label) && {
+            let is_target = add_count == position;
+            add_count += 1;
+            is_target
+        }
+    })
+}
+
+/// Same lookup as [`staged_add_rule_op_index`], but returns a mutable reference to the op
+/// itself for in-place edits (used by `stage_rule_value`/`stage_rule_comparator`).
+fn staged_add_rule_op_mut<'a>(
+    patch: &'a mut SegmentPatch,
+    group_label: &str,
+    position: usize,
+) -> Option<&'a mut SegmentPatchOp> {
+    let mut add_count = 0;
+    patch.ops.iter_mut().find(|op| {
+        matches!(op, SegmentPatchOp::AddRule { group_label: gl, .. } if gl == group_label) && {
+            let is_target = add_count == position;
+            add_count += 1;
+            is_target
+        }
+    })
 }
 
 /// Stages a tag addition or removal on a feature patch.
@@ -346,7 +468,7 @@ fn environment_name(session: &Session<Connection>, environment_id: i32) -> Strin
         .unwrap_or_else(|_| format!("#{environment_id}"))
 }
 
-/// Resets both feature and identity contexts, clearing all state.
+/// Resets feature, identity, and segment contexts, clearing all state.
 ///
 /// Refuses to run if there are any uncommitted staged changes - run `COMMIT` or
 /// `DISCARD` first to avoid losing work.

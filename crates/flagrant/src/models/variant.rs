@@ -105,7 +105,7 @@ pub async fn create(
     balance_control_weight(&mut tx, environment, feature.id, variant_id, weight as i8).await?;
 
     // Seed this variant into every segment that already overrides this feature in this
-    // environment, at 0% weight - so it's materialized there (visible in the editor/listing)
+    // environment, at 0% weight - so it's materialized there (visible in the menu/listing)
     // without needing to rebalance the segment's control-variant remainder: a 0-weight row
     // and no row at all are equivalent for that sum.
     let mut overriding_segments: Vec<i32> =

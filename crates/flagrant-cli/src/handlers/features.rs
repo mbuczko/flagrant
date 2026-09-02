@@ -95,7 +95,7 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
 
     let name = match args.get(1) {
@@ -138,7 +138,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
 
     let desc = match args.get(1) {
@@ -176,23 +176,32 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 ///
 /// Fetches the feature and stores it in the session so that subsequent session-aware
 /// commands, like `VARIANT` or `SET` operate on it. Fails if there are uncommitted
-/// staged changes. Shared entry point used by both the top-level `USE <feature>` and
-/// `environments::switch_to` (`USE /environment`, to re-enter the previously active
-/// feature after switching environments).
+/// staged changes.
 pub(crate) fn switch_to(feature_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     stage::ensure_no_pending(session)?;
+    let feature_id = enter(feature_name, session)?;
 
+    let overrides = fetch_overrides(feature_id, session);
+    let ctx = session.context.read().unwrap();
+    let feature = ctx.feature.as_ref().unwrap();
+
+    feature.display(None, &OverridesContext::committed_only(overrides));
+    Ok(())
+}
+
+/// Fetches `feature_name` (scoped to the current environment) and sets it as the active
+/// feature context, rebuilding the variant index - without printing anything.
+/// Returns the feature's id.
+pub(crate) fn enter(feature_name: &str, session: &Session<Connection>) -> anyhow::Result<i32> {
     let feature = fetch_feature(feature_name, session)
         .map_err(|_| anyhow::anyhow!("Feature '{}' not found.", feature_name))?;
-
-    let overrides = fetch_overrides(feature.id, session);
-    feature.display(None, &OverridesContext::committed_only(overrides));
-
+    let feature_id = feature.id;
     let mut ctx = session.context.write().unwrap();
-    ctx.feature = Some(feature);
 
+    ctx.feature = Some(feature);
     index::rebuild(&mut ctx);
-    Ok(())
+
+    Ok(feature_id)
 }
 
 /// Print details of a feature.
@@ -227,7 +236,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let feature = ctx.feature.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
-            "Not in a feature context. Set the context with: \"USE <feature>\" command."
+            "Not in a feature context. Set the context with: \"/FEATURE <feature>\" command."
         )
     })?;
     let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
@@ -304,7 +313,7 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     };
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
 
     let pending = ctx.get_or_init_feature_patch();
@@ -327,7 +336,7 @@ pub fn server_side(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
     };
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
 
     let pending = ctx.get_or_init_feature_patch();
@@ -339,18 +348,30 @@ pub fn server_side(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
 
 /// Stage adding or removing one or more tags on the current feature.
 ///
-/// Expected args: `tag1 [tag2 ...]`
+/// Expected args: `[tag1 [tag2 ...]]`
 ///
 /// Tags are separated by whitespace. Prefix a tag with `-` to remove it instead of
-/// adding it (e.g. `FEATURE tag experimental -ui`).
+/// adding it (e.g. `FEATURE tag experimental -ui`). If no tags are given, prompts for
+/// them inline instead.
 pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
 
-    let ops = parse_tag_ops(&args[1..]);
+    let ops = if args.len() > 1 {
+        parse_tag_ops(&args[1..])
+    } else {
+        let Some(input) = prompt_line("Tags (space/comma-separated, prefix with - to remove)", "")?
+        else {
+            println!("Cancelled.");
+            return Ok(());
+        };
+        let tokens: Vec<Arg> = input.split_whitespace().map(|t| Arg(t, 0)).collect();
+        parse_tag_ops(&tokens)
+    };
+
     if ops.is_empty() {
         bail!("No tags provided.");
     }
@@ -510,7 +531,9 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
     if let Some(pattern) = args.get(1) {
         let ctx = session.context.read().unwrap();
         let feature = ctx.feature.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Not within a feature context. Use \"USE <feature>\" to set a context.")
+            anyhow::anyhow!(
+                "Not within a feature context. Use \"/FEATURE <feature>\" to set a context."
+            )
         })?;
 
         ctx.client.delete(ctx.env_resource().subpath(format!(
@@ -567,7 +590,7 @@ fn effective_rollout(ctx: &Connection) -> Option<RolloutConfig> {
 fn progressive_rules(tokens: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
     if tokens.is_empty() {
         bail!("Usage: FEATURE progressive rules <w1>:<dur1> [<w2>:<dur2> ...] <100>");
@@ -640,7 +663,7 @@ fn progressive_rules(tokens: &[Arg], session: &Session<Connection>) -> anyhow::R
 fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
     let n: u32 = arg
         .ok_or_else(|| anyhow::anyhow!("Usage: FEATURE progressive sample <n>"))?
@@ -663,7 +686,7 @@ fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyho
 fn progressive_delete(session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"USE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
     }
     ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Unset);
     println!("Staged: progressive rollout deleted");
@@ -673,7 +696,7 @@ fn progressive_delete(session: &Session<Connection>) -> anyhow::Result<()> {
 fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"USE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
     })?;
     let has_config = feature.rollout.is_some();
     let environment_name = ctx.environment.name.clone();

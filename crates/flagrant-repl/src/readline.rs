@@ -41,7 +41,7 @@ pub fn init<T>(
     session: &Session<T>,
     commands: &[ReplCommand<T>],
     help: Option<(char, HelpHandler<T>)>,
-    shortcut: Option<(char, &str)>,
+    overlay: Option<(char, &[ReplCommand<T>])>,
 ) -> anyhow::Result<()> {
     let mut rl: Editor<ReplHelper<T>, DefaultHistory> = Editor::new()?;
     let prompter = helper.prompter;
@@ -53,19 +53,38 @@ pub fn init<T>(
     loop {
         match rl.readline(prompter(session).as_str()) {
             Ok(line) => {
-                let line = match shortcut {
-                    Some((trigger, prefix)) if line.starts_with(trigger) => {
-                        format!("{prefix} {line}")
-                    }
-                    _ => line,
-                };
-
+                // Help overlay
                 if let Some((trigger, handler)) = help
                     && let Some(rest) = line.strip_prefix(trigger)
                 {
                     rl.add_history_entry(line.as_str())?;
                     if let Err(error) = handler(rest.trim(), session) {
                         eprintln!("{error}");
+                    }
+                    continue;
+                }
+                // Context overlay
+                if let Some((trigger, overlay_cmds)) = overlay
+                    && let Some(rest) = line.strip_prefix(trigger)
+                {
+                    let slices = split_command_line(rest)?;
+                    rl.add_history_entry(line.as_str())?;
+
+                    if slices.is_empty() {
+                        let names = overlay_cmds
+                            .iter()
+                            .map(|c| c.cmd.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        println!("Available commands: {names}");
+                    } else if let Some(cmd) = overlay_cmds.iter().find(|c| {
+                        c.matches_slices(&slices.iter().map(Deref::deref).collect::<Vec<_>>())
+                    }) {
+                        if let Err(error) = (cmd.handler)(&slices[1..], session) {
+                            eprintln!("{error}");
+                        }
+                    } else {
+                        eprintln!("Command or its arguments not supported");
                     }
                     continue;
                 }

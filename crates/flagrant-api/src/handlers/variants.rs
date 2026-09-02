@@ -2,7 +2,11 @@ use axum::{Json, extract::Path};
 use flagrant::models::{environment, feature, identity, project, variant};
 use flagrant_types::Variant;
 
-use crate::{errors::ServiceError, extractors::DbConnection};
+use crate::{
+    errors::ServiceError,
+    extractors::DbConnection,
+    handlers::features::{FeatureId, resolve_feature_id},
+};
 
 /// Fetches a variant by ID.
 #[utoipa::path(
@@ -36,7 +40,7 @@ pub async fn fetch(
     params(
         ("project" = String, Path, description = "Project name"),
         ("environment" = String, Path, description = "Environment name"),
-        ("feature_id" = i32, Path, description = "Feature ID")
+        ("feature_id" = String, Path, description = "Feature ID or name")
     ),
     responses(
         (status = 200, description = "List of feature variants", body = Vec<Variant>)
@@ -45,10 +49,11 @@ pub async fn fetch(
 )]
 pub async fn list(
     DbConnection(mut conn): DbConnection,
-    Path((project_name, env_name, feature_id)): Path<(String, String, i32)>,
+    Path((project_name, env_name, feature_id)): Path<(String, String, FeatureId)>,
 ) -> Result<Json<Vec<Variant>>, ServiceError> {
     let proj = project::get_by_name(&mut conn, project_name).await?;
     let env = environment::get_by_name(&mut conn, &proj, env_name).await?;
+    let feature_id = resolve_feature_id(&mut conn, &env, feature_id).await?;
     let feature = feature::get_by_id(&mut conn, &env, feature_id).await?;
     let variants = variant::get_for_feature(&mut conn, &env, feature.id, None).await?;
 

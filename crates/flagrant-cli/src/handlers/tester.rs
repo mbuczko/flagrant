@@ -40,7 +40,7 @@ pub fn get(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .or_else(|| ctx.feature.as_ref().map(|f| f.name.clone()))
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "No feature given and none in context. Use `GET <feature>@<identity>` or set a feature context with \"USE <feature>\"."
+                "No feature given and none in context. Use `GET <feature>@<identity>` or set a feature context with \"/FEATURE <feature>\"."
             )
         })?;
 
@@ -49,7 +49,7 @@ pub fn get(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .or_else(|| ctx.identity.as_ref().map(|i| i.value.clone()))
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "No identity given and none in context. Use `GET <feature>@<identity>` or set an identity context with \"USE @<identity>\"."
+                "No identity given and none in context. Use `GET <feature>@<identity>` or set an identity context with \"/IDENTITY <identity>\"."
             )
         })?;
 
@@ -78,7 +78,7 @@ pub fn get_all(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
                 .map(|i| i.value.clone())
                 .ok_or_else(|| {
                     anyhow::anyhow!(
-                        "No identity given and none in context. Use `GETALL @<identity>` or set an identity context with \"USE @<identity>\"."
+                        "No identity given and none in context. Use `GETALL @<identity>` or set an identity context with \"/IDENTITY <identity>\"."
                     )
                 })?
         }

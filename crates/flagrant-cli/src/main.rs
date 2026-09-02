@@ -26,10 +26,10 @@ mod printer;
 /// can't drift out of sync.
 const HELP_TRIGGER: char = '?';
 
-/// First-character shortcut for switching environments - `/dev` is rewritten into
-/// `USE /dev` before completion and dispatch, so it behaves exactly like typing the
-/// full `USE /dev` command (live environment-name completion, same switch logic).
-const ENV_TRIGGER: char = '/';
+/// First-character trigger for the `context>` overlay - switches context via
+/// `ENVIRONMENT`/`FEATURE`/`IDENTITY`/`SEGMENT <name>`, each command and its name
+/// argument tab-completing independently of the main command set.
+const CONTEXT_TRIGGER: char = '/';
 
 #[derive(FromArgs)]
 /// Flagrant feature flag CLI
@@ -63,11 +63,11 @@ fn print_banner() {
         "CLI-driven feature flagging".dimmed()
     );
     println!(
-        "\n  {} for environment switch",
-        ENV_TRIGGER.to_string().cyan()
+        "\n  {} for context switch",
+        CONTEXT_TRIGGER.to_string().cyan()
     );
     println!("  {} for help", HELP_TRIGGER.to_string().yellow());
-    println!("\n  Use ⌫ to escape help/environment prompt.\n");
+    println!("\n  Use ⌫ to escape help/context prompt.\n");
 }
 
 fn prompter(session: &Session<Connection>) -> String {
@@ -112,10 +112,6 @@ fn identity_ctx(session: &Session<Connection>) -> bool {
 }
 fn segment_ctx(session: &Session<Connection>) -> bool {
     session.context.read().unwrap().segment.is_some()
-}
-fn any_ctx(session: &Session<Connection>) -> bool {
-    let ctx = session.context.read().unwrap();
-    ctx.feature.is_some() || ctx.identity.is_some() || ctx.segment.is_some()
 }
 fn pending_ctx(session: &Session<Connection>) -> bool {
     let ctx = session.context.read().unwrap();
@@ -198,7 +194,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Feature.op_in_context(
             "tag",
-            "tag1 [tag2 ...]",
+            "[tag1 [tag2 ...]]",
             handlers::features::tag,
             in_context!(feature_ctx),
         ),
@@ -308,7 +304,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Group.op_in_context(
             "show",
-            "label",
+            "[label]",
             handlers::groups::show,
             in_context!(segment_ctx),
         ),
@@ -324,7 +320,16 @@ fn main() -> anyhow::Result<()> {
             handlers::groups::delete,
             in_context!(segment_ctx),
         ),
-        Command::Group.args_in_context("add · delete · describe · show", in_context!(segment_ctx)),
+        Command::Group.op_in_context(
+            "rejoin",
+            "[label] [and|and-not]",
+            handlers::groups::rejoin,
+            in_context!(segment_ctx),
+        ),
+        Command::Group.args_in_context(
+            "add · delete · describe · rejoin · show",
+            in_context!(segment_ctx),
+        ),
         // Rules (only in segment context)
         Command::Rule.op_in_context(
             "add",
@@ -334,7 +339,7 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Rule.op_in_context(
             "show",
-            "group-label rule-index",
+            "[group-label [rule-index]]",
             handlers::rules::show,
             in_context!(segment_ctx),
         ),
@@ -346,13 +351,13 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Rule.op_in_context(
             "value",
-            "group-label rule-index [value]",
+            "[group-label [rule-index]] [value]",
             handlers::rules::value,
             in_context!(segment_ctx),
         ),
         Command::Rule.op_in_context(
             "comparator",
-            "group-label rule-index [comparator]",
+            "[group-label [rule-index]] [comparator]",
             handlers::rules::comparator,
             in_context!(segment_ctx),
         ),
@@ -396,20 +401,7 @@ fn main() -> anyhow::Result<()> {
             handlers::discard,
             in_context!(pending_ctx),
         ),
-        Command::Reset.no_op_in_context(
-            "→ reset feature and identity context",
-            handlers::reset,
-            in_context!(any_ctx),
-        ),
         Command::Reload.no_op("→ reload server configuration", handlers::admin::reload),
-        // Unified context switch, replacing the old FEATURE/IDENTITY/SEGMENT/ENVIRONMENT
-        // use ops: a bare name is a feature, `@name` an identity, `+name` a segment,
-        // `/name` an environment, and `feature@identity` / `feature+segment` combine a
-        // feature switch with one.
-        Command::Use.no_op(
-            "feature | @identity | +segment | /environment",
-            handlers::context::r#use,
-        ),
         // Query resolved feature values for an identity, without mutating any context
         Command::Get.no_op("[feature][@identity]", handlers::tester::get),
         Command::GetAll.no_op("[@identity]", handlers::tester::get_all),
@@ -450,12 +442,25 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Unset.args_in_context("distribution", in_context!(feature_ctx)),
     ];
+    // `/`-triggered context overlay: a separate, small command list (never merged with
+    // `commands` above) reachable only when the line starts with `CONTEXT_TRIGGER`, so
+    // reusing the `ENVIRONMENT`/`FEATURE`/`IDENTITY`/`SEGMENT` command names can't
+    // collide with those commands' own sub-ops registered in `commands`.
+    let context_commands = vec![
+        Command::Environment.no_op("name", handlers::context::switch_environment),
+        Command::Feature.no_op("name", handlers::context::switch_feature),
+        Command::Identity.no_op("name", handlers::context::switch_identity),
+        Command::Segment.no_op("name", handlers::context::switch_segment),
+        Command::Reset.no_op("→ reset all context", handlers::reset),
+    ];
+
     let overlays = vec![
         (HELP_TRIGGER, "\x1b[33mhelp> \x1b[0m"),
-        (ENV_TRIGGER, "\x1b[36menvironment> \x1b[0m"),
+        (CONTEXT_TRIGGER, "\x1b[36mcontext> \x1b[0m"),
     ];
     let help_topics: Vec<String> = help::TOPICS.iter().map(|s| s.to_string()).collect();
     let arg_completer = ArgCompleter { session: &session };
+    let context_arg_completer = completer::ContextArgCompleter { session: &session };
     let helper = ReplHelper {
         prompter,
         hinter: ReplHinter::new(&commands, &session),
@@ -478,7 +483,14 @@ fn main() -> anyhow::Result<()> {
         })
         .with_arg_completer(&arg_completer)
         .with_help_topics(HELP_TRIGGER, help_topics)
-        .with_shortcut(ENV_TRIGGER, "USE"),
+        .with_overlay(
+            CONTEXT_TRIGGER,
+            context_commands
+                .iter()
+                .map(|c| (c.cmd.to_uppercase(), &c.op, None))
+                .collect(),
+            Some(&context_arg_completer),
+        ),
     };
 
     readline::init(
@@ -486,7 +498,7 @@ fn main() -> anyhow::Result<()> {
         &session,
         &commands,
         Some((HELP_TRIGGER, help::show)),
-        Some((ENV_TRIGGER, "USE")),
+        Some((CONTEXT_TRIGGER, &context_commands)),
     )?;
 
     Ok(())

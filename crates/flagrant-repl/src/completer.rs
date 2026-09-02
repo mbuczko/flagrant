@@ -16,6 +16,17 @@ pub type CommandList<'a> = Vec<(
     Option<Box<dyn Fn() -> bool + 'a>>,
 )>;
 
+/// A self-contained command list + argument completer active only when the line starts
+/// with `trigger` - e.g. a `/`-triggered overlay with its own small set of commands,
+/// distinct from (and never merged with) the main command list, so it can't collide with
+/// unrelated op/argument completions already registered for the same command names in the
+/// main list.
+struct Overlay<'a> {
+    trigger: char,
+    commands: CommandList<'a>,
+    arg_completer: Option<&'a dyn AutoCompleter>,
+}
+
 pub struct CommandLineCompleter<'a> {
     commands: CommandList<'a>,
     arg_completer: Option<&'a dyn AutoCompleter>,
@@ -23,10 +34,8 @@ pub struct CommandLineCompleter<'a> {
     /// (e.g. a `?FEATURE` help overlay) - active only when the line starts with the
     /// trigger char, and offers no operation/argument completion.
     help: Option<(char, Vec<String>)>,
-    /// Trigger char that rewrites the line into `"{prefix} {line}"` before normal
-    /// command/op/argument completion - e.g. with `('/', "USE")`, typing `/dev` completes
-    /// exactly as if `USE /dev` had been typed, reusing `USE`'s existing argument completer.
-    shortcut: Option<(char, &'static str)>,
+    /// Trigger character for a self-contained overlay command list (see [`Overlay`]).
+    overlay: Option<Overlay<'a>>,
 }
 
 pub trait AutoCompleter {
@@ -60,11 +69,10 @@ impl<'a> CommandLineCompleter<'a> {
     /// Filters duplicates by assuming commands are sorted lexicographically and
     /// skipping consecutive identical command names. Matches commands that start
     /// with `prefix`, or returns all commands if `prefix` is empty.
-    fn complete_command(&self, prefix: &str) -> anyhow::Result<Vec<Pair>> {
+    fn complete_command(commands: &CommandList<'_>, prefix: &str) -> anyhow::Result<Vec<Pair>> {
         let mut prev_command_str = "";
         let empty = prefix.trim().is_empty();
-        let pairs = self
-            .commands
+        let pairs = commands
             .iter()
             .filter_map(|(command_str, _, within_ctx)| {
                 if command_str != prev_command_str
@@ -90,13 +98,12 @@ impl<'a> CommandLineCompleter<'a> {
     /// command name (like "FEATURE"). Returns matching operations with the display form
     /// preserved and the replacement form lowercased.
     fn complete_operation(
-        &self,
+        commands: &CommandList<'_>,
         command: &str,
         prefix: &str,
         pos: usize,
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
-        let pairs = self
-            .commands
+        let pairs = commands
             .iter()
             .filter_map(|(command_str, op, within_ctx)| {
                 if command_str.eq_ignore_ascii_case(command)
@@ -126,7 +133,7 @@ impl<'a> CommandLineCompleter<'a> {
     /// based on the command name, argument position, and the partial text already typed.
     /// Returns an empty list if no `AutoCompleter` is registered.
     fn complete_argument(
-        &self,
+        arg_completer: Option<&dyn AutoCompleter>,
         command: &str,
         args: &[Arg],
         arg_number: usize,
@@ -135,7 +142,7 @@ impl<'a> CommandLineCompleter<'a> {
     ) -> anyhow::Result<(usize, Vec<Pair>)> {
         Ok((
             pos,
-            match self.arg_completer {
+            match arg_completer {
                 Some(arg_completer) => arg_completer
                     .complete_by_prefix(command, args, arg_number, arg_prefix)
                     .unwrap_or_default()
@@ -162,11 +169,21 @@ impl<'a> CommandLineCompleter<'a> {
         self
     }
 
-    /// Registers a trigger char that rewrites the line into `"{command_prefix} {line}"`
-    /// before completion, so a leading trigger char can act as a shortcut for an
-    /// existing command without duplicating its argument-completion logic.
-    pub fn with_shortcut(mut self, trigger: char, command_prefix: &'static str) -> Self {
-        self.shortcut = Some((trigger, command_prefix));
+    /// Registers a trigger char that activates a self-contained overlay command list -
+    /// full command-name, operation, and argument completion, exactly like the main
+    /// command list, but scoped to `commands`/`arg_completer` and never merged with the
+    /// main ones (so command names can be reused across both without collision).
+    pub fn with_overlay(
+        mut self,
+        trigger: char,
+        commands: CommandList<'a>,
+        arg_completer: Option<&'a dyn AutoCompleter>,
+    ) -> Self {
+        self.overlay = Some(Overlay {
+            trigger,
+            commands,
+            arg_completer,
+        });
         self
     }
 
@@ -175,7 +192,7 @@ impl<'a> CommandLineCompleter<'a> {
             commands,
             arg_completer: None,
             help: None,
-            shortcut: None,
+            overlay: None,
         }
     }
 }
@@ -183,18 +200,20 @@ impl<'a> CommandLineCompleter<'a> {
 impl Completer for CommandLineCompleter<'_> {
     type Candidate = Pair;
 
-    /// Rewrites the line into `"{prefix} {line}"` when it starts with the registered
-    /// shortcut trigger, delegates to `complete_inner`, then un-shifts the returned start
-    /// offset back into the original (unprefixed) line's coordinates. A no-op passthrough
-    /// when no shortcut is registered or the line doesn't start with its trigger.
+    /// Delegates to the registered overlay's own command list/argument completer when the
+    /// line starts with its trigger char, otherwise to the main completion path.
     fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
-        if let Some((trigger, prefix)) = self.shortcut
-            && line.starts_with(trigger)
+        if let Some(overlay) = &self.overlay
+            && line.starts_with(overlay.trigger)
         {
-            let offset = prefix.len() + 1; // "{prefix} " length
-            let rewritten = format!("{prefix} {line}");
-            let (start, pairs) = self.complete_inner(&rewritten, pos + offset, ctx)?;
-            return Ok((start.saturating_sub(offset), pairs));
+            let trigger_len = overlay.trigger.len_utf8();
+            let (start, pairs) = self.complete_scoped(
+                &overlay.commands,
+                overlay.arg_completer,
+                &line[trigger_len..],
+                pos.saturating_sub(trigger_len),
+            )?;
+            return Ok((start + trigger_len, pairs));
         }
         self.complete_inner(line, pos, ctx)
     }
@@ -235,6 +254,20 @@ impl CommandLineCompleter<'_> {
             return Ok((pos, vec![]));
         }
 
+        self.complete_scoped(&self.commands, self.arg_completer, line, pos)
+    }
+
+    /// Command-name, operation, and argument completion for a given command list - shared
+    /// by the main completion path and any registered [`Overlay`], parameterized on which
+    /// command list/argument completer to consult so the two can never see each other's
+    /// commands.
+    fn complete_scoped(
+        &self,
+        commands: &CommandList<'_>,
+        arg_completer: Option<&dyn AutoCompleter>,
+        line: &str,
+        pos: usize,
+    ) -> Result<(usize, Vec<Pair>)> {
         let args = split_command_line(line).unwrap();
         let (arg_n, offset) = find_arg_by_position(&args, pos);
 
@@ -248,8 +281,7 @@ impl CommandLineCompleter<'_> {
                 .first()
                 .map(|a| a[..offset].to_uppercase())
                 .unwrap_or_default();
-            return self
-                .complete_command(&prefix)
+            return Self::complete_command(commands, &prefix)
                 .map(|pairs| (start, pairs))
                 .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())));
         }
@@ -258,15 +290,26 @@ impl CommandLineCompleter<'_> {
         let argument = &args[arg_n];
 
         if arg_n == 1
-            && let Ok(candidates) =
-                self.complete_operation(command, &argument[..offset].to_lowercase(), argument.1)
+            && let Ok(candidates) = Self::complete_operation(
+                commands,
+                command,
+                &argument[..offset].to_lowercase(),
+                argument.1,
+            )
             && !candidates.1.is_empty()
         {
             return Ok(candidates);
         }
 
-        self.complete_argument(command, &args, arg_n, &argument[..offset], argument.1)
-            .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
+        Self::complete_argument(
+            arg_completer,
+            command,
+            &args,
+            arg_n,
+            &argument[..offset],
+            argument.1,
+        )
+        .map_err(|e| ReadlineError::Io(io::Error::other(e.to_string())))
     }
 }
 
@@ -345,7 +388,34 @@ mod tests {
     }
 
     #[test]
-    fn shortcut_rewrites_line_and_unshifts_completion_offset() {
+    fn offers_no_completions_past_help_topic() {
+        let completer = CommandLineCompleter::new(vec![])
+            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        let (_start, pairs) = completer.complete("?FEATURE foo", 12, &ctx).unwrap();
+        assert!(pairs.is_empty());
+    }
+
+    #[test]
+    fn overlay_completes_command_keyword() {
+        let op: Option<String> = None;
+        let commands: CommandList = vec![("FEATURE".to_string(), &op, None)];
+        let completer = CommandLineCompleter::new(vec![]).with_overlay('/', commands, None);
+        let history = DefaultHistory::new();
+        let ctx = Context::new(&history);
+
+        // "/FEAT" - as typed, with the leading trigger char hidden by the overlay
+        // mechanism (same rendering convention as the `?` help trigger).
+        let (start, pairs) = completer.complete("/FEAT", 5, &ctx).unwrap();
+        assert_eq!(start, 1);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].replacement, "FEATURE");
+    }
+
+    #[test]
+    fn overlay_completes_argument_via_its_own_completer() {
         struct StubCompleter;
         impl AutoCompleter for StubCompleter {
             fn complete_by_prefix(
@@ -355,35 +425,22 @@ mod tests {
                 _arg_number: usize,
                 prefix: &str,
             ) -> anyhow::Result<Vec<String>> {
-                assert_eq!(command, "USE");
-                Ok(vec![format!("{prefix}v")])
+                assert_eq!(command, "FEATURE");
+                Ok(vec![format!("{prefix}heme")])
             }
         }
 
         let op: Option<String> = None;
-        let commands: CommandList = vec![("USE".to_string(), &op, None)];
+        let commands: CommandList = vec![("FEATURE".to_string(), &op, None)];
         let stub = StubCompleter;
-        let completer = CommandLineCompleter::new(commands)
-            .with_arg_completer(&stub)
-            .with_shortcut('/', "USE");
+        let completer = CommandLineCompleter::new(vec![]).with_overlay('/', commands, Some(&stub));
         let history = DefaultHistory::new();
         let ctx = Context::new(&history);
 
-        // "/de" - as if the user had typed `/de` directly, with no literal "USE " prefix.
-        let (start, pairs) = completer.complete("/de", 3, &ctx).unwrap();
-        assert_eq!(start, 0);
+        // "/FEATURE ui_t" - the overlay's own argument completer is consulted, never the
+        // main completer's `arg_completer` (there isn't one registered here at all).
+        let (_start, pairs) = completer.complete("/FEATURE ui_t", 13, &ctx).unwrap();
         assert_eq!(pairs.len(), 1);
-        assert_eq!(pairs[0].replacement, "/dev");
-    }
-
-    #[test]
-    fn offers_no_completions_past_help_topic() {
-        let completer = CommandLineCompleter::new(vec![])
-            .with_help_topics('?', vec!["FEATURE".to_string(), "SEGMENT".to_string()]);
-        let history = DefaultHistory::new();
-        let ctx = Context::new(&history);
-
-        let (_start, pairs) = completer.complete("?FEATURE foo", 12, &ctx).unwrap();
-        assert!(pairs.is_empty());
+        assert_eq!(pairs[0].replacement, "ui_theme");
     }
 }

@@ -51,6 +51,10 @@ DELETE FROM segment_groups WHERE group_id = $1
 -- :doc Updates a group's description
 UPDATE segment_groups SET description = $2 WHERE group_id = $1
 
+-- :name update_group_connector :<> :!
+-- :doc Updates a non-head group's connector (AND/AND NOT)
+UPDATE segment_groups SET connector = $2 WHERE group_id = $1
+
 -- :name clear_initial_group_connector :<> :!
 -- :doc Sets connector to NULL for the group with the lowest position (new head after deletion)
 UPDATE segment_groups SET connector = NULL
