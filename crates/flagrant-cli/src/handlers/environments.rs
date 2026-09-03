@@ -119,7 +119,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Fails if there are uncommitted staged changes.
 pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     if env_name.is_empty() {
-        return hint_available(session);
+        bail!(hint_available(session)?);
     }
 
     let mut ctx = session.context.write().unwrap();
@@ -159,7 +159,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
 
 /// Prints every environment name in the current project - shown when `/ENVIRONMENT` is
 /// submitted with no environment name.
-fn hint_available(session: &Session<Connection>) -> anyhow::Result<()> {
+fn hint_available(session: &Session<Connection>) -> anyhow::Result<String> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
     let names = ctx
@@ -170,6 +170,5 @@ fn hint_available(session: &Session<Connection>) -> anyhow::Result<()> {
         .collect::<Vec<_>>()
         .join(", ");
 
-    println!("Available environments: {}", names.cyan());
-    Ok(())
+    Ok(format!("Available environments: {}", names.cyan()))
 }
