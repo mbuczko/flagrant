@@ -514,6 +514,12 @@ impl Snapshot {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotDiff {
+    pub target: Snapshot,
+    pub current: SnapshotState,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum FeatureOverride {

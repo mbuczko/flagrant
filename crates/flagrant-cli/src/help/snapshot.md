@@ -3,6 +3,7 @@ A **snapshot** is a numbered, point-in-time capture of a feature's full state - 
 - `SNAPSHOT list` - list every snapshot recorded for the current feature, most recent first
 - `SNAPSHOT show <version>` - print the full state captured by a snapshot version
 - `SNAPSHOT describe <version> [comment]` - change a snapshot's comment
+- `SNAPSHOT diff <version>` - show what differs between the feature's current state and a snapshot version
 - `SNAPSHOT restore <version> [comment]` - restore the current feature to an earlier snapshot version
 
 Restoring is itself a commit: it produces a brand-new snapshot matching the target version's state, rather than rewriting history in place - so the version you restored *from* is never lost, and a restore can itself be undone by restoring again.
@@ -12,4 +13,5 @@ Restoring is itself a commit: it produces a brand-new snapshot matching the targ
 - `SNAPSHOT list` - see every recorded version for the feature in context
 - `SNAPSHOT show 3` - inspect exactly what version 3 looked like
 - `SNAPSHOT describe 3 "pre-launch baseline"` - label version 3 with a comment
+- `SNAPSHOT diff 3` - preview what restoring to version 3 would change
 - `SNAPSHOT restore 3` - roll the feature back to version 3, recorded as a new snapshot

@@ -106,7 +106,7 @@ impl Tabular for RolloutStatus {
 
 /// Formats a duration in seconds as a compact human string (e.g. `1d 2h 3m`), used both
 /// for the schedule summary and the time-to-next-step estimate.
-pub(super) fn format_duration(mut secs: u32) -> String {
+pub(crate) fn format_duration(mut secs: u32) -> String {
     let days = secs / 86400;
     secs %= 86400;
     let hours = secs / 3600;

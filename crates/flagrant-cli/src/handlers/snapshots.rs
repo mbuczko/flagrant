@@ -3,7 +3,7 @@ use fancy_table::{Align, FancyTable, FancyTableOpts, Layout, Width};
 use flagrant_client::connection::Connection;
 use flagrant_repl::{command::Arg, session::Session};
 use flagrant_types::{
-    Snapshot,
+    Snapshot, SnapshotDiff,
     payload::{RestoreRequest, UpdateSnapshotCommentPayload},
 };
 
@@ -13,7 +13,7 @@ use crate::{
         internal::{index, stage},
         prompt_line,
     },
-    printer::{menu, tabular::Tabular},
+    printer::{self, menu, tabular::Tabular},
 };
 
 fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
@@ -92,6 +92,26 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let state = snapshot.parsed_state()?;
     snapshot.display(None, &state);
+    Ok(())
+}
+
+/// Shows what a `SNAPSHOT restore <version>` to a given version would change - the
+/// feature's current live state compared against that snapshot's captured state,
+/// rendered git-diff style (removed in red, added in green).
+pub fn diff(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let feature_id = current_feature_id(session)?;
+    let version = parse_version(args, "SNAPSHOT diff <version>")?;
+
+    let ctx = session.context.read().unwrap();
+    let path = ctx
+        .env_resource()
+        .subpath(format!("/features/{feature_id}/snapshots/{version}/diff"));
+    let diff: SnapshotDiff = ctx.client.get(path)?;
+
+    drop(ctx);
+
+    let target_state = diff.target.parsed_state()?;
+    printer::snapshot_diff::print(&diff.current, &target_state, diff.target.version);
     Ok(())
 }
 
