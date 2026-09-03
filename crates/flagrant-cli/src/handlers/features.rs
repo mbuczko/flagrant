@@ -22,6 +22,7 @@ use crate::{
 pub(crate) fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
+
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
@@ -122,6 +123,7 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if name.is_empty() {
         bail!("No name provided.");
     }
+
     println!("Staged: name = {name}");
 
     ctx.get_or_init_feature_patch().name = Some(name);
@@ -239,6 +241,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             "Not in a feature context. Set the context with: \"/FEATURE <feature>\" command."
         )
     })?;
+
     let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
     let overrides = fetch_overrides(feature.id, session);
 

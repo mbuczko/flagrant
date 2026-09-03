@@ -147,8 +147,8 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     bail!("No such an environment.")
 }
 
-/// Prints every environment name in the current project - shown when `/ENVIRONMENT` is
-/// submitted with no environment name.
+/// Prepares list of environments available for the current project.
+/// Shown when `/ENVIRONMENT` is submitted with no environment name.
 fn hint_available(session: &Session<Connection>) -> anyhow::Result<String> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
