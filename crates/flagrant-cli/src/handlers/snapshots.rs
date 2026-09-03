@@ -285,7 +285,7 @@ pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     drop(ctx);
 
     println!(
-        "Restored to v{version} - recorded as new snapshot v{}.",
+        "Restored to version: {version} and recorded as new snapshot: {}.",
         snapshot.version
     );
     Ok(())
