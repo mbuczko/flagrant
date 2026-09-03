@@ -8,6 +8,8 @@ A **snapshot** is a numbered, point-in-time capture of a feature's full state - 
 
 Restoring is itself a commit: it produces a brand-new snapshot matching the target version's state, rather than rewriting history in place - so the version you restored *from* is never lost, and a restore can itself be undone by restoring again.
 
+Anywhere a `<version>` is expected, you can use `~N` (git `HEAD~N`-style) instead of an absolute number. The current state always matches the most recent snapshot (every commit that changes state immediately captures a new one), so `~0` is the latest snapshot itself, `~1` is one snapshot before it, `~2` two before, and so on.
+
 ### Examples
 
 - `SNAPSHOT list` - see every recorded version for the feature in context
@@ -15,3 +17,6 @@ Restoring is itself a commit: it produces a brand-new snapshot matching the targ
 - `SNAPSHOT describe 3 "pre-launch baseline"` - label version 3 with a comment
 - `SNAPSHOT diff 3` - preview what restoring to version 3 would change
 - `SNAPSHOT restore 3` - roll the feature back to version 3, recorded as a new snapshot
+- `SNAPSHOT describe ~0 "pre-launch baseline"` - label the snapshot a commit just produced, without looking up its version
+- `SNAPSHOT restore ~1` - undo the last commit, rolling back to the snapshot before it
+- `SNAPSHOT diff ~2` - compare the current state against the snapshot from two commits ago

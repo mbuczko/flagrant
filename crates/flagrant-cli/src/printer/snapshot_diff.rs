@@ -1,16 +1,22 @@
 use std::collections::HashSet;
 
 use colored::Colorize;
-use flagrant_types::{SnapshotIdentityOverride, SnapshotSegmentOverride, SnapshotState, SnapshotVariant};
+use flagrant_types::{
+    SnapshotIdentityOverride, SnapshotSegmentOverride, SnapshotState, SnapshotVariant,
+};
+use similar::{ChangeTag, TextDiff};
 
-use super::tabular::rollout::format_duration;
+use super::tabular::{rollout::format_duration, segment::format_connector};
 
 /// One line of a git-diff-style comparison: unchanged, only present on the current
-/// (live) side, or only present on the target (snapshot) side.
+/// (live) side, only present on the target (snapshot) side, or present on both but with
+/// different text - word-highlighted rather than shown as a plain removed+added pair, so
+/// a long line doesn't have to be read in full to spot what actually changed.
 enum Line {
     Same(String),
     Removed(String),
     Added(String),
+    Changed { old: String, new: String },
 }
 
 impl Line {
@@ -23,8 +29,38 @@ impl Line {
             Line::Same(s) => println!("    {s}"),
             Line::Removed(s) => println!("  {}", format!("- {s}").red()),
             Line::Added(s) => println!("  {}", format!("+ {s}").green()),
+            Line::Changed { old, new } => {
+                let (removed, added) = word_diff_sides(old, new);
+                println!("  {}{removed}", "- ".red());
+                println!("  {}{added}", "+ ".green());
+            }
         }
     }
+}
+
+/// Word-level highlight of a changed text field: words common to both sides are plain
+/// red/green (matching the surrounding removed/added convention), the words that
+/// actually differ are bold on a black background - so a long line (a description, a
+/// segment's rule summary) stands out where it changed instead of forcing a full
+/// re-read of the whole line.
+fn word_diff_sides(old: &str, new: &str) -> (String, String) {
+    let diff = TextDiff::from_words(old, new);
+    let mut removed = String::new();
+    let mut added = String::new();
+
+    for change in diff.iter_all_changes() {
+        let text = change.as_str().unwrap_or_default();
+        match change.tag() {
+            ChangeTag::Equal => {
+                removed.push_str(&text.red().to_string());
+                added.push_str(&text.green().to_string());
+            }
+            ChangeTag::Delete => removed.push_str(&text.red().bold().on_black().to_string()),
+            ChangeTag::Insert => added.push_str(&text.green().bold().on_black().to_string()),
+        }
+    }
+
+    (removed, added)
 }
 
 const LABEL_WIDTH: usize = 12;
@@ -39,6 +75,19 @@ fn scalar_lines(out: &mut Vec<Line>, label: &str, current: &str, target: &str) {
     } else {
         out.push(Line::Removed(field(label, current)));
         out.push(Line::Added(field(label, target)));
+    }
+}
+
+/// Same as `scalar_lines`, but for free-text fields worth word-diffing rather than
+/// showing as a plain removed+added pair - e.g. `description`, which can run long.
+fn scalar_line_worddiff(out: &mut Vec<Line>, label: &str, current: &str, target: &str) {
+    if current == target {
+        out.push(Line::Same(field(label, current)));
+    } else {
+        out.push(Line::Changed {
+            old: field(label, current),
+            new: field(label, target),
+        });
     }
 }
 
@@ -79,8 +128,10 @@ fn variant_lines(current: &[SnapshotVariant], target: &[SnapshotVariant]) -> Vec
             Some(tv) => {
                 used_target.insert(tv.id);
                 if cv.value != tv.value || cv.weight != tv.weight {
-                    lines.push(Line::Removed(variant_line(cv)));
-                    lines.push(Line::Added(variant_line(tv)));
+                    lines.push(Line::Changed {
+                        old: variant_line(cv),
+                        new: variant_line(tv),
+                    });
                 } else {
                     lines.push(Line::Same(variant_line(cv)));
                 }
@@ -116,9 +167,51 @@ fn segment_override_line(state: &SnapshotState, ov: &SnapshotSegmentOverride) ->
     format!("{} {weights}", ov.segment_name)
 }
 
+/// Summarizes a segment override's rule groups as captured in the snapshot (or live) -
+/// each group's connector and `subject comparator value` rules, OR-ed within a group,
+/// combined across groups by their connector (mirrors `SEGMENT show`'s own AND/AND-NOT
+/// symbols) - so a rule/group edit on the overriding segment shows up even when the
+/// weights it drives haven't changed.
+fn segment_rules_summary(ov: &SnapshotSegmentOverride) -> String {
+    ov.groups
+        .iter()
+        .map(|g| {
+            let connector = g
+                .connector
+                .as_ref()
+                .map(|c| format!("{} ", format_connector(c)))
+                .unwrap_or_default();
+            let rules = g
+                .rules
+                .iter()
+                .map(|r| format!("{} {} {}", r.subject, r.comparator, r.value))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            format!("{connector}[{rules}]")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A segment override's definition line - its description and rule groups as captured -
+/// shown only when it differs between current and target, since it's not part of the
+/// weights line every override already prints.
+fn segment_definition_line(ov: &SnapshotSegmentOverride) -> String {
+    let desc = ov.segment_description.as_deref().unwrap_or("");
+    let rules = segment_rules_summary(ov);
+    if desc.is_empty() {
+        format!("{}  {rules}", ov.segment_name)
+    } else {
+        format!("{}  \"{desc}\"  {rules}", ov.segment_name)
+    }
+}
+
 /// Matches `current`'s segment overrides against `target`'s by `segment_id` - a segment
 /// override only exists at all while a segment actually overrides the feature, so unlike
-/// variants there's no value-based fallback to consider.
+/// variants there's no value-based fallback to consider. Compares both the weights the
+/// override drives and the overriding segment's own definition (name, description, rule
+/// groups) as captured at each end - a segment can change shape (a rename, description
+/// edit, or rule/group change) without its weights ever moving.
 fn segment_override_lines(current: &SnapshotState, target: &SnapshotState) -> Vec<Line> {
     let mut lines = Vec::new();
     let mut used_target: HashSet<i32> = HashSet::new();
@@ -131,18 +224,31 @@ fn segment_override_lines(current: &SnapshotState, target: &SnapshotState) -> Ve
         {
             Some(tov) => {
                 used_target.insert(tov.segment_id);
-                let mut cw: Vec<(i32, u8)> =
-                    cov.weights.iter().map(|w| (w.variant_id, w.weight)).collect();
-                let mut tw: Vec<(i32, u8)> =
-                    tov.weights.iter().map(|w| (w.variant_id, w.weight)).collect();
+                let mut cw: Vec<(i32, u8)> = cov
+                    .weights
+                    .iter()
+                    .map(|w| (w.variant_id, w.weight))
+                    .collect();
+                let mut tw: Vec<(i32, u8)> = tov
+                    .weights
+                    .iter()
+                    .map(|w| (w.variant_id, w.weight))
+                    .collect();
                 cw.sort();
                 tw.sort();
 
-                if cw != tw {
+                if cw != tw || cov.segment_name != tov.segment_name {
                     lines.push(Line::Removed(segment_override_line(current, cov)));
                     lines.push(Line::Added(segment_override_line(target, tov)));
                 } else {
                     lines.push(Line::Same(segment_override_line(current, cov)));
+                }
+
+                if cov.segment_description != tov.segment_description || cov.groups != tov.groups {
+                    lines.push(Line::Changed {
+                        old: segment_definition_line(cov),
+                        new: segment_definition_line(tov),
+                    });
                 }
             }
             None => lines.push(Line::Removed(segment_override_line(current, cov))),
@@ -249,7 +355,12 @@ pub fn print(current: &SnapshotState, target: &SnapshotState, version: i32) {
         if target.is_srv { "ON" } else { "OFF" },
     );
     if !current.description.is_empty() || !target.description.is_empty() {
-        scalar_lines(&mut top, "description", &current.description, &target.description);
+        scalar_line_worddiff(
+            &mut top,
+            "description",
+            &current.description,
+            &target.description,
+        );
     }
 
     let variants = variant_lines(&current.variants, &target.variants);
@@ -317,6 +428,6 @@ fn rollout_lines(current: &SnapshotState, target: &SnapshotState) -> Vec<Line> {
         (Some(c), None) => vec![Line::Removed(c)],
         (None, Some(t)) => vec![Line::Added(t)],
         (Some(c), Some(t)) if c == t => vec![Line::Same(c)],
-        (Some(c), Some(t)) => vec![Line::Removed(c), Line::Added(t)],
+        (Some(c), Some(t)) => vec![Line::Changed { old: c, new: t }],
     }
 }

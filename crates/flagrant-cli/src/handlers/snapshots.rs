@@ -31,12 +31,67 @@ fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
         })
 }
 
-fn parse_version(args: &[Arg], usage: &str) -> anyhow::Result<i32> {
-    args.get(1)
+/// Resolves a version token that's either an absolute version number or a `~N` relative
+/// reference - git `HEAD~N`-style: the current live state always matches the most recent
+/// snapshot (every commit that changes state immediately captures a new one), so that
+/// latest snapshot plays the role of `HEAD` here just like it does in git - `~0` is that
+/// latest snapshot (the current state), `~1` is one snapshot before it, `~2` two before,
+/// and so on. `~0` is mostly useful for `SNAPSHOT describe`, to label the snapshot a
+/// commit just produced without having to look up its absolute version number first.
+fn parse_version_str(
+    raw: &str,
+    session: &Session<Connection>,
+    feature_id: i32,
+) -> anyhow::Result<i32> {
+    match raw.strip_prefix('~') {
+        Some(rel) => {
+            let n: usize = rel.parse().map_err(|_| {
+                anyhow::anyhow!(
+                    "Relative version must be a number, e.g. ~0 for the current state or ~1 for the snapshot before it."
+                )
+            })?;
+            resolve_relative_version(session, feature_id, n)
+        }
+        None => raw
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Version must be a number.")),
+    }
+}
+
+/// Resolves `~N` into the absolute version number of the snapshot N steps before the
+/// current state (`~0` is the most recent snapshot itself, i.e. `HEAD` - see
+/// `parse_version_str`).
+fn resolve_relative_version(
+    session: &Session<Connection>,
+    feature_id: i32,
+    n: usize,
+) -> anyhow::Result<i32> {
+    let ctx = session.context.read().unwrap();
+    let path = ctx
+        .env_resource()
+        .subpath(format!("/features/{feature_id}/snapshots"));
+    let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+    drop(ctx);
+
+    snapshots.get(n).map(|s| s.version).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Only {} snapshot(s) recorded - ~{n} doesn't exist.",
+            snapshots.len()
+        )
+    })
+}
+
+fn parse_version(
+    args: &[Arg],
+    usage: &str,
+    session: &Session<Connection>,
+    feature_id: i32,
+) -> anyhow::Result<i32> {
+    let raw = args
+        .get(1)
         .ok_or_else(|| anyhow::anyhow!("Usage: {usage}"))?
-        .to_string()
-        .parse()
-        .map_err(|_| anyhow::anyhow!("Version must be a number."))
+        .to_string();
+    parse_version_str(&raw, session, feature_id)
 }
 
 /// Lists every snapshot recorded for the current feature, most recent first.
@@ -81,7 +136,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
 /// state), and pinned identity overrides.
 pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let feature_id = current_feature_id(session)?;
-    let version = parse_version(args, "SNAPSHOT show <version>")?;
+    let version = parse_version(args, "SNAPSHOT show <version>", session, feature_id)?;
 
     let ctx = session.context.read().unwrap();
     let path = ctx
@@ -100,7 +155,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// rendered git-diff style (removed in red, added in green).
 pub fn diff(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let feature_id = current_feature_id(session)?;
-    let version = parse_version(args, "SNAPSHOT diff <version>")?;
+    let version = parse_version(args, "SNAPSHOT diff <version>", session, feature_id)?;
 
     let ctx = session.context.read().unwrap();
     let path = ctx
@@ -127,18 +182,15 @@ pub fn diff(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// omitted, prompts for it inline, pre-filled with the current comment.
 pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let feature_id = current_feature_id(session)?;
-    let ctx = session.context.read().unwrap();
-
     let version: i32 = match args.get(1) {
-        Some(v) => v
-            .to_string()
-            .parse()
-            .map_err(|_| anyhow::anyhow!("Version must be a number."))?,
+        Some(v) => parse_version_str(&v.to_string(), session, feature_id)?,
         None => {
+            let ctx = session.context.read().unwrap();
             let path = ctx
                 .env_resource()
                 .subpath(format!("/features/{feature_id}/snapshots"));
             let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+            drop(ctx);
 
             if snapshots.is_empty() {
                 bail!("No snapshots recorded yet for this feature.");
@@ -163,6 +215,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         }
     };
 
+    let ctx = session.context.read().unwrap();
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots/{version}"));
@@ -202,7 +255,12 @@ pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     stage::ensure_no_pending(session)?;
 
     let feature_id = current_feature_id(session)?;
-    let version = parse_version(args, "SNAPSHOT restore <version> [comment]")?;
+    let version = parse_version(
+        args,
+        "SNAPSHOT restore <version> [comment]",
+        session,
+        feature_id,
+    )?;
     let comment = args.get(2).map(|a| a.to_string());
 
     let ctx = session.context.read().unwrap();
