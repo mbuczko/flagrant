@@ -8,7 +8,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::prompt_line,
+    handlers::{internal::stage, prompt_line},
     printer::tabular::{Tabular, environment::list_with_current},
 };
 
@@ -121,20 +121,9 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     if env_name.is_empty() {
         bail!(hint_available(session)?);
     }
+    stage::ensure_no_pending(session)?;
 
     let mut ctx = session.context.write().unwrap();
-    if ctx
-        .feature_patch
-        .as_ref()
-        .map(|p| !p.is_empty())
-        .unwrap_or(false)
-    {
-        bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-    }
-    if ctx.has_identity_pending() {
-        bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
-    }
-
     let res = ctx.project.as_base_resource();
     let response = ctx
         .client
@@ -147,6 +136,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
         ctx.environment = env;
         ctx.identity = None;
         ctx.identity_patch = None;
+
         drop(ctx);
 
         if let Some(name) = feature_name {
