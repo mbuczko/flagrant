@@ -438,13 +438,9 @@ fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
 ///
 /// Must be called without arguments; passing any argument is an error that hints
 /// at the more targeted `VARIANT discard <index>` command.
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if !args.is_empty() {
-        bail!(
-            "No arguments expected. To discard a single change on variant use `VARIANT discard <index>`."
-        );
-    }
+pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
+
     if ctx.feature_patch.take().is_some() {
         println!("Pending changes discarded.");
     }
@@ -557,7 +553,7 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
 /// - `rules <w1>:<dur1> [<w2>:<dur2> ...] <100>` - stage a new schedule, e.g.
 ///   `10:6h 50:2d 80:30m 100`. Each duration accepts an `s`/`m`/`h`/`d` suffix; the last
 ///   token is the terminal step and must be a bare weight with no duration. Committing
-///   this immediately activates the schedule, from step 0, in *every* environment of the
+///   this immediately activates the schedule, from step 0, in every environment of the
 ///   project - there's no separate per-environment activation step. Progression itself
 ///   still gates independently per environment from there on (each has its own
 ///   minimum-sample-size and hold-duration checks).
