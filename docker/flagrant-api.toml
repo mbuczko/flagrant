@@ -7,6 +7,6 @@
 listen = "0.0.0.0:3030"
 
 # Enables the Redis-backed response cache for the public features endpoint.
-[redis]
-url = "redis://redis:6379"
-ttl-seconds = 30
+# [redis]
+# url = "redis://redis:6379"
+# ttl-seconds = 30
