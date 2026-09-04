@@ -484,14 +484,17 @@ pub(crate) fn reset(_args: &[Arg], session: &Session<Connection>) -> anyhow::Res
             anyhow::bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
         }
     }
+
     let mut ctx = session.context.write().unwrap();
+
     ctx.feature = None;
     ctx.feature_patch = None;
-    ctx.variant_index.clear();
     ctx.identity = None;
     ctx.identity_patch = None;
     ctx.segment = None;
     ctx.segment_patch = None;
+    ctx.variant_index.clear();
+
     println!("Context reset.");
     Ok(())
 }

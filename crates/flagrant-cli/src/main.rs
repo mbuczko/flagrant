@@ -367,6 +367,12 @@ fn main() -> anyhow::Result<()> {
         ),
         // Snapshots (only in feature context)
         Command::Snapshot.op_in_context(
+            "diff",
+            "version",
+            handlers::snapshots::diff,
+            in_context!(feature_ctx),
+        ),
+        Command::Snapshot.op_in_context(
             "list",
             "",
             handlers::snapshots::list,
@@ -391,7 +397,7 @@ fn main() -> anyhow::Result<()> {
             in_context!(feature_ctx),
         ),
         Command::Snapshot.args_in_context(
-            "describe · list · restore · show",
+            "describe · diff · list · restore · show",
             in_context!(feature_ctx),
         ),
         // Commit / discard (available when any context has pending changes)

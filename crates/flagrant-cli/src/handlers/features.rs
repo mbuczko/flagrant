@@ -22,6 +22,7 @@ use crate::{
 pub(crate) fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow::Result<Feature> {
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
+
     ctx.client
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
@@ -122,6 +123,7 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     if name.is_empty() {
         bail!("No name provided.");
     }
+
     println!("Staged: name = {name}");
 
     ctx.get_or_init_feature_patch().name = Some(name);
@@ -239,6 +241,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             "Not in a feature context. Set the context with: \"/FEATURE <feature>\" command."
         )
     })?;
+
     let patch = ctx.feature_patch.as_ref().filter(|p| !p.is_empty());
     let overrides = fetch_overrides(feature.id, session);
 
@@ -438,13 +441,9 @@ fn parse_tag_ops(args: &[Arg]) -> Vec<(String, bool)> {
 ///
 /// Must be called without arguments; passing any argument is an error that hints
 /// at the more targeted `VARIANT discard <index>` command.
-pub fn discard(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
-    if !args.is_empty() {
-        bail!(
-            "No arguments expected. To discard a single change on variant use `VARIANT discard <index>`."
-        );
-    }
+pub fn discard(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
+
     if ctx.feature_patch.take().is_some() {
         println!("Pending changes discarded.");
     }
@@ -557,7 +556,7 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
 /// - `rules <w1>:<dur1> [<w2>:<dur2> ...] <100>` - stage a new schedule, e.g.
 ///   `10:6h 50:2d 80:30m 100`. Each duration accepts an `s`/`m`/`h`/`d` suffix; the last
 ///   token is the terminal step and must be a bare weight with no duration. Committing
-///   this immediately activates the schedule, from step 0, in *every* environment of the
+///   this immediately activates the schedule, from step 0, in every environment of the
 ///   project - there's no separate per-environment activation step. Progression itself
 ///   still gates independently per environment from there on (each has its own
 ///   minimum-sample-size and hold-duration checks).

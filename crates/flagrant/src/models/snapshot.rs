@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use flagrant_types::{
-    Environment, Feature, Project, Segment, Snapshot, SnapshotIdentityOverride,
+    Environment, Feature, Project, Segment, Snapshot, SnapshotDiff, SnapshotIdentityOverride,
     SnapshotSegmentGroup, SnapshotSegmentOverride, SnapshotState, SnapshotVariant, TagList,
     Variant,
     payload::{FeaturePatch, TagPatchOp, VariantPatchOp},
@@ -92,7 +92,22 @@ pub async fn set_comment(
     row.ok_or(FlagrantError::NotFound("Snapshot not found").into())
 }
 
-async fn build_state(
+/// Builds the read-only counterpart of [`restore`]: the feature's live state
+/// alongside the target version's state, for previewing what a restore to `version`
+/// would change without applying anything.
+pub async fn diff(
+    conn: &mut SqliteConnection,
+    project: &Project,
+    environment: &Environment,
+    feature: &Feature,
+    version: i32,
+) -> anyhow::Result<SnapshotDiff> {
+    let target = get_by_version(conn, feature.id, environment.id, version).await?;
+    let current = build_state(conn, project, environment, feature).await?;
+    Ok(SnapshotDiff { target, current })
+}
+
+pub async fn build_state(
     conn: &mut SqliteConnection,
     project: &Project,
     environment: &Environment,

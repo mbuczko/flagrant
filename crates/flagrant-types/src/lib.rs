@@ -227,7 +227,7 @@ pub struct IdentityVariant {
     pub is_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     /// Match against the identity value string (e.g. email, user ID).
@@ -299,7 +299,7 @@ impl Comparator {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct SegmentRule {
     #[sqlx(rename = "rule_id")]
     pub id: i32,
@@ -438,7 +438,7 @@ pub struct SnapshotVariant {
 /// recreate the group (and its rules) if the owning segment was later deleted. Vec
 /// order (not a stored position field) carries the intended group order - mirrors
 /// `Segment::groups`, which already omits `position` for the same reason.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct SnapshotSegmentGroup {
     pub label: String,
     pub connector: Option<GroupConnector>,
@@ -512,6 +512,12 @@ impl Snapshot {
     pub fn parsed_state(&self) -> serde_json::Result<SnapshotState> {
         serde_json::from_str(&self.state)
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SnapshotDiff {
+    pub target: Snapshot,
+    pub current: SnapshotState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

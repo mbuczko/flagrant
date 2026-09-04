@@ -3,7 +3,7 @@ pub mod feature;
 mod feature_response;
 mod group;
 mod identity;
-mod rollout;
+pub(crate) mod rollout;
 mod rule;
 pub mod segment;
 mod snapshot;

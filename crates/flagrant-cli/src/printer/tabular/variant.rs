@@ -39,11 +39,7 @@ impl Tabular for EffectiveVariant {
         )
         .into_owned();
 
-        let control_s = if variant.is_control {
-            "yes".to_string()
-        } else {
-            "no".dimmed().to_string()
-        };
+        let control_s = if variant.is_control { "yes" } else { "no" }.to_string();
 
         let identities_s = if identities.is_empty() {
             "(none)".dimmed().to_string()

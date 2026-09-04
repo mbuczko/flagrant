@@ -21,6 +21,7 @@ use utoipa::OpenApi;
         crate::handlers::snapshots::fetch,
         crate::handlers::snapshots::update_comment,
         crate::handlers::snapshots::restore,
+        crate::handlers::snapshots::diff,
         crate::handlers::variants::list,
         crate::handlers::variants::fetch,
         crate::handlers::variants::get_pinned_identities,
@@ -89,6 +90,7 @@ use utoipa::OpenApi;
             flagrant_types::payload::RestoreRequest,
             flagrant_types::payload::UpdateSnapshotCommentPayload,
             flagrant_types::Snapshot,
+            flagrant_types::SnapshotDiff,
             flagrant_types::SnapshotState,
             flagrant_types::SnapshotVariant,
             flagrant_types::SnapshotSegmentOverride,
@@ -116,7 +118,7 @@ use utoipa::OpenApi;
     ),
     info(
         title = "Flagrant API",
-        version = "0.0.26",
+        version = "0.0.27",
         description = "CLI-powered feature-flagging service"
     )
 )]

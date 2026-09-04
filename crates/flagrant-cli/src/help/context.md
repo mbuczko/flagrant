@@ -1,4 +1,4 @@
-Typing `/` switches the prompt to a `context>` overlay for switching which environment/feature/identity/segment is active, or clearing context entirely. Both the command keyword and its name argument tab-complete. A bare `/` with nothing typed after it lists the available commands.
+Typing `/` switches the prompt to a `context>` overlay for changing which environment/feature/identity/segment is active, or clearing context entirely. Both the command keyword and its name argument tab-complete. A bare `/` with nothing typed after it lists the available commands.
 
 - `/ENVIRONMENT <name>` - switch into a different environment
 - `/FEATURE <name>` - switch into a feature context

@@ -52,6 +52,10 @@ pub fn init_router() -> Router<AppState> {
             "/envs/:environment/features/:feature_id/snapshots/:version/restore",
             post(snapshots::restore),
         )
+        .route(
+            "/envs/:environment/features/:feature_id/snapshots/:version/diff",
+            get(snapshots::diff),
+        )
         // Variants
         .route(
             "/envs/:environment/features/:feature_id/overrides",

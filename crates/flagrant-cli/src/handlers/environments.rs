@@ -8,7 +8,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    handlers::prompt_line,
+    handlers::{internal::stage, prompt_line},
     printer::tabular::{Tabular, environment::list_with_current},
 };
 
@@ -119,22 +119,11 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
 /// Fails if there are uncommitted staged changes.
 pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow::Result<()> {
     if env_name.is_empty() {
-        return hint_available(session);
+        bail!(hint_available(session)?);
     }
+    stage::ensure_no_pending(session)?;
 
     let mut ctx = session.context.write().unwrap();
-    if ctx
-        .feature_patch
-        .as_ref()
-        .map(|p| !p.is_empty())
-        .unwrap_or(false)
-    {
-        bail!("You have uncommitted changes. Run `COMMIT` or `DISCARD` first.");
-    }
-    if ctx.has_identity_pending() {
-        bail!("You have uncommitted identity changes. Run `COMMIT` or `DISCARD` first.");
-    }
-
     let res = ctx.project.as_base_resource();
     let response = ctx
         .client
@@ -147,6 +136,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
         ctx.environment = env;
         ctx.identity = None;
         ctx.identity_patch = None;
+
         drop(ctx);
 
         if let Some(name) = feature_name {
@@ -157,9 +147,9 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     bail!("No such an environment.")
 }
 
-/// Prints every environment name in the current project - shown when `/ENVIRONMENT` is
-/// submitted with no environment name.
-fn hint_available(session: &Session<Connection>) -> anyhow::Result<()> {
+/// Prepares list of environments available for the current project.
+/// Shown when `/ENVIRONMENT` is submitted with no environment name.
+fn hint_available(session: &Session<Connection>) -> anyhow::Result<String> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
     let names = ctx
@@ -170,6 +160,5 @@ fn hint_available(session: &Session<Connection>) -> anyhow::Result<()> {
         .collect::<Vec<_>>()
         .join(", ");
 
-    println!("Available environments: {}", names.cyan());
-    Ok(())
+    Ok(format!("Available environments: {}", names.cyan()))
 }
