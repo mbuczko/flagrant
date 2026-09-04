@@ -40,8 +40,6 @@ jobs:
     env:
       IMAGE: ${{ gitea.repository }} # owner/repo, must be all lowercase for Docker
     steps:
-      # actions/checkout and docker/login-action are JS-based actions, so `node`
-      # must be on PATH before any `uses:` step runs - see the same note above.
       - name: Install Node.js
         run: apk add --no-cache nodejs
 
@@ -78,7 +76,6 @@ jobs:
   build-docker-image-arm64:
     needs: test
     if: startsWith(gitea.ref, 'refs/tags/')
-    # adjust this label to whatever the Raspberry Pi 5 runner is registered under
     runs-on: arm64
     container:
       image: docker:27-cli
@@ -147,6 +144,12 @@ jobs:
           username: ${{ gitea.actor }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -157,6 +160,8 @@ jobs:
           docker buildx imagetools create \
             -t ${{ vars.REGISTRY }}/${{ env.IMAGE }}:latest \
             -t ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ steps.vars.outputs.tag }} \
+            -t docker.io/${{secrets.DOCKERHUB_USERNAME}}/flagrant-api:latest \
+            -t docker.io/${{secrets.DOCKERHUB_USERNAME}}/flagrant-api:${{ steps.vars.outputs.tag }} \
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ steps.vars.outputs.tag }}-amd64 \
             ${{ vars.REGISTRY }}/${{ env.IMAGE }}:${{ steps.vars.outputs.tag }}-arm64
 
@@ -191,10 +196,6 @@ jobs:
           mkdir -p dist
           tar -czf dist/flagrant-freebsd-amd64.tar.gz -C target/x86_64-unknown-freebsd/release flagrant-api flagrant-cli
 
-      # Gitea's generic package registry: PUT the file to
-      # /api/packages/{owner}/generic/{package}/{version}/{filename}. Owner is derived
-      # from `gitea.repository` (owner/repo) since the `gitea` context has no dedicated
-      # repository-owner field.
       - name: Publish generic package to Gitea
         env:
           REPO: ${{ gitea.repository }}
