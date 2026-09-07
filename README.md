@@ -40,19 +40,18 @@ or
 myproject/prod → ui_theme + beta_testers › ...
 ```
 
-Typing an entity's command with just a name switches into that entity's context - the same `FEATURE`/`IDENTITY`/`SEGMENT`/`ENVIRONMENT` keywords used for `add`/`delete`/`list`/etc., no separate syntax to learn:
+Typing an entity's command with just a name switches into that entity's context - the same mechanic works for all following commands, with tab-completion built-in:
 
 ```
 FEATURE feature
 IDENTITY identity
 SEGMENT segment
 ENVIRONMENT environment
-RESET
 ```
 
-Identity and segment context are independent of feature context, so combining a feature switch with an identity/segment switch takes two commands, e.g. `FEATURE feature` then `IDENTITY identity`. An environment switch re-enters the previously active feature in the new environment. `ENVIRONMENT` with no name lists every environment in the project. `RESET` drops feature, identity, and segment context all at once.
+If a name happens to collide with one of that command's other sub-commands (e.g. a feature literally named `list`), the bare form can't reach it. Use the explicit `use` op instead, which is unambiguous regardless of what the name is: `FEATURE use list`, `IDENTITY use show`, `SEGMENT use add`, `ENVIRONMENT use dev`.
 
-If a name happens to collide with one of that command's other sub-commands (e.g. a feature literally named `list`), the bare form can't reach it - a real op always wins. Use the explicit `use` op instead, which is unambiguous regardless of what the name is: `FEATURE use list`, `IDENTITY use show`, `SEGMENT use add`, `ENVIRONMENT use dev`.
+Identity and segment context are independent of feature context, so combining a feature switch with an identity/segment switch takes two commands, e.g. `FEATURE feature` then `IDENTITY identity`. An environment switch re-enters the previously active feature in the new environment. `ENVIRONMENT` with no name lists every environment in the project. `RESET` drops feature, identity, and segment context all at once.
 
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE set [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
