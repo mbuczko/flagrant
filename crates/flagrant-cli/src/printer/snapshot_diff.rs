@@ -238,8 +238,10 @@ fn segment_override_lines(current: &SnapshotState, target: &SnapshotState) -> Ve
                 tw.sort();
 
                 if cw != tw || cov.segment_name != tov.segment_name {
-                    lines.push(Line::Removed(segment_override_line(current, cov)));
-                    lines.push(Line::Added(segment_override_line(target, tov)));
+                    lines.push(Line::Changed {
+                        old: segment_override_line(current, cov),
+                        new: segment_override_line(target, tov),
+                    });
                 } else {
                     lines.push(Line::Same(segment_override_line(current, cov)));
                 }

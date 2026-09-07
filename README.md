@@ -52,7 +52,7 @@ Typing `/` at the prompt switches it into a `context>` overlay for changing a co
 
 Identity and segment context are independent of feature context, so combining a feature switch with an identity/segment switch takes two commands, e.g. `/FEATURE feature` then `/IDENTITY identity`. An environment switch re-enters the previously active feature in the new environment. `/ENVIRONMENT` with no name lists every environment in the project. `/RESET` drops feature, identity, and segment context all at once.
 
-A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE add [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
+A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE set [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
 ### Interactive prompts
 
@@ -139,7 +139,7 @@ Enter an identity's context with:
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
 
 - `IDENTITY trait <name=value|-name ...>` to stage trait changes/removals, e.g. `IDENTITY trait country=pl -org`
-- `OVERRIDE add [variant-index]` / `OVERRIDE delete` see Overrides below
+- `OVERRIDE set [variant-index]` / `OVERRIDE delete` see Overrides below
 
 ### Segments
 
@@ -170,8 +170,8 @@ Available rule comparators:
 
 Overrides bypass a feature's normal weighted distribution for a specific identity or a whole segment. Both require a feature + identity/segment context (see [Context composition](#context-composition)):
 
-- **Identity override**: `OVERRIDE add [variant-index]` pins that one identity to a specific variant of the feature (by its display index, same numbering as `FEATURE show`), regardless of its weight-based assignment. Omit the index to pick from an interactive menu instead, listing every variant with the identity's current one marked. `OVERRIDE delete` releases the pin, freeing the identity to be redistributed on its next request.
-- **Segment override**: `OVERRIDE add [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit both arguments to open an interactive menu instead: navigate variants with the arrow keys and adjust each one's weight up/down by 5% at a time, with the control variant's weight auto-balancing live as you go. `OVERRIDE delete` removes it, falling back to the feature's normal weights for that segment's identities.
+- **Identity override**: `OVERRIDE set [variant-index]` pins that one identity to a specific variant of the feature (by its display index, same numbering as `FEATURE show`), regardless of its weight-based assignment. Omit the index to pick from an interactive menu instead, listing every variant with the identity's current one marked. `OVERRIDE delete` releases the pin, freeing the identity to be redistributed on its next request.
+- **Segment override**: `OVERRIDE set [variant-index weight]` overrides the feature's variant weights specifically for identities matching the segment, with its own independently-balanced control variant - so segment traffic can be split differently than the general population. Omit both arguments to open an interactive menu instead: navigate variants with the arrow keys and adjust each one's weight up/down by 5% at a time, with the control variant's weight auto-balancing live as you go. `OVERRIDE delete` removes it, falling back to the feature's normal weights for that segment's identities.
 - **Bulk clearing** (feature context only, no identity/segment context needed): `UNSET distribution <pattern>` clears the variant assignment for every identity whose value matches `pattern` (`*` as a wildcard), without deleting the identities or their traits - handy for forcing a whole cohort to be redistributed in case of emergency.
 
 All staged changes across every active context - feature edits, identity/segment overrides, trait changes - are applied together with `COMMIT`, or dropped together with `DISCARD`.

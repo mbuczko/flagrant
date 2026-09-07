@@ -413,7 +413,7 @@ fn main() -> anyhow::Result<()> {
         Command::GetAll.no_op("[@identity]", handlers::tester::get_all),
         // Identity overrides (only in identity context)
         Command::Override.op_in_context(
-            "add",
+            "set",
             "[variant-index]",
             handlers::identities::set_override,
             in_context!(identity_ctx),
@@ -424,10 +424,10 @@ fn main() -> anyhow::Result<()> {
             handlers::identities::unset_override,
             in_context!(identity_ctx),
         ),
-        Command::Override.args_in_context("add · delete", in_context!(identity_ctx)),
+        Command::Override.args_in_context("set · delete", in_context!(identity_ctx)),
         // Segment overrides (only in feature + segment context)
         Command::Override.op_in_context(
-            "add",
+            "set",
             "[variant-index weight]",
             handlers::segments::set_override,
             in_context!(feature_ctx, segment_ctx),
@@ -438,7 +438,7 @@ fn main() -> anyhow::Result<()> {
             handlers::segments::unset_override,
             in_context!(feature_ctx, segment_ctx),
         ),
-        Command::Override.args_in_context("add · delete", in_context!(feature_ctx, segment_ctx)),
+        Command::Override.args_in_context("set · delete", in_context!(feature_ctx, segment_ctx)),
         // UNSET (only in feature context)
         Command::Unset.op_in_context(
             "distribution",

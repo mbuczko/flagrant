@@ -406,7 +406,7 @@ fn resolve_identity(
     )
 }
 
-/// Builds the `OVERRIDE add` menu options - every existing variant, numbered and labeled
+/// Builds the `OVERRIDE set` menu options - every existing variant, numbered and labeled
 /// with its distribution weight, value, staged/default/current markers, colon-aligned via
 /// [`menu::align_rows`]. `ordered` and its numbering must match `set_override`'s own
 /// `variant-index` argument (every non-deleted variant, in `effective_variants` order -

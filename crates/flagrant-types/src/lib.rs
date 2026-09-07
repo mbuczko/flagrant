@@ -461,7 +461,7 @@ pub struct SnapshotSegmentOverride {
 
 /// A single pinned identity override as captured inside a snapshot. Organic
 /// (non-pinned) assignments are never part of snapshot state - only deliberate,
-/// bounded `OVERRIDE add` pins are.
+/// bounded `OVERRIDE set` pins are.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SnapshotIdentityOverride {
     pub identity_id: i32,
