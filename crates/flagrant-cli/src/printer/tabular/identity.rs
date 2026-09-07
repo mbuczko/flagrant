@@ -32,7 +32,7 @@ impl Tabular for IdentityWithTraits {
             .collect();
 
         FancyTable::create(FancyTableOpts::default())
-            .add_column_named_with_align("IDENTITY".into(), Layout::Fixed(40), Align::Left)
+            .add_column_named_with_align("IDENTITY".into(), Layout::Fixed(30), Align::Left)
             .add_column_named_with_align("TRAITS".into(), Layout::Expandable(60), Align::Left)
             .width(Width::Percentage(100))
             .build()
