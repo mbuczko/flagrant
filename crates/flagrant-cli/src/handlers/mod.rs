@@ -1,5 +1,4 @@
 pub mod admin;
-pub mod context;
 pub mod environments;
 pub mod features;
 pub mod groups;

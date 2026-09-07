@@ -35,7 +35,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if in_context {
         let identity = ctx.identity.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-                "Not in an identity context. Set the context with: \"/IDENTITY <identity>\" command."
+                "Not in an identity context. Set the context with: \"IDENTITY <identity>\" command."
             )
         })?;
         let patch = ctx.identity_patch.as_ref().filter(|p| !p.is_empty());
@@ -152,7 +152,7 @@ pub fn drop_matching(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 /// Expected args: `<identity>`
 ///
 /// Switches into the named identity's context first if not already there (same as
-/// `/IDENTITY <identity>`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// `IDENTITY <identity>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this identity is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -210,6 +210,24 @@ pub(crate) fn switch_to(identity_str: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
+/// Bare `IDENTITY <name>` catch-all - switches into `<name>`'s context.
+pub(crate) fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.first() else {
+        bail!("Usage: IDENTITY <name>");
+    };
+    switch_to(name, session)
+}
+
+/// `IDENTITY use <name>` - unambiguous by fixed argument position, unlike the bare
+/// catch-all above, which a real op always wins over. Only needed as an escape hatch for
+/// an identity literally named after one of this command's other ops (e.g. `list`).
+pub(crate) fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.get(1) else {
+        bail!("Usage: IDENTITY use <name>");
+    };
+    switch_to(name, session)
+}
+
 /// Stage adding/changing or removing one or more traits on the current identity.
 ///
 /// Expected args: `name=value [name2=value2 ...] [-name3 ...]`
@@ -246,7 +264,7 @@ pub fn r#trait(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let mut ctx = session.context.write().unwrap();
 
     if ctx.identity.is_none() {
-        bail!("Not in an identity context. Use `/IDENTITY <identity>` first.");
+        bail!("Not in an identity context. Use `IDENTITY <identity>` first.");
     }
 
     let existing: Vec<String> = ctx
@@ -281,12 +299,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
     // Gather everything under a read lock, including showing the menu if needed.
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!(
-            "Not in an identity context. Use \"/IDENTITY <identity>\" to set a context."
-        )
+        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY <identity>\" to set a context.")
     })?;
 
     let effectives = effective::effective_variants(feature, ctx.feature_patch.as_ref());
@@ -340,12 +356,10 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
     })?;
     let identity = ctx.identity.as_ref().ok_or_else(|| {
-        anyhow::anyhow!(
-            "Not in an identity context. Use \"/IDENTITY <identity>\" to set a context."
-        )
+        anyhow::anyhow!("Not in an identity context. Use \"IDENTITY <identity>\" to set a context.")
     })?;
 
     let feature_name = feature.name.clone();

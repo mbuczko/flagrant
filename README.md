@@ -24,7 +24,7 @@ https://github.com/user-attachments/assets/6e26ae6a-4964-4428-8da0-8c9e9fa2f703
 
 ## Concepts
 
-Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based `/`-triggered context overlay: enter a context, stage changes, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
+Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based commands: enter a context, stage changes, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
 
 ### Context composition
 
@@ -40,17 +40,19 @@ or
 myproject/prod → ui_theme + beta_testers › ...
 ```
 
-Typing `/` at the prompt switches it into a `context>` overlay for changing a context, or clearing it - both the command keyword and (where applicable) its name argument tab-complete:
+Typing an entity's command with just a name switches into that entity's context - the same `FEATURE`/`IDENTITY`/`SEGMENT`/`ENVIRONMENT` keywords used for `add`/`delete`/`list`/etc., no separate syntax to learn:
 
 ```
-/FEATURE feature
-/IDENTITY identity
-/SEGMENT segment
-/ENVIRONMENT environment
-/RESET
+FEATURE feature
+IDENTITY identity
+SEGMENT segment
+ENVIRONMENT environment
+RESET
 ```
 
-Identity and segment context are independent of feature context, so combining a feature switch with an identity/segment switch takes two commands, e.g. `/FEATURE feature` then `/IDENTITY identity`. An environment switch re-enters the previously active feature in the new environment. `/ENVIRONMENT` with no name lists every environment in the project. `/RESET` drops feature, identity, and segment context all at once.
+Identity and segment context are independent of feature context, so combining a feature switch with an identity/segment switch takes two commands, e.g. `FEATURE feature` then `IDENTITY identity`. An environment switch re-enters the previously active feature in the new environment. `ENVIRONMENT` with no name lists every environment in the project. `RESET` drops feature, identity, and segment context all at once.
+
+If a name happens to collide with one of that command's other sub-commands (e.g. a feature literally named `list`), the bare form can't reach it - a real op always wins. Use the explicit `use` op instead, which is unambiguous regardless of what the name is: `FEATURE use list`, `IDENTITY use show`, `SEGMENT use add`, `ENVIRONMENT use dev`.
 
 A feature context alone lets you edit the feature itself (status, variants, tags, description, ...). Once an identity or segment context is also active, extra commands become available that only make sense across that combination - namely `OVERRIDE set [...]` / `OVERRIDE delete` (see Overrides below), which override that specific identity's or segment's variant assignment for the feature in context.
 
@@ -76,7 +78,7 @@ Values and weights are shared across environments differently depending on which
 Enter a feature's context with:
 
 ```
-/FEATURE <feature>
+FEATURE <feature>
 ```
 
 The prompt then shows the active feature, and these become available:
@@ -133,7 +135,7 @@ An **identity** is a caller recognized across requests, identified by an arbitra
 Enter an identity's context with:
 
 ```
-/IDENTITY <identity>
+IDENTITY <identity>
 ```
 
 `IDENTITY add <identity> [trait:value ...]` creates one and switches into it in the same step. Inside the context:
@@ -148,7 +150,7 @@ A **segment** is a project-scoped, rule-based group of identities - useful for r
 Enter a segment's context with:
 
 ```
-/SEGMENT <segment>
+SEGMENT <segment>
 ```
 
 (mutually exclusive with an identity context - entering one clears the other). Inside the context:
@@ -180,7 +182,7 @@ All staged changes across every active context - feature edits, identity/segment
 
 Every `COMMIT` that changes a feature - directly, or indirectly through a segment/identity override that touches it - automatically records a numbered **snapshot** of that feature's full state: its variants, any segment overrides (including the overriding segment's own rules, so it can be recreated if that segment is later deleted), and any pinned identity overrides. There's nothing to stage - it's just a side effect of committing, one snapshot per affected feature per commit, versions never reused even across restores.
 
-Snapshots require a feature context (`/FEATURE <feature>`):
+Snapshots require a feature context (`FEATURE <feature>`):
 
 - `SNAPSHOT list` to see every version recorded for the feature, most recent first
 - `SNAPSHOT show <version>` to inspect exactly what a version captured
