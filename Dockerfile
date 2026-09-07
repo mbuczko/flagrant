@@ -61,7 +61,7 @@ COPY --from=builder /usr/local/bin/flagrant-cli /usr/local/bin/flagrant-cli
 COPY --from=builder --chown=65532:65532 /data /data
 COPY --chown=65532:65532 docker/flagrant-api.toml /etc/flagrant/flagrant.toml
 
-ENV DB_NAME=/data/flagrant.db
+ENV FLAGRANT_DB=/data/flagrant.db
 ENV FLAGRANT_CONFIG=/etc/flagrant/flagrant.toml
 
 EXPOSE 3030

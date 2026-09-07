@@ -36,14 +36,14 @@ The first two commands pull and start the API server. The third opens a `flagran
 
 By default the image stores its SQLite database at `/data/flagrant.db` (declared as a `VOLUME`, so it survives container restarts) and reads its server config from `/etc/flagrant/flagrant.toml` (a minimal default baked in - see [Server-side-only flags](#server-side-only-flags) for what can go in there). Both are overridable via environment variables:
 
-- `DB_NAME` - path to the SQLite database file
+- `FLAGRANT_DB` - path to the SQLite database file
 - `FLAGRANT_CONFIG` - path to the TOML config file
 
 ```sh
 docker run -d --name flagrant-api -p 3030:3030 \
   -v $(pwd)/data:/data \
   -v $(pwd)/my-flagrant.toml:/etc/flagrant/my-flagrant.toml:ro \
-  -e DB_NAME=/data/my-flagrant.db \
+  -e FLAGRANT_DB=/data/my-flagrant.db \
   -e FLAGRANT_CONFIG=/etc/flagrant/my-flagrant.toml \
   mbuczko/flagrant-api:latest
 ```
