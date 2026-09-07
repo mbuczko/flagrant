@@ -152,7 +152,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .flatten()
         .filter(|p| !p.is_empty());
 
-    // `OVERRIDE add` requires a feature+segment context and switching feature is
+    // `OVERRIDE set` requires a feature+segment context and switching feature is
     // blocked while this patch is pending, so the in-context feature is guaranteed to
     // be the one any `SetFeatureOverride` op refers to - at most one can be staged.
     if is_in_context && let Some(feature) = ctx.feature.as_ref() {
@@ -424,11 +424,11 @@ fn current_weights_for<'a>(
 
 /// Stage variant weight overrides for the current feature within this segment.
 ///
-/// **Menu mode** (`OVERRIDE add` - no args):
+/// **Menu mode** (`OVERRIDE set` - no args):
 /// Opens an interactive menu listing every non-control variant's current weight and
 /// allows adjusting the highlighted one by 5 (clamped so the total never exceeds 100).
 ///
-/// **Inline mode** (`OVERRIDE add <variant-index> <weight>`):
+/// **Inline mode** (`OVERRIDE set <variant-index> <weight>`):
 /// Updates a single variant's staged weight without touching others.
 ///
 /// Either way, every non-control variant ends up with an explicit entry (0 for any not
@@ -452,7 +452,7 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
         let idx = args.get(1).unwrap().parse::<usize>()?;
         let weight = args
             .get(2)
-            .ok_or_else(|| anyhow::anyhow!("Usage: OVERRIDE add <variant-index> <weight>"))?
+            .ok_or_else(|| anyhow::anyhow!("Usage: OVERRIDE set <variant-index> <weight>"))?
             .parse::<u8>()?;
 
         let variant_ref = index::resolve(idx, &ctx)?;

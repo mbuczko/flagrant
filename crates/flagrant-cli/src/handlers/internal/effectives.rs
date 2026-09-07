@@ -180,7 +180,7 @@ pub(crate) fn effective_variants(
 }
 
 /// Builds rows for the "adjust every non-control variant's weight" menu shared by
-/// `VARIANT weight` (adjusting the feature's own distribution) and segment `OVERRIDE add`
+/// `VARIANT weight` (adjusting the feature's own distribution) and segment `OVERRIDE set`
 /// (adjusting a segment's weight override) - the two only differ in where a row's initial
 /// weight comes from, supplied via `weight_for`. Returns the same non-control, non-deleted
 /// variants zipped 1:1 with the rows (so a caller can map a confirmed row back to its

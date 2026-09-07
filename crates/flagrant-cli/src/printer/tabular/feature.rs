@@ -11,7 +11,7 @@ use super::{Tabular, rollout::format_duration};
 
 /// A staged change to the in-context identity's override for this feature.
 pub enum IdentityPending {
-    /// A new or updated override was staged (`OVERRIDE add`), pinning the identity to the
+    /// A new or updated override was staged (`OVERRIDE set`), pinning the identity to the
     /// variant holding `variant_value`.
     Override {
         identity: String,
