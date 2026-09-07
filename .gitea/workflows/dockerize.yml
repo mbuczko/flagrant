@@ -182,6 +182,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache cargo registry and build artifacts
+        continue-on-error: true
+        uses: Swatinem/rust-cache@v2
+
       - name: Determine release tag
         id: vars
         env:
