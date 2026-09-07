@@ -25,9 +25,7 @@ fn current_feature_id(session: &Session<Connection>) -> anyhow::Result<i32> {
         .as_ref()
         .map(|f| f.id)
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Not in a feature context. Use \"/FEATURE <feature>\" to set a context."
-            )
+            anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
         })
 }
 

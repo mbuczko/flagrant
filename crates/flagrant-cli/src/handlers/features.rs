@@ -96,7 +96,7 @@ pub fn rename(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
 
     let name = match args.get(1) {
@@ -140,7 +140,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
 
     let desc = match args.get(1) {
@@ -191,6 +191,24 @@ pub(crate) fn switch_to(feature_name: &str, session: &Session<Connection>) -> an
     Ok(())
 }
 
+/// Bare `FEATURE <name>` catch-all - switches into `<name>`'s context.
+pub(crate) fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.first() else {
+        bail!("Usage: FEATURE <name>");
+    };
+    switch_to(name, session)
+}
+
+/// `FEATURE use <name>` - unambiguous by fixed argument position, unlike the bare
+/// catch-all above, which a real op always wins over. Only needed as an escape hatch for
+/// a feature literally named after one of this command's other ops (e.g. `list`).
+pub(crate) fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.get(1) else {
+        bail!("Usage: FEATURE use <name>");
+    };
+    switch_to(name, session)
+}
+
 /// Fetches `feature_name` (scoped to the current environment) and sets it as the active
 /// feature context, rebuilding the variant index - without printing anything.
 /// Returns the feature's id.
@@ -238,7 +256,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
     let feature = ctx.feature.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
-            "Not in a feature context. Set the context with: \"/FEATURE <feature>\" command."
+            "Not in a feature context. Set the context with: \"FEATURE <feature>\" command."
         )
     })?;
 
@@ -316,7 +334,7 @@ pub fn status(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
     };
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
 
     let pending = ctx.get_or_init_feature_patch();
@@ -339,7 +357,7 @@ pub fn server_side(args: &[Arg], session: &Session<Connection>) -> anyhow::Resul
     };
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
 
     let pending = ctx.get_or_init_feature_patch();
@@ -360,7 +378,7 @@ pub fn tag(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
 
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
 
     let ops = if args.len() > 1 {
@@ -531,7 +549,7 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
         let ctx = session.context.read().unwrap();
         let feature = ctx.feature.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-                "Not within a feature context. Use \"/FEATURE <feature>\" to set a context."
+                "Not within a feature context. Use \"FEATURE <feature>\" to set a context."
             )
         })?;
 
@@ -589,7 +607,7 @@ fn effective_rollout(ctx: &Connection) -> Option<RolloutConfig> {
 fn progressive_rules(tokens: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
     if tokens.is_empty() {
         bail!("Usage: FEATURE progressive rules <w1>:<dur1> [<w2>:<dur2> ...] <100>");
@@ -662,7 +680,7 @@ fn progressive_rules(tokens: &[Arg], session: &Session<Connection>) -> anyhow::R
 fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
     let n: u32 = arg
         .ok_or_else(|| anyhow::anyhow!("Usage: FEATURE progressive sample <n>"))?
@@ -685,7 +703,7 @@ fn progressive_sample(arg: Option<&Arg>, session: &Session<Connection>) -> anyho
 fn progressive_delete(session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     if ctx.feature.is_none() {
-        bail!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.");
+        bail!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.");
     }
     ctx.get_or_init_feature_patch().rollout = Some(RolloutPatchOp::Unset);
     println!("Staged: progressive rollout deleted");
@@ -695,7 +713,7 @@ fn progressive_delete(session: &Session<Connection>) -> anyhow::Result<()> {
 fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
     })?;
     let has_config = feature.rollout.is_some();
     let environment_name = ctx.environment.name.clone();

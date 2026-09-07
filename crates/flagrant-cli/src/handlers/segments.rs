@@ -135,7 +135,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         None => {
             let ctx = session.context.read().unwrap();
             ctx.segment.clone().ok_or_else(|| {
-                anyhow::anyhow!("Not in a segment context. Use `/SEGMENT <segment>` first.")
+                anyhow::anyhow!("Not in a segment context. Use `SEGMENT <segment>` first.")
             })?
         }
     };
@@ -200,7 +200,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 /// and pre-selected).
 ///
 /// Switches into the named segment's context first if not already there (same as
-/// `/SEGMENT <segment>`, failing if there are uncommitted staged changes elsewhere), then stages its
+/// `SEGMENT <segment>`, failing if there are uncommitted staged changes elsewhere), then stages its
 /// deletion. Nothing is sent to the API until `COMMIT`; `DISCARD` un-stages it. Once staged,
 /// any other pending change for this segment is ignored by the server on commit.
 pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
@@ -437,7 +437,7 @@ fn current_weights_for<'a>(
 pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let ctx = session.context.read().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
     })?;
 
     let environment_id = ctx.environment.id;
@@ -579,13 +579,13 @@ pub fn set_override(args: &[Arg], session: &Session<Connection>) -> anyhow::Resu
 pub fn unset_override(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let mut ctx = session.context.write().unwrap();
     let feature = ctx.feature.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Not in a feature context. Use \"/FEATURE <feature>\" to set a context.")
+        anyhow::anyhow!("Not in a feature context. Use \"FEATURE <feature>\" to set a context.")
     })?;
     let feature_id = feature.id;
     let feature_name = feature.name.clone();
 
     if ctx.segment.is_none() {
-        bail!("Not in a segment context. Use \"/SEGMENT <segment>\" to set a context.");
+        bail!("Not in a segment context. Use \"SEGMENT <segment>\" to set a context.");
     }
 
     let patch = ctx.get_or_init_segment_patch();
@@ -648,4 +648,22 @@ pub(crate) fn switch_to(segment_str: &str, session: &Session<Connection>) -> any
     ctx.segment = Some(segment);
 
     Ok(())
+}
+
+/// Bare `SEGMENT <name>` catch-all - switches into `<name>`'s context.
+pub(crate) fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.first() else {
+        bail!("Usage: SEGMENT <name>");
+    };
+    switch_to(name, session)
+}
+
+/// `SEGMENT use <name>` - unambiguous by fixed argument position, unlike the bare
+/// catch-all above, which a real op always wins over. Only needed as an escape hatch for
+/// a segment literally named after one of this command's other ops (e.g. `list`).
+pub(crate) fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let Some(name) = args.get(1) else {
+        bail!("Usage: SEGMENT use <name>");
+    };
+    switch_to(name, session)
 }

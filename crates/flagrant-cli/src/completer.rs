@@ -52,7 +52,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                             })
                             .collect::<Vec<_>>()
                     }
-                    "delete" | "show" if arg_n == 2 => complete_identities(&ctx, prefix)?,
+                    "delete" | "show" | "use" if arg_n == 2 => complete_identities(&ctx, prefix)?,
                     // Auto-complete trait names for filtering, e.g. `trait:vip` or `trait:-vip`
                     "list" => match prefix.split_once(':') {
                         Some(("trait", val)) => {
@@ -76,17 +76,20 @@ impl AutoCompleter for ArgCompleter<'_> {
                         None => filter_by_prefix(&["trait"], prefix),
                         _ => vec![],
                     },
+                    // Bare `IDENTITY <name>` (no recognized op yet) - complete identity
+                    // names to switch context.
+                    _ if arg_n == 1 => complete_identities(&ctx, prefix)?,
                     _ => vec![],
                 })
             }
-            "FEATURE" if arg_n >= 2 => {
+            "FEATURE" if arg_n >= 1 => {
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.env_resource();
                 let op: &str = &args[1];
 
                 Ok(match op {
                     // Auto-complete feature name
-                    "delete" | "show" if arg_n == 2 => complete_features(&ctx, prefix)?,
+                    "delete" | "show" | "use" if arg_n == 2 => complete_features(&ctx, prefix)?,
 
                     "status" if arg_n == 2 => filter_by_prefix(&["on", "off", "archived"], prefix),
                     "server-side" if arg_n == 2 => filter_by_prefix(&["on", "off"], prefix),
@@ -141,6 +144,9 @@ impl AutoCompleter for ArgCompleter<'_> {
                         None => filter_by_prefix(&["tag", "status"], prefix),
                         _ => vec![],
                     },
+                    // Bare `FEATURE <name>` (no recognized op yet) - complete feature
+                    // names to switch context.
+                    _ if arg_n == 1 => complete_features(&ctx, prefix)?,
                     _ => vec![],
                 })
             }
@@ -214,54 +220,25 @@ impl AutoCompleter for ArgCompleter<'_> {
                     _ => vec![],
                 })
             }
-            "SEGMENT" if arg_n >= 2 => {
+            "SEGMENT" if arg_n >= 1 => {
                 let ctx = self.session.context.read().unwrap();
                 let res = ctx.project_resource();
                 let op: &str = &args[1];
 
                 Ok(match op {
-                    "delete" | "show" if arg_n == 2 => complete_segments(&ctx, prefix)?,
+                    "delete" | "show" | "use" if arg_n == 2 => complete_segments(&ctx, prefix)?,
                     "list" if arg_n == 2 => ctx
                         .client
                         .get::<Vec<Segment>>(res.subpath(format!("/segments?pattern={prefix}")))?
                         .into_iter()
                         .map(|s| s.name)
                         .collect::<Vec<_>>(),
+                    // Bare `SEGMENT <name>` (no recognized op yet) - complete segment
+                    // names to switch context.
+                    _ if arg_n == 1 => complete_segments(&ctx, prefix)?,
                     _ => vec![],
                 })
             }
-            _ => Ok(vec![]),
-        }
-    }
-}
-
-/// Argument completer for the `/`-triggered context overlay's own command list
-/// (`ENVIRONMENT`/`FEATURE`/`IDENTITY`/`SEGMENT`, each taking a single name argument at
-/// `arg_n == 1`) - kept separate from `ArgCompleter` since those same command names
-/// already have their own `arg_n`-keyed sub-op completions registered above for the main
-/// command set, which a bare-name completion at the same position would otherwise
-/// collide with.
-pub struct ContextArgCompleter<'a> {
-    pub session: &'a Session<Connection>,
-}
-
-impl AutoCompleter for ContextArgCompleter<'_> {
-    fn complete_by_prefix(
-        &self,
-        command: &str,
-        _args: &[Arg],
-        arg_n: usize,
-        prefix: &str,
-    ) -> anyhow::Result<Vec<String>> {
-        if arg_n != 1 {
-            return Ok(vec![]);
-        }
-        let ctx = self.session.context.read().unwrap();
-        match command.to_uppercase().as_str() {
-            "ENVIRONMENT" => complete_environments(&ctx, prefix),
-            "FEATURE" => complete_features(&ctx, prefix),
-            "IDENTITY" => complete_identities(&ctx, prefix),
-            "SEGMENT" => complete_segments(&ctx, prefix),
             _ => Ok(vec![]),
         }
     }

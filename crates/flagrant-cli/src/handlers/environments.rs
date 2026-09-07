@@ -147,8 +147,24 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     bail!("No such an environment.")
 }
 
+/// Bare `ENVIRONMENT [name]` catch-all - switches into `name`'s context, or lists every
+/// environment in the project when no name is given (see `switch_to`'s empty-string
+/// handling).
+pub(crate) fn switch(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let name = args.first().map(|a| a.as_ref()).unwrap_or("");
+    switch_to(name, session)
+}
+
+/// `ENVIRONMENT use <name>` - unambiguous by fixed argument position, unlike the bare
+/// catch-all above, which a real op always wins over. Only needed as an escape hatch for
+/// an environment literally named after one of this command's other ops (e.g. `list`).
+pub(crate) fn r#use(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
+    let name = args.get(1).map(|a| a.as_ref()).unwrap_or("");
+    switch_to(name, session)
+}
+
 /// Prepares list of environments available for the current project.
-/// Shown when `/ENVIRONMENT` is submitted with no environment name.
+/// Shown when `ENVIRONMENT` is submitted with no environment name.
 fn hint_available(session: &Session<Connection>) -> anyhow::Result<String> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
