@@ -22,6 +22,34 @@ As it's written in Rust, Flagrant comes with low-level resource utilisation and 
 
 https://github.com/user-attachments/assets/6e26ae6a-4964-4428-8da0-8c9e9fa2f703
 
+## Running with Docker
+
+The published image bundles both `flagrant-api` (the long-running server, and the container's default entrypoint) and `flagrant-cli`, so a single container is enough to try Flagrant end-to-end - no local Rust toolchain or separate build step needed:
+
+```sh
+docker pull mbuczko/flagrant-api:latest
+docker run -d --name flagrant-api -p 3030:3030 mbuczko/flagrant-api:latest
+docker exec -it flagrant-api flagrant-cli -p demo
+```
+
+The first two commands pull and start the API server. The third opens a `flagrant-cli` REPL inside that same running container - `-p demo` opens project `demo`, creating it (and its first environment) if it doesn't already exist. No `-h` flag is needed since `flagrant-cli`'s default host, `http://localhost:3030`, already points at the API server sharing that container.
+
+By default the image stores its SQLite database at `/data/flagrant.db` (declared as a `VOLUME`, so it survives container restarts) and reads its server config from `/etc/flagrant/flagrant.toml` (a minimal default baked in - see [Server-side-only flags](#server-side-only-flags) for what can go in there). Both are overridable via environment variables:
+
+- `DB_NAME` - path to the SQLite database file
+- `FLAGRANT_CONFIG` - path to the TOML config file
+
+```sh
+docker run -d --name flagrant-api -p 3030:3030 \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/my-flagrant.toml:/etc/flagrant/my-flagrant.toml:ro \
+  -e DB_NAME=/data/my-flagrant.db \
+  -e FLAGRANT_CONFIG=/etc/flagrant/my-flagrant.toml \
+  mbuczko/flagrant-api:latest
+```
+
+The base image is distroless (no shell, no `mkdir`), so whatever path either variable points at needs to already exist inside the container - bind-mounting it in, as above, is the simplest way, since Docker creates the host-side path for you before the container starts.
+
 ## Concepts
 
 Flagrant models four core entities - **features**, **variants**, **identities**, and **segments** - plus **overrides** that carve out exceptions to normal distribution. Everything is managed through the CLI's context-based commands: enter a context, stage changes, then apply them all at once with `COMMIT` (or throw them away with `DISCARD`).
