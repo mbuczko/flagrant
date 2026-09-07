@@ -7,7 +7,7 @@ static MIGRATOR: Migrator = sqlx::migrate!();
 
 pub async fn init_pool() -> anyhow::Result<SqlitePool> {
     let options = SqliteConnectOptions::new()
-        .filename(env::var("DB_NAME").expect("No DB_NAME provided"))
+        .filename(env::var("FLAGRANT_DB").expect("No FLAGRANT_DB provided"))
         .create_if_missing(true)
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal);
