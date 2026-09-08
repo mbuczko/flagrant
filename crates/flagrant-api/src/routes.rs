@@ -7,7 +7,7 @@ use utoipa_scalar::{Scalar, Servable};
 
 use crate::handlers::{
     admin, commit, environments, features, identities, projects, segments, snapshots, traits,
-    variants,
+    variants, version,
 };
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
@@ -116,6 +116,8 @@ pub fn init_router() -> Router<AppState> {
 
     Router::new()
         .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        // Version / health check
+        .route("/version", get(version::get_version))
         // Admin
         .route("/admin/reload", post(admin::reload_config))
         // Projects

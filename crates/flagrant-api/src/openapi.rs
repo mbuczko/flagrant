@@ -42,6 +42,7 @@ use utoipa::OpenApi;
         crate::handlers::segments::get_feature_override_weights,
         crate::api::get_features,
         crate::handlers::admin::reload_config,
+        crate::handlers::version::get_version,
     ),
     components(
         schemas(
@@ -100,6 +101,7 @@ use utoipa::OpenApi;
             flagrant_types::RolloutStep,
             flagrant_types::RolloutStatus,
             flagrant_types::payload::RolloutPatchOp,
+            crate::handlers::version::VersionResponse,
         )
     ),
     tags(
