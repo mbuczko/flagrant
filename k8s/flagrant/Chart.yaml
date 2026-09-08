@@ -9,7 +9,7 @@ description: >-
 # .gitea/workflows/dockerize.yml, `publish-helm-chart` job).
 type: application
 version: 0.1.0
-appVersion: "0.0.33"
+appVersion: "0.0.34"
 home: https://github.com/mbuczko/flagrant
 keywords:
   - feature-flags
