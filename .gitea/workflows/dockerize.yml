@@ -15,7 +15,7 @@ jobs:
     if: gitea.ref != 'refs/heads/master'
     runs-on: ubuntu-latest
     container:
-      image: gitea.rodzinks.pl/michal/flagrant-linux-ci:latest
+      image: ${{ vars.REGISTRY }}/${{ vars.REGISTRY_OWNER }}/flagrant-linux-ci:latest
       credentials:
         username: ${{ gitea.actor }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -174,7 +174,7 @@ jobs:
     if: startsWith(gitea.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     container:
-      image: gitea.rodzinks.pl/michal/flagrant-freebsd-ci:latest
+      image: ${{ vars.REGISTRY }}/${{ vars.REGISTRY_OWNER }}/flagrant-freebsd-ci:latest
       credentials:
         username: ${{ gitea.actor }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -212,3 +212,47 @@ jobs:
           curl -sSf -u "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" \
             --upload-file dist/flagrant-freebsd-amd64.tar.gz \
             "${{ gitea.server_url }}/api/packages/${OWNER}/generic/flagrant-freebsd/${{ steps.vars.outputs.tag }}/flagrant-freebsd-amd64.tar.gz"
+
+  publish-helm-chart:
+    needs: test
+    if: startsWith(gitea.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    container:
+      image: alpine/helm:latest
+    steps:
+      # Same reasoning as the docker:27-cli jobs above: actions/checkout is a Node-based
+      # action, and this Alpine-based image doesn't ship Node.js.
+      - name: Install Node.js
+        run: apk add --no-cache nodejs curl
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Chart.yaml's own `version`/`appVersion` are just placeholders for local `helm
+      # lint`/`helm template` runs - the published chart always tracks the release tag,
+      # overridden here at package time. Helm requires strict SemVer (no `v` prefix).
+      - name: Determine release version
+        id: vars
+        env:
+          REF: ${{ gitea.ref }}
+        run: |
+          tag="${REF#refs/tags/}"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package chart
+        run: |
+          helm package k8s/flagrant \
+            --version "${{ steps.vars.outputs.version }}" \
+            --app-version "${{ steps.vars.outputs.version }}" \
+            --destination dist
+
+      # https://docs.gitea.com/usage/packages/helm
+      - name: Publish chart to Gitea
+        env:
+          REPO: ${{ gitea.repository }}
+        run: |
+          OWNER="${REPO%%/*}"
+          curl -sSf -u "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" \
+            -X POST \
+            --upload-file "dist/flagrant-${{ steps.vars.outputs.version }}.tgz" \
+            "${{ gitea.server_url }}/api/packages/${OWNER}/helm/api/charts"

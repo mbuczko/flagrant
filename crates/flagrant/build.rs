@@ -1,27 +1,6 @@
-use notify_debouncer_mini::{DebounceEventResult, new_debouncer, notify::RecursiveMode};
-use std::{path::Path, time::Duration};
-
 fn main() {
-    // Select recommended watcher for debouncer.
-    // Using a callback here; could also be a channel.
-    let mut debouncer = new_debouncer(
-        Duration::from_secs(1),
-        |res: DebounceEventResult| match res {
-            Ok(events) => events.iter().for_each(|_event| {
-                std::process::Command::new("cargo")
-                    .arg("build")
-                    .status()
-                    .expect("Failed to execute command");
-            }),
-            Err(e) => println!("Error {:?}", e),
-        },
-    )
-    .unwrap();
-
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    debouncer
-        .watcher()
-        .watch(Path::new("resources"), RecursiveMode::Recursive)
-        .unwrap();
+    // hugsqlx-derive reads query files via a plain `fs::read_to_string` at macro-expansion
+    // time, so Cargo's own staleness check has no idea the crate depends on them - without
+    // this, editing a `.sql` file alone wouldn't trigger a rebuild.
+    println!("cargo:rerun-if-changed=resources");
 }

@@ -1,0 +1,95 @@
+# Default values for the flagrant chart.
+# See README.md for the full picture on why this chart is shaped the way it is
+# (single SQLite writer, Litestream restore/replicate, secrets handling).
+
+# SQLite has exactly one writer. Do not raise this, and do not point an HPA at
+# this Deployment - a second replica would mean two processes writing to two
+# different local copies of the database, replicating to the same S3 bucket.
+replicaCount: 1
+
+image:
+  repository: docker.io/mbuczko/flagrant-api
+  pullPolicy: IfNotPresent
+  # Defaults to .Chart.appVersion when empty.
+  tag: latest
+
+litestreamImage:
+  repository: litestream/litestream
+  pullPolicy: IfNotPresent
+  tag: "0.3.13"
+
+service:
+  type: ClusterIP
+  port: 3030
+
+serviceAccount:
+  create: false
+  name: ""
+  # Useful for AWS IRSA (EKS), e.g.:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/flagrant-litestream
+  # Grants S3 access to the pod without any static credentials below.
+  annotations: {}
+
+# flagrant-api's config file (FLAGRANT_CONFIG). May contain per-project/env
+# `srv-token` secrets (see [projects."<name>/<env>"] srv-token in the repo's
+# root flagrant.toml) - it is always rendered into a Secret, never a ConfigMap.
+config:
+  # Inline content, rendered into a Secret owned by this release. Fine for
+  # local/test use; for anything real, leave this as-is and set
+  # existingSecret instead so tokens never land in `helm get values`/git.
+  content: |
+    [http]
+    listen = "0.0.0.0:3030"
+  # Name of a pre-existing Secret containing the rendered flagrant.toml.
+  # Takes precedence over `content` when set.
+  existingSecret: ""
+  existingSecretKey: flagrant.toml
+
+litestream:
+  # Path to the SQLite file inside the shared /data emptyDir. Must match the
+  # path derived from FLAGRANT_DB below.
+  dbPath: /data/flagrant.db
+
+  replica:
+    bucket: ""
+    path: flagrant.db
+    region: ""
+    # Set for S3-compatible stores that aren't AWS (MinIO, Cloudflare R2, ...).
+    endpoint: ""
+    forcePathStyle: false
+
+  # Credentials for the S3 replica. Prefer existingSecret in production, or
+  # leave everything empty and grant access via serviceAccount.annotations
+  # (IRSA) instead - no static credentials needed at all in that case.
+  s3:
+    existingSecret: ""
+    existingSecretAccessKeyIdKey: access-key-id
+    existingSecretSecretAccessKeyKey: secret-access-key
+    accessKeyId: ""
+    secretAccessKey: ""
+
+# Size cap for the emptyDir backing /data. The SQLite file itself isn't
+# durable here - Litestream/S3 is the durable copy - this just bounds local
+# disk usage.
+persistence:
+  sizeLimit: 1Gi
+
+resources: {}
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

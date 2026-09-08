@@ -127,7 +127,7 @@ A feature can be marked **server-side-only** with `FEATURE server-side on|off`. 
 To actually read srv-only features, a caller additionally sends an `Authorization: Bearer <token>` header, matching a per-project+environment `srv-token` configured server-side in `flagrant-api`'s TOML config file (`flagrant.toml` by default, or whatever path `FLAGRANT_CONFIG` points to):
 
 ```toml
-[projects.my_project.envs.production]
+[projects."demo/prod"]
 srv-token = "prod-secret-token"
 ```
 
@@ -236,6 +236,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
 - [x] **gRPC** - for backend-to-backend connection
 - [x] **Docker image** 
+- [x] **K8S Chart**
 - [ ] **Prometheus metrics**
 
 Further out: analytics on flag exposure/conversion, and client SDKs beyond Rust (JVM, JS, Python).

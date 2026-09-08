@@ -4,22 +4,25 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
-/// Server configuration loaded once at startup from a TOML file, keyed by project and
-/// environment name. Carries per-environment settings (currently just the `srv-token`
-/// unlocking server-side-only features), an optional `[http]` section overriding the
-/// HTTP listen address, plus optional top-level `[redis]` and `[grpc]` sections enabling
-/// those features when present.
+/// Server configuration loaded once at startup from a TOML file, keyed by `<project>/<env>`
+/// in the file but stored nested (project, then environment) so lookups are two plain `&str`
+/// map accesses - no string concatenation/allocation needed.
+///
+/// Carries per-project-environment settings (currently just the `srv-token` unlocking
+/// server-side-only features), an optional `[http]` section overriding the HTTP listen
+/// address, plus optional top-level `[redis]` and `[grpc]` sections enabling those features
+/// when present.
 ///
 /// ```toml
-/// [projects.my_project.envs.production]
+/// [projects."my_project/production"]
 /// srv-token = "prod-secret-token"
 /// ```
 #[derive(Debug, Default, Deserialize)]
 pub struct ServerConfig {
-    #[serde(default)]
-    pub projects: HashMap<String, ProjectConfig>,
+    #[serde(default, deserialize_with = "deserialize_projects")]
+    pub projects: HashMap<String, HashMap<String, ProjectEnvConfig>>,
     #[serde(default)]
     pub http: HttpConfig,
     #[serde(default)]
@@ -97,15 +100,35 @@ fn default_ttl_seconds() -> u64 {
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub struct ProjectConfig {
-    #[serde(default)]
-    pub envs: HashMap<String, EnvironmentConfig>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct EnvironmentConfig {
+pub struct ProjectEnvConfig {
     #[serde(rename = "srv-token")]
     pub srv_token: Option<String>,
+}
+
+/// Splits the file's flat `"<project>/<env>"` keys into a nested map at load time, so
+/// [`ServerConfig::srv_token`] never has to allocate a combined key back together.
+fn deserialize_projects<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<String, HashMap<String, ProjectEnvConfig>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let flat = HashMap::<String, ProjectEnvConfig>::deserialize(deserializer)?;
+    let mut nested = HashMap::<String, HashMap<String, ProjectEnvConfig>>::new();
+
+    for (key, config) in flat {
+        let (project, environment) = key.split_once('/').ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "invalid `projects` key {key:?}: expected \"<project>/<environment>\""
+            ))
+        })?;
+        nested
+            .entry(project.to_owned())
+            .or_default()
+            .insert(environment.to_owned(), config);
+    }
+
+    Ok(nested)
 }
 
 impl ServerConfig {
@@ -141,7 +164,6 @@ impl ServerConfig {
     pub fn srv_token(&self, project: &str, environment: &str) -> Option<&str> {
         self.projects
             .get(project)?
-            .envs
             .get(environment)?
             .srv_token
             .as_deref()

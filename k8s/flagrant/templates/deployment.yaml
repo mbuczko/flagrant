@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flagrant.fullname" . }}
+  labels:
+    {{- include "flagrant.labels" . | nindent 4 }}
+spec:
+  # SQLite has a single writer. Recreate guarantees the old pod (and its
+  # litestream-replicate sidecar) is fully torn down before the new one - and
+  # its litestream-restore init container - starts, so there's never a moment
+  # with two processes writing to two local copies of the database.
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "flagrant.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "flagrant.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "flagrant.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # Fetches the SQLite file from S3 before flagrant-api ever starts.
+        # Without this, flagrant-api's create_if_missing(true) would silently
+        # start against a brand new, empty database instead of failing loudly.
+        - name: litestream-restore
+          image: "{{ .Values.litestreamImage.repository }}:{{ .Values.litestreamImage.tag }}"
+          imagePullPolicy: {{ .Values.litestreamImage.pullPolicy }}
+          args:
+            - restore
+            - -config
+            - /etc/litestream.yml
+            - -if-replica-exists
+            - {{ .Values.litestream.dbPath }}
+          {{- with (include "flagrant.litestreamEnv" .) }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+      containers:
+        # Continuously streams WAL frames to S3 so the database is durable
+        # across pod restarts/rescheduling.
+        - name: litestream-replicate
+          image: "{{ .Values.litestreamImage.repository }}:{{ .Values.litestreamImage.tag }}"
+          imagePullPolicy: {{ .Values.litestreamImage.pullPolicy }}
+          args:
+            - replicate
+            - -config
+            - /etc/litestream.yml
+          {{- with (include "flagrant.litestreamEnv" .) }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream.yml
+              subPath: litestream.yml
+              readOnly: true
+        - name: flagrant-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: FLAGRANT_DB
+              value: {{ .Values.litestream.dbPath | quote }}
+            - name: FLAGRANT_CONFIG
+              value: /etc/flagrant/flagrant.toml
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/flagrant
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: {{ .Values.persistence.sizeLimit }}
+        - name: litestream-config
+          configMap:
+            name: {{ include "flagrant.litestreamConfigMapName" . }}
+        - name: config
+          secret:
+            secretName: {{ include "flagrant.configSecretName" . }}
+            items:
+              - key: {{ .Values.config.existingSecretKey }}
+                path: flagrant.toml
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

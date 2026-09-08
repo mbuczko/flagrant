@@ -9,6 +9,7 @@ pub mod snapshots;
 pub mod tags;
 pub mod traits;
 pub mod variants;
+pub mod version;
 
 use smallvec::{SmallVec, smallvec};
 

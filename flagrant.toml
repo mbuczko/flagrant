@@ -19,8 +19,8 @@ ttl-seconds = 30
 listen = "unix:/tmp/flagrant/grpc.sock"
 # listen = "127.0.0.1:50051"   # alternative: plain TCP
 
-[projects.demo.envs.dev]
+[projects."demo/dev"]
 srv-token = "dev-srv-token"
 
-[projects.demo.envs.prod]
+[projects."demo/prod"]
 srv-token = "prod-srv-token"
