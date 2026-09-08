@@ -92,7 +92,7 @@ resolution to the pod's ServiceAccount (e.g. AWS IRSA).
     secretKeyRef:
       name: {{ $secretName }}
       key: {{ .Values.litestream.s3.existingSecretAccessKeyIdKey }}
-- name: LITESTREAM_ACCESS_KEY_SECRET
+- name: LITESTREAM_SECRET_ACCESS_KEY
   valueFrom:
     secretKeyRef:
       name: {{ $secretName }}
