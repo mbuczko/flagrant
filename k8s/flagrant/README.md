@@ -66,6 +66,21 @@ both optional `flagrant-api` features enabled purely via `[redis]`/`[grpc]`
 sections in `flagrant.toml` - this chart doesn't deploy Redis itself. Point
 `[redis] url` at an instance you manage separately if you want caching.
 
+## Installing the published chart
+
+Every tagged release publishes this chart to the same Gitea instance as the
+Docker image and FreeBSD package (see `.gitea/workflows/dockerize.yml`,
+`publish-helm-chart` job), as a Helm chart repository
+(https://docs.gitea.com/usage/packages/helm):
+
+```sh
+helm repo add flagrant <helm repository>
+helm repo update
+helm install my-flagrant flagrant/flagrant --version 0.0.33 \
+  --set litestream.replica.bucket=your-s3-bucket \
+  --set litestream.replica.region=eu-west-1
+```
+
 ## Verifying a rendered install
 
 ```sh
