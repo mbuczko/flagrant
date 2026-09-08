@@ -1,0 +1,24 @@
+flagrant has been deployed as {{ include "flagrant.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+IMPORTANT - read before relying on this in production:
+
+1. Single writer only. `replicaCount` must stay at 1 - do not attach an HPA
+   to this Deployment. Rollouts use `strategy: Recreate`, so there is a brief
+   window of downtime on every deploy while the old pod terminates before the
+   new one starts. This is intentional: SQLite cannot tolerate two writers.
+
+2. First deploy against an empty bucket: the `litestream-restore` init
+   container uses `-if-replica-exists`, so it's a no-op the first time and
+   flagrant-api starts with a fresh database. `litestream-replicate` then
+   begins seeding {{ .Values.litestream.replica.bucket }} immediately.
+
+3. Shutdown race window: `litestream-replicate` and `flagrant-api` are
+   ordinary sidecar containers (for broad Kubernetes-version compatibility),
+   so both receive SIGTERM at the same time rather than the sidecar draining
+   after the app stops. Up to one Litestream sync interval (default ~1s) of
+   writes made in the last instant before shutdown could be lost. If your
+   cluster runs Kubernetes 1.29+, consider converting litestream-replicate to
+   a native sidecar (`initContainers` entry with `restartPolicy: Always`) for
+   stronger ordering guarantees.
+
+4. Secrets: {{ if .Values.config.existingSecret }}using existingSecret {{ .Values.config.existingSecret }} for flagrant.toml.{{ else }}flagrant.toml (which may contain srv-tokens) was rendered from `config.content` into a Secret owned by this release - avoid committing real tokens into values files checked into git; use `config.existingSecret` with a secret managed outside Helm instead.{{ end }}

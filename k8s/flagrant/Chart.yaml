@@ -1,0 +1,14 @@
+apiVersion: v2
+name: flagrant
+description: >-
+  Feature flag management API (flagrant-api) backed by SQLite, replicated to
+  S3 via Litestream. Single-writer only: this chart intentionally does not
+  support running more than one replica.
+type: application
+version: 0.1.0
+appVersion: "0.0.33"
+home: https://github.com/mbuczko/flagrant
+keywords:
+  - feature-flags
+  - sqlite
+  - litestream

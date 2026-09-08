@@ -236,6 +236,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **Caching layer (redis)** - to keep flags cached for given TTL and offload the hot-paths
 - [x] **gRPC** - for backend-to-backend connection
 - [x] **Docker image** 
+- [x] **K8S Chart**
 - [ ] **Prometheus metrics**
 
 Further out: analytics on flag exposure/conversion, and client SDKs beyond Rust (JVM, JS, Python).
