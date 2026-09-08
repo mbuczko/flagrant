@@ -127,7 +127,7 @@ A feature can be marked **server-side-only** with `FEATURE server-side on|off`. 
 To actually read srv-only features, a caller additionally sends an `Authorization: Bearer <token>` header, matching a per-project+environment `srv-token` configured server-side in `flagrant-api`'s TOML config file (`flagrant.toml` by default, or whatever path `FLAGRANT_CONFIG` points to):
 
 ```toml
-[projects.my_project.envs.production]
+[projects."demo/prod"]
 srv-token = "prod-secret-token"
 ```
 
