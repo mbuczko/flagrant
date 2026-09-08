@@ -76,7 +76,7 @@ Docker image and FreeBSD package (see `.gitea/workflows/dockerize.yml`,
 ```sh
 helm repo add flagrant <helm repository>
 helm repo update
-helm install my-flagrant flagrant/flagrant --version 0.0.33 \
+helm install my-flagrant flagrant/flagrant --version 0.0.34 \
   --set litestream.replica.bucket=your-s3-bucket \
   --set litestream.replica.region=eu-west-1
 ```
