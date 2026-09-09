@@ -38,7 +38,16 @@ spec:
             - restore
             - -config
             - /etc/litestream.yml
+            # -if-replica-exists: first-ever deploy against an empty bucket - no generation
+            # to restore yet, so succeed and let flagrant-api start fresh.
             - -if-replica-exists
+            # -if-db-not-exists: the emptyDir survives a pod sandbox recreation (e.g. node/
+            # kubelet restart) even though the Pod object isn't deleted - so a local file can
+            # already be there from before the restart. Without this, restore refuses to touch
+            # it and crash-loops forever; with it, it just leaves the existing file alone rather
+            # than risk overwriting newer local writes with an older S3 snapshot (that's what
+            # -force would do instead).
+            - -if-db-not-exists
             - {{ .Values.litestream.dbPath }}
           {{- with (include "flagrant.litestreamEnv" .) }}
           env:

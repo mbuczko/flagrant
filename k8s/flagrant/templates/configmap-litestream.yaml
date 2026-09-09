@@ -6,6 +6,8 @@ metadata:
     {{- include "flagrant.labels" . | nindent 4 }}
 data:
   litestream.yml: |
+    logging:
+      level: {{ .Values.litestream.logLevel | default "info" | quote }}
     dbs:
       - path: {{ .Values.litestream.dbPath }}
         replicas:
