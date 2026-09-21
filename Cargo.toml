@@ -33,6 +33,7 @@ reqwest = "0.11"
 smallvec = "1.15.1"
 colored = "3.0.0"
 toml = "0.8"
+dotenvy = "0.15"
 regex = "1.10.4"
 redis = { version = "1.7", features = ["tokio-comp", "connection-manager"] }
 tonic = "0.14.6"

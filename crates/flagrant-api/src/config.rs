@@ -137,8 +137,9 @@ impl ServerConfig {
         Ok(toml::from_str(&contents)?)
     }
 
-    /// Resolves the config path from `FLAGRANT_CONFIG`, falling back to `flagrant.toml`
-    /// if it exists in the current directory. Returns `None` when neither is available.
+    /// Resolves the config path from `FLAGRANT_CONFIG` (set in the environment or loaded
+    /// from a `.env` file at startup), falling back to `flagrant.toml` if it exists in the
+    /// current directory. Returns `None` when neither is available.
     /// Re-checked on every call (not cached) so a file created after startup, or a
     /// `flagrant.toml` that appears later, is picked up on the next reload.
     pub fn resolve_path() -> Option<PathBuf> {

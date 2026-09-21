@@ -39,6 +39,8 @@ By default the image stores its SQLite database at `/data/flagrant.db` (declared
 - `FLAGRANT_DB` - path to the SQLite database file
 - `FLAGRANT_CONFIG` - path to the TOML config file
 
+When running `flagrant-api` outside Docker, both variables can also be placed in a `.env` file in the working directory (or a parent of it) instead of being exported in the shell. Variables already set in the environment take precedence over the `.env` file.
+
 ```sh
 docker run -d --name flagrant-api -p 3030:3030 \
   -v $(pwd)/data:/data \

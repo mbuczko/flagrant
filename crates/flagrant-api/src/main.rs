@@ -24,6 +24,11 @@ mod tracing;
 
 #[tokio::main]
 async fn main() {
+    // Loads variables (`FLAGRANT_CONFIG`, `FLAGRANT_DB`, ...) from a `.env` file in the
+    // current directory or any parent. Already-set environment variables are never
+    // overridden, and a missing `.env` is fine.
+    dotenvy::dotenv().ok();
+
     init_tracing();
 
     let pool = flagrant::db::init_pool()

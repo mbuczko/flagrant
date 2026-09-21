@@ -908,6 +908,7 @@ dependencies = [
  "anyhow",
  "axum 0.7.7",
  "axum-extra",
+ "dotenvy",
  "flagrant",
  "flagrant-types",
  "prost",
