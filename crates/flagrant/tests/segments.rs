@@ -37,6 +37,7 @@ async fn attribution_for(
         SQLIdentities::fetch_identities(conn, params![environment.id, feature.id])
             .await
             .unwrap();
+
     rows.into_iter()
         .find(|r| r.identity_id == identity_id)
         .unwrap()

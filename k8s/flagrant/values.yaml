@@ -50,6 +50,8 @@ litestream:
   # path derived from FLAGRANT_DB below.
   dbPath: /data/flagrant.db
 
+  logLevel: warn
+
   replica:
     bucket: ""
     path: flagrant.db
