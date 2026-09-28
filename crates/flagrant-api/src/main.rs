@@ -64,6 +64,7 @@ async fn main() {
     #[cfg(feature = "grpc")]
     if let Some(grpc_config) = grpc_config {
         let grpc_state = state.clone();
+
         tokio::spawn(async move {
             if let Err(err) = grpc::serve(grpc_config, grpc_state).await {
                 ::tracing::error!(error = ?err, "gRPC server exited with an error");
@@ -80,7 +81,7 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("Cannot listen on {http_listen}: {e}"));
 
-    ::tracing::info!("listening on {}", listener.local_addr().unwrap());
+    ::tracing::info!(addr = ?listener.local_addr().unwrap(), "Starting HTTP server");
     axum::serve(listener, router)
         .await
         .expect("Cannot start HTTP server");

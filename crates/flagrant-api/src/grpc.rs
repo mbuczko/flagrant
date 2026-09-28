@@ -126,7 +126,7 @@ pub async fn serve(config: GrpcConfig, state: AppState) -> anyhow::Result<()> {
         }
 
         let listener = UnixListener::bind(path)?;
-        tracing::info!("gRPC listening on unix:{path}");
+        tracing::info!("Starting gRPC server at unix:{path}");
 
         Server::builder()
             .add_service(svc)
@@ -134,7 +134,7 @@ pub async fn serve(config: GrpcConfig, state: AppState) -> anyhow::Result<()> {
             .await?;
     } else {
         let listener = TcpListener::bind(&config.listen).await?;
-        tracing::info!("gRPC listening on {}", listener.local_addr()?);
+        tracing::info!(addr = ?listener.local_addr()?, "Starting gRPC server");
 
         Server::builder()
             .add_service(svc)

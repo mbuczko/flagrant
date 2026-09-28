@@ -143,13 +143,12 @@ impl ServerConfig {
     /// Re-checked on every call (not cached) so a file created after startup, or a
     /// `flagrant.toml` that appears later, is picked up on the next reload.
     pub fn resolve_path() -> Option<PathBuf> {
-        match env::var("FLAGRANT_CONFIG") {
-            Ok(path) => Some(PathBuf::from(path)),
-            Err(_) => {
-                let default_path = PathBuf::from("flagrant.toml");
-                default_path.exists().then_some(default_path)
-            }
-        }
+        let path = match env::var("FLAGRANT_CONFIG") {
+            Ok(path) => PathBuf::from(path),
+            Err(_) => PathBuf::from("flagrant.toml"),
+        };
+        tracing::info!(path = ?path, "Loading config file");
+        path.exists().then_some(path)
     }
 
     /// Loads configuration from [`Self::resolve_path`], defaulting to an empty config
