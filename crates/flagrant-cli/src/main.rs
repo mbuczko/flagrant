@@ -52,8 +52,9 @@ struct Args {
 
 fn print_banner() {
     println!(
-        "\n  {} {}{}",
+        "\n  {} {} {}{}",
         "Flagrant".bold(),
+        format!("v{}", env!("CARGO_PKG_VERSION")).dimmed(),
         "⚡".yellow(),
         "CLI-driven feature flagging".dimmed()
     );
