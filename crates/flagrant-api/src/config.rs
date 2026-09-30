@@ -12,8 +12,8 @@ use serde::{Deserialize, Deserializer};
 ///
 /// Carries per-project-environment settings (currently just the `srv-token` unlocking
 /// server-side-only features), an optional `[http]` section overriding the HTTP listen
-/// address, plus optional top-level `[redis]` and `[grpc]` sections enabling those features
-/// when present.
+/// address, plus optional top-level `[redis]`, `[grpc]` and `[metrics]` sections enabling
+/// those features when present.
 ///
 /// ```toml
 /// [projects."my_project/production"]
@@ -29,6 +29,8 @@ pub struct ServerConfig {
     pub redis: Option<RedisConfig>,
     #[serde(default)]
     pub grpc: Option<GrpcConfig>,
+    #[serde(default)]
+    pub metrics: Option<MetricsConfig>,
 }
 
 /// The always-on HTTP server's listen address. Unlike `[redis]`/`[grpc]`, there's nothing
@@ -78,6 +80,31 @@ fn default_http_listen() -> String {
 #[derive(Debug, Clone, Deserialize)]
 pub struct GrpcConfig {
     pub listen: String,
+}
+
+/// Optional Prometheus metrics endpoint, served from its own listener rather than the main
+/// HTTP one - metrics carry project/feature/trait names and identity counts, so this lets
+/// them be bound to an internal interface only. Absent `[metrics]` section means no
+/// listener (and no background refresh) at all - same on/off convention as `[grpc]`.
+///
+/// Gauges are recomputed from the database every `refresh-seconds` by a background task,
+/// not on each scrape, so several scrapers never multiply the query load. Read once at
+/// startup, like `[grpc]`'s `listen` - not picked up by `/admin/reload`.
+///
+/// ```toml
+/// [metrics]
+/// listen = "127.0.0.1:9090"
+/// refresh-seconds = 30
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetricsConfig {
+    pub listen: String,
+    #[serde(rename = "refresh-seconds", default = "default_refresh_seconds")]
+    pub refresh_seconds: u64,
+}
+
+fn default_refresh_seconds() -> u64 {
+    30
 }
 
 /// Optional Redis-backed response cache for the public features endpoint. Absent

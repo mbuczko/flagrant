@@ -194,6 +194,26 @@ pub async fn bump_up_accumulators(
     Ok(())
 }
 
+/// Gives back `count` draws of `variant_id` in the pool (segment) - the inverse of
+/// [`bump_up_accumulators`] plus the chosen variant's own -100 (see `distributor::release`).
+pub async fn release_accumulators(
+    conn: &mut SqliteConnection,
+    environment_id: i32,
+    feature_id: i32,
+    segment_id: Option<i32>,
+    variant_id: i32,
+    count: i64,
+) -> anyhow::Result<()> {
+    SQLFeatures::release_feature_variants_accumulators(
+        conn,
+        params![environment_id, feature_id, segment_id, count, variant_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not release variants accumulators", e))?;
+
+    Ok(())
+}
+
 /// Applies a `FeaturePatch` to the given feature atomically within a single transaction.
 ///
 /// Operations are applied in the following order to ensure weight constraints remain

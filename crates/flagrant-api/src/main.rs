@@ -17,6 +17,8 @@ mod extractors;
 #[cfg(feature = "grpc")]
 mod grpc;
 mod handlers;
+#[cfg(feature = "metrics")]
+mod metrics;
 mod openapi;
 mod routes;
 mod state;
@@ -53,6 +55,8 @@ async fn main() {
     let http_listen = config.http.listen.clone();
     #[cfg(feature = "grpc")]
     let grpc_config = config.grpc.clone();
+    #[cfg(feature = "metrics")]
+    let metrics_config = config.metrics.clone();
 
     let state = AppState {
         pool,
@@ -68,6 +72,16 @@ async fn main() {
         tokio::spawn(async move {
             if let Err(err) = grpc::serve(grpc_config, grpc_state).await {
                 ::tracing::error!(error = ?err, "gRPC server exited with an error");
+            }
+        });
+    }
+
+    #[cfg(feature = "metrics")]
+    if let Some(metrics_config) = metrics_config {
+        let pool = state.pool.clone();
+        tokio::spawn(async move {
+            if let Err(err) = metrics::serve(metrics_config, pool).await {
+                ::tracing::error!(error = ?err, "metrics server exited with an error");
             }
         });
     }

@@ -10,7 +10,7 @@ use hugsqlx::{HugSqlx, params};
 use serde_valid::Validate;
 use smallvec::SmallVec;
 use sqlx::{Connection, SqliteConnection};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{distributor, errors::FlagrantError, evaluator};
 
@@ -30,6 +30,76 @@ struct IdentityWithTraitRow {
     trait_id: Option<i32>,
     trait_name: Option<String>,
     trait_value: Option<String>,
+}
+
+/// Distributed assignments about to vanish, grouped by the pool they occupy - see
+/// [`release_assignments`].
+#[derive(sqlx::FromRow)]
+struct ReleasedAssignments {
+    environment_id: i32,
+    feature_id: i32,
+    segment_id: Option<i32>,
+    variant_id: i32,
+    identities: i64,
+}
+
+/// Hands the accumulator draws of `assignments` back to their pools (see
+/// [`distributor::release`]). Called right before unpinned assignments are removed or moved
+/// out of their pool, so the accumulators keep describing the population that is really
+/// left in it.
+async fn release_assignments(
+    conn: &mut SqliteConnection,
+    assignments: Vec<ReleasedAssignments>,
+) -> anyhow::Result<()> {
+    for a in assignments {
+        distributor::release(
+            conn,
+            a.environment_id,
+            a.feature_id,
+            a.segment_id,
+            a.variant_id,
+            a.identities,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// Releases the distributed (unpinned) assignments of one identity, optionally limited to a
+/// single feature. Pinned ones never drew from an accumulator, so there is nothing to give
+/// back for them.
+async fn release_for_identity(
+    conn: &mut SqliteConnection,
+    identity_id: i32,
+    feature_id: Option<i32>,
+) -> anyhow::Result<()> {
+    let assignments = SQLIdentities::fetch_unpinned_assignments_for_identity::<
+        _,
+        ReleasedAssignments,
+    >(&mut *conn, params![identity_id, feature_id])
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity assignments", e))?;
+
+    release_assignments(conn, assignments).await
+}
+
+/// Same as [`release_for_identity`], for every identity of `environment` matching the LIKE
+/// `pattern`.
+async fn release_matching(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    pattern: &str,
+    feature_id: Option<i32>,
+) -> anyhow::Result<()> {
+    let assignments =
+        SQLIdentities::fetch_unpinned_assignments_by_pattern::<_, ReleasedAssignments>(
+            &mut *conn,
+            params![environment.id, pattern, feature_id],
+        )
+        .await
+        .map_err(|e| FlagrantError::QueryFailed("Could not fetch identity assignments", e))?;
+
+    release_assignments(conn, assignments).await
 }
 
 /// A single trait filter condition used by [`list`]: matches identities carrying a trait
@@ -339,6 +409,8 @@ pub async fn patch(
                     "No variant with given value found for this feature",
                 ))?;
 
+        // Same as in `override_variant`: pinning takes the identity out of its pool.
+        release_for_identity(&mut tx, identity.id, Some(feat.id)).await?;
         SQLIdentities::upsert_identity_variant(
             &mut *tx,
             params![
@@ -374,6 +446,7 @@ pub async fn patch(
 pub async fn delete(conn: &mut SqliteConnection, identity: Identity) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
 
+    release_for_identity(&mut tx, identity.id, None).await?;
     SQLIdentities::delete_identity_traits(&mut *tx, params![identity.id]).await?;
     SQLIdentities::delete_identity_variants(&mut *tx, params![identity.id]).await?;
     SQLIdentities::delete_identity(&mut *tx, params![identity.id]).await?;
@@ -391,6 +464,7 @@ pub async fn clear_matching(
 ) -> anyhow::Result<()> {
     let mut tx = conn.begin().await?;
 
+    release_matching(&mut tx, environment, pattern, None).await?;
     SQLIdentities::delete_identity_traits_for_environment_pattern(
         &mut *tx,
         params![environment.id, pattern],
@@ -421,13 +495,17 @@ pub async fn clear_distribution_for_feature(
     feature_id: i32,
     pattern: &str,
 ) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    release_matching(&mut tx, environment, pattern, Some(feature_id)).await?;
     SQLIdentities::delete_identity_variants_for_feature_pattern(
-        conn,
+        &mut *tx,
         params![feature_id, environment.id, pattern],
     )
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not clear variant assignments", e))?;
 
+    tx.commit().await?;
     Ok(())
 }
 
@@ -542,10 +620,13 @@ pub async fn get_identity_variants(
         let attach_to_variant = if var.pinned_at.is_some() {
             None
         } else if let Some(id) = var.migrated_id {
+            // Stays in the pool the row was attributed to: organic for a weight-shift
+            // migration (`segment_id` is None there), the segment's own for one recorded by
+            // `rebalance_segment_members`.
             variant::get_by_id(&mut tx, environment, id, None)
                 .await
                 .ok()
-                .map(|v| (v, None))
+                .map(|v| (v, var.segment_id))
         } else if var.identity_id.is_none() {
             let segment_id = evaluate_segment_for(
                 &mut tx,
@@ -568,9 +649,38 @@ pub async fn get_identity_variants(
             )
             .await?;
             if segment_id != var.segment_id {
-                let variant =
-                    distributor::distribute(&mut tx, environment, var.feature_id, segment_id)
+                let variant = match var.variant_id {
+                    Some(previous) => {
+                        // The identity leaves the pool (organic or a segment's) it was drawn
+                        // from, so give that draw back before drawing from the new one -
+                        // otherwise its old slot stays counted and the pool it left ends up
+                        // over-filled by the identities that fill in later.
+                        distributor::release(
+                            &mut tx,
+                            environment.id,
+                            var.feature_id,
+                            var.segment_id,
+                            previous,
+                            1,
+                        )
                         .await?;
+                        // ...and stay on the current variant if the new pool has room for
+                        // it, so a weight change moves only as many identities as it needs
+                        // to instead of reshuffling every one that enters the pool.
+                        distributor::redistribute(
+                            &mut tx,
+                            environment,
+                            var.feature_id,
+                            segment_id,
+                            previous,
+                        )
+                        .await?
+                    }
+                    None => {
+                        distributor::distribute(&mut tx, environment, var.feature_id, segment_id)
+                            .await?
+                    }
+                };
                 Some((variant, segment_id))
             } else {
                 SQLIdentities::clear_identity_dirty(
@@ -609,6 +719,114 @@ pub async fn get_identity_variants(
 
     tx.commit().await?;
     Ok(variants)
+}
+
+#[derive(sqlx::FromRow)]
+struct SegmentMember {
+    identity_id: i32,
+    variant_id: i32,
+}
+
+/// Brings the identities already attributed to a segment in line with the weights its
+/// override for `feature_id` has just been given, moving only as many of them as it takes.
+///
+/// Without this, editing an override's weights leaves current members on the old ones (a
+/// dirty re-evaluation whose segment is unchanged only clears the flag) while newcomers draw
+/// from accumulators reset to the new weights as if the pool was empty, so the segment ends
+/// up as a blend of the two. It needs no rule evaluation: who is in the segment is already
+/// recorded in `identity_variants.segment_id`.
+///
+///  - the members' counts per variant are compared with the target counts for the new
+///    weights ([`distributor::target_counts`]);
+///  - exactly the surplus of each over-full variant - its most recent attachments, the oldest
+///    ones stay put - gets a pending migration (`migrated_id`) to a variant that is short, the same lazy mechanism
+///    organic weight changes use (resolved on each identity's next read, keeping its
+///    `segment_id`), so the effective assignment counts are the new ones right away;
+///  - the pool's accumulators are set to what they would be had exactly that population been
+///    drawn (see [`distributor::distribute`]) rather than reset to the bare weights, so
+///    identities joining later fill the real deficits.
+///
+/// `weights_changed` false only re-syncs the accumulators to the actual population: an edit
+/// that leaves the weights as they were must not shuffle anyone just because the members
+/// happen to sit a rounding step away from the exact targets.
+pub(crate) async fn rebalance_segment_members(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    segment_id: i32,
+    weights_changed: bool,
+) -> anyhow::Result<()> {
+    let pool =
+        variant::get_for_feature(&mut *conn, environment, feature_id, Some(segment_id)).await?;
+    let members = SQLIdentities::fetch_segment_members::<_, SegmentMember>(
+        &mut *conn,
+        params![environment.id, feature_id, segment_id],
+    )
+    .await
+    .map_err(|e| FlagrantError::QueryFailed("Could not fetch segment members", e))?;
+
+    let mut held: HashMap<i32, Vec<i32>> = HashMap::new();
+    for member in &members {
+        held.entry(member.variant_id)
+            .or_default()
+            .push(member.identity_id);
+    }
+    let total = members.len() as i64;
+
+    let targets = if weights_changed {
+        let weights: Vec<(i32, u8)> = pool.iter().map(|v| (v.id, v.weight)).collect();
+        distributor::target_counts(&weights, total)
+    } else {
+        pool.iter()
+            .map(|v| (v.id, held.get(&v.id).map_or(0, |ids| ids.len() as i64)))
+            .collect()
+    };
+
+    // Members beyond a variant's target - the most recently attached ones, since they have had
+    // the least exposure to the variant they'd be leaving - are the ones to move...
+    let mut surplus: Vec<i32> = Vec::new();
+    for (variant_id, ids) in &held {
+        let target = targets.get(variant_id).copied().unwrap_or(0) as usize;
+        surplus.extend(ids.iter().skip(target.min(ids.len())).copied());
+    }
+    surplus.sort_unstable();
+
+    // ...to the variants that fall short of theirs, in a stable order.
+    let mut shortfalls: Vec<(i32, i64)> = pool
+        .iter()
+        .map(|v| {
+            let have = held.get(&v.id).map_or(0, |ids| ids.len() as i64);
+            (v.id, targets.get(&v.id).copied().unwrap_or(0) - have)
+        })
+        .filter(|(_, missing)| *missing > 0)
+        .collect();
+    shortfalls.sort_by_key(|(variant_id, _)| *variant_id);
+
+    let mut moves = surplus.into_iter();
+    for (variant_id, missing) in shortfalls {
+        for identity_id in moves.by_ref().take(missing as usize) {
+            SQLIdentities::migrate_identity_to_variant(
+                &mut *conn,
+                params![identity_id, feature_id, environment.id, variant_id],
+            )
+            .await
+            .map_err(|e| FlagrantError::QueryFailed("Could not migrate segment member", e))?;
+        }
+    }
+
+    for v in &pool {
+        let n = targets.get(&v.id).copied().unwrap_or(0);
+        let accumulator = v.weight as i64 * (total + 1) - 100 * n;
+        variant::update_accumulator(
+            &mut *conn,
+            environment,
+            v,
+            Some(segment_id),
+            accumulator as i32,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// Gradually redirects a percentage of identities currently evaluating to `from_variant_id`
@@ -666,8 +884,13 @@ pub async fn override_variant(
     feature_id: i32,
     variant_id: i32,
 ) -> anyhow::Result<()> {
+    let mut tx = conn.begin().await?;
+
+    // A pinned identity no longer takes part in distribution, so the draw it was holding in
+    // its pool (organic or a segment's) has to go back to it.
+    release_for_identity(&mut tx, identity.id, Some(feature_id)).await?;
     SQLIdentities::upsert_identity_variant(
-        conn,
+        &mut *tx,
         params![
             identity.id,
             environment.id,
@@ -680,6 +903,7 @@ pub async fn override_variant(
     .await
     .map_err(|e| FlagrantError::QueryFailed("Could not override variant for identity", e))?;
 
+    tx.commit().await?;
     Ok(())
 }
 

@@ -65,6 +65,41 @@ DELETE FROM identity_traits
 WHERE identity_id = $1
   AND trait_id = (SELECT trait_id FROM traits WHERE project_id = $2 AND name = $3)
 
+-- :name fetch_unpinned_assignments_for_identity :<> :*
+-- :doc Groups the distributed (unpinned) assignments of given identity - optionally limited to
+-- a single feature (NULL = all) - by the pool (segment_id, NULL = organic) and effective
+-- variant they occupy. These are exactly the accumulator draws that vanish when the
+-- assignments are removed, so they need giving back (see distributor::release).
+SELECT environment_id, feature_id, segment_id, COALESCE(migrated_id, variant_id) AS variant_id, COUNT(*) AS identities
+FROM identity_variants
+WHERE identity_id = $1 AND ($2 IS NULL OR feature_id = $2) AND pinned_at IS NULL
+GROUP BY environment_id, feature_id, segment_id, COALESCE(migrated_id, variant_id)
+
+-- :name fetch_unpinned_assignments_by_pattern :<> :*
+-- :doc Same as fetch_unpinned_assignments_for_identity, but for every identity in an environment
+-- matching a LIKE pattern, optionally limited to a single feature (NULL = all)
+SELECT environment_id, feature_id, segment_id, COALESCE(migrated_id, variant_id) AS variant_id, COUNT(*) AS identities
+FROM identity_variants
+WHERE environment_id = $1 AND ($3 IS NULL OR feature_id = $3) AND pinned_at IS NULL
+  AND identity_id IN (SELECT identity_id FROM identities WHERE environment_id = $1 AND identity LIKE $2)
+GROUP BY environment_id, feature_id, segment_id, COALESCE(migrated_id, variant_id)
+
+-- :name fetch_segment_members :<> :*
+-- :doc Returns (identity_id, effective variant_id) of every distributed, unpinned identity
+-- currently attributed to given segment for given feature+environment, oldest attachment
+-- first. Membership is already recorded in identity_variants.segment_id, so this needs no
+-- rule evaluation.
+SELECT identity_id, COALESCE(migrated_id, variant_id) AS variant_id
+FROM identity_variants
+WHERE environment_id = $1 AND feature_id = $2 AND segment_id = $3 AND pinned_at IS NULL
+ORDER BY attached_at, identity_id
+
+-- :name migrate_identity_to_variant :<> :!
+-- :doc Records a pending migration of one identity's assignment to another variant, resolved
+-- lazily the next time the identity is read (see migrate_identities for the organic equivalent).
+UPDATE identity_variants SET migrated_id = $4
+WHERE identity_id = $1 AND feature_id = $2 AND environment_id = $3
+
 -- :name delete_identity_variants :<> :!
 -- :doc Removes all variant assignments for given identity
 DELETE FROM identity_variants WHERE identity_id = $1

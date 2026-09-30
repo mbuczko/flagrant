@@ -2,6 +2,7 @@ pub mod commit;
 pub mod environment;
 pub mod feature;
 pub mod identity;
+pub mod metrics;
 pub mod project;
 pub mod rollout;
 pub mod rule;

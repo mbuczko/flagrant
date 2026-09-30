@@ -157,6 +157,40 @@ listen = "0.0.0.0:3030"
 
 Same restart caveat as `[grpc].listen`: read once at startup, not affected by `RELOAD`.
 
+### Metrics
+
+`flagrant-api` can expose [Prometheus](https://prometheus.io/) metrics. It's opt-in: absent a `[metrics]` section in the TOML config, nothing is listened on and nothing is computed. Metrics are served from their own listener (rather than the main HTTP one) since they carry project, feature and trait names plus identity counts - bind it to an internal interface and point your scraper at `GET /metrics`:
+
+```toml
+[metrics]
+listen = "127.0.0.1:9090"
+# how often the gauges are recomputed from the database (default: 30)
+refresh-seconds = 30
+```
+
+The gauges are recomputed by a background task every `refresh-seconds`, not on each scrape, so adding scrapers never adds database load - a scrape returns values at most one interval old. Same restart caveat as `[grpc].listen`: read once at startup, not affected by `RELOAD`.
+
+| Metric | Labels | Meaning |
+|---|---|---|
+| `flagrant_identities_total` | `project`, `environment` | identities in the environment |
+| `flagrant_variant_identities` | `project`, `environment`, `feature`, `variant_id`, `variant` | identities currently assigned to the variant |
+| `flagrant_variant_identities_ratio` | same as above | share (0-1) of the feature's assigned identities that got the variant |
+| `flagrant_trait_identities` | `project`, `environment`, `trait` | identities carrying the trait, whatever its value |
+| `flagrant_segment_identities` | `project`, `environment`, `feature`, `segment` | identities currently attributed to the segment for the feature |
+| `flagrant_segment_variant_identities` | `project`, `environment`, `feature`, `segment`, `variant_id`, `variant` | the same, split per variant - to verify a segment's weight override is actually honored |
+| `flagrant_segment_dirty_identities` | `project`, `environment`, `feature` | identity assignments waiting to be re-evaluated after a segment change |
+
+A few things worth knowing when reading them:
+
+- Variant counts follow an identity's *effective* variant, so a pending weight-shift migration is already reflected before the identity is next read.
+- Only identities already resolved for a feature are assigned to one of its variants. The `_ratio` is relative to that assigned population (a feature's ratios sum to 1, or are all 0 while nobody is assigned), not to `flagrant_identities_total`. Multiply by 100 in PromQL (or use Grafana's `percentunit`) for a percentage.
+- The `variant` label is the variant's value, cut down to its first line and 64 characters; `variant_id` is the stable key if the value gets edited.
+- Segment metrics are only reported for a segment and feature it overrides (or still holds identities of), and a fresh override nobody has hit yet shows up as zeros. Identities are attributed to a segment per feature, lazily, when they are read - there is no feature-independent "members of segment X" count.
+- `flagrant_segment_dirty_identities` is the backlog of identity assignments flagged by a segment change, settled one by one as each identity is next read. It should drain to 0 as traffic arrives; a value that stays high means those identities aren't being read (or the segment keeps being edited). It is reported for every feature, zero when nothing is pending.
+- Traits are counted per trait *name* only, never per value - values are free-form, and a label per value would make the number of series unbounded.
+
+The endpoint is also opt-in at *build* time, via the `metrics` Cargo feature on `flagrant-api` (enabled by default), same as `redis` and `grpc` above.
+
 ### Identities & traits
 
 An **identity** is a caller recognized across requests, identified by an arbitrary string value (a user id, session id, anything) sent via the `X-Flagrant-Identity` header. Identities can carry arbitrary typed **traits** (string/int/float/bool), used by segment rules to decide which cohort an identity belongs to. Once distributed to a variant for a feature, an identity keeps seeing that same variant on subsequent requests, unless something explicitly changes it - a weight change migrates a portion of identities, an override pins/unpins one, or its distribution is cleared outright.
@@ -239,7 +273,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **gRPC** - for backend-to-backend connection
 - [x] **Docker multi-arch (amd64/arm64) image**
 - [x] **k8s helm chart**
-- [ ] **Prometheus metrics**
+- [x] **Prometheus metrics** - identities per variant, trait and segment; runtime (cache/HTTP) metrics to follow
 
 Further out: analytics on flag exposure/conversion, and client SDKs beyond Rust (JVM, JS, Python).
 
