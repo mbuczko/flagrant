@@ -11,8 +11,8 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant = {path = "../flagrant", version = "0.0.36"}
-flagrant-types = {path = "../flagrant-types", version = "0.0.36"}
+flagrant = {path = "../flagrant", version = "0.0.37"}
+flagrant-types = {path = "../flagrant-types", version = "0.0.37"}
 
 tokio = {workspace = true}
 axum = {workspace = true}
@@ -32,6 +32,7 @@ tonic = {workspace = true, optional = true}
 tonic-prost = {workspace = true, optional = true}
 prost = {workspace = true, optional = true}
 tokio-stream = {workspace = true, optional = true}
+prometheus = {workspace = true, optional = true}
 
 utoipa = {workspace = true}
 utoipa-scalar = {workspace = true}
@@ -44,8 +45,9 @@ features = ["add-extension", "compression-full", "trace"]
 tonic-prost-build = {version = "0.14.6", optional = true}
 
 [features]
-default = ["redis", "grpc"]
+default = ["redis", "grpc", "metrics"]
 redis = ["dep:redis"]
+metrics = ["dep:prometheus"]
 grpc = ["dep:tonic", "dep:tonic-prost", "dep:prost", "dep:tokio-stream", "dep:tonic-prost-build"]
 
 [[bin]]

@@ -8,4 +8,4 @@ You are inside a **feature context** - these are also available:
 - `FEATURE progressive rules <w1>:<dur1> ... <100>` - stage a progressive rollout schedule for the feature's single alternative variant 
 - `FEATURE progressive sample <n>` - stage the minimum number of distributed identities required before the schedule starts advancing
 - `FEATURE progressive delete` - stage removing the progressive rollout entirely (clears the schedule and every environment's progression)
-- `FEATURE progressive status` - show the live progression status (applied immediately, not staged)
+- `FEATURE progressive status` - show the live (applied) progression status

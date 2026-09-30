@@ -19,6 +19,14 @@ ttl-seconds = 30
 listen = "unix:/tmp/flagrant/grpc.sock"
 # listen = "127.0.0.1:50051"   # alternative: plain TCP
 
+# Optional: exposes Prometheus metrics (identities per variant / trait) on a
+# separate listener, so it can be bound to an internal interface only. Omit
+# this section entirely to disable it. Gauges are recomputed from the database
+# every `refresh-seconds` (default 30), not on each scrape.
+[metrics]
+listen = "127.0.0.1:9091"
+refresh-seconds = 30
+
 [projects."demo/dev"]
 srv-token = "dev-srv-token"
 

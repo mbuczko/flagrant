@@ -79,6 +79,16 @@ SET accumulator = accumulator + weight
 WHERE environment_id = $1 AND variant_id IN (select variant_id from variants where feature_id = $2)
   AND segment_id IS $3
 
+-- :name release_feature_variants_accumulators :<> :!
+-- :doc Reverses `count` earlier distributions to variant `variant_id`, scoped to a segment
+-- (NULL = organic): the exact inverse of distributing then bumping accumulators, i.e. every
+-- variant gives back its weight and the released one gets its 100 back. Purely additive, so
+-- it doesn't matter how many other draws happened in between.
+UPDATE variant_weights
+SET accumulator = accumulator - weight * $4 + CASE WHEN variant_id = $5 THEN 100 * $4 ELSE 0 END
+WHERE environment_id = $1 AND variant_id IN (select variant_id from variants where feature_id = $2)
+  AND segment_id IS $3
+
 -- :name delete_feature :<> :!
 -- :doc Removes a feature. Note that feature value and variants need to be removed before.
 DELETE FROM features WHERE feature_id = $1

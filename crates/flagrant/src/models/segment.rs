@@ -467,6 +467,9 @@ pub async fn patch(
                 feature_id,
                 variant_weights,
             } => {
+                let weights_before =
+                    override_weights(&mut *conn, environment, feature_id, segment.id).await?;
+
                 variant::delete_segment_weights_for_feature(
                     &mut *conn,
                     segment.id,
@@ -491,6 +494,20 @@ pub async fn patch(
                     environment,
                     segment.id,
                     feature_id,
+                )
+                .await?;
+
+                // Identities already in the segment don't move by themselves when its
+                // weights change - bring them to the new ones (a no-op when nobody is in it
+                // yet, and it never shuffles anyone if the weights came out the same).
+                let weights_changed = weights_before
+                    != override_weights(&mut *conn, environment, feature_id, segment.id).await?;
+                identity::rebalance_segment_members(
+                    &mut *conn,
+                    environment,
+                    feature_id,
+                    segment.id,
+                    weights_changed,
                 )
                 .await?;
 
@@ -520,6 +537,24 @@ pub async fn patch(
         .map_err(|e| FlagrantError::QueryFailed("Could not bump segment version", e))?;
 
     get_by_id(conn, project, segment.id).await.map(Some)
+}
+
+/// The segment's current override weights for the feature as (variant id, weight) pairs in
+/// a stable order - variants the segment doesn't override are there with weight 0.
+async fn override_weights(
+    conn: &mut SqliteConnection,
+    environment: &Environment,
+    feature_id: i32,
+    segment_id: i32,
+) -> anyhow::Result<Vec<(i32, u8)>> {
+    let mut weights: Vec<_> =
+        variant::get_for_feature(conn, environment, feature_id, Some(segment_id))
+            .await?
+            .into_iter()
+            .map(|v| (v.id, v.weight))
+            .collect();
+    weights.sort_unstable();
+    Ok(weights)
 }
 
 //
