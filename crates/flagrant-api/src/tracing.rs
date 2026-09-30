@@ -9,6 +9,6 @@ pub fn init_tracing() {
                 "flagrant_api=debug,flagrant=debug,tower_http=debug,axum::rejection=trace".into()
             }),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_ansi(std::env::var_os("NO_COLOR").is_none()))
         .init();
 }
