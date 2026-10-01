@@ -390,7 +390,7 @@ pub(crate) fn commit(args: &[Arg], session: &Session<Connection>) -> anyhow::Res
 
     let path = ctx.env_resource().subpath("/commit");
     let result: CommitResult = ctx
-        .client
+        .transport
         .post(path, payload)
         .map_err(|err| anyhow::anyhow!("Commit failed: {err}"))?;
 
@@ -462,7 +462,7 @@ fn environment_name(session: &Session<Connection>, environment_id: i32) -> Strin
     let ctx = session.context.read().unwrap();
     let res = ctx.project_resource();
 
-    ctx.client
+    ctx.transport
         .get::<Environment>(res.subpath(format!("/envs/{environment_id}")))
         .map(|e| e.name)
         .unwrap_or_else(|_| format!("#{environment_id}"))

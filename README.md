@@ -263,6 +263,70 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - `GET [feature][@identity]` - resolve one feature's value for an identity.
 - `GETALL [@identity]` - resolve every feature's value for an identity.
 
+## Using the Rust SDK (`flagrant-sdk`)
+
+`flagrant-sdk` is the Rust client external apps embed to resolve features for an identity - the very same identity-facing endpoint `GET`/`GETALL` hit in the CLI (see [Querying resolved values](#querying-resolved-values)), and nothing else. It has no notion of projects/features/segments management at all - that's `flagrant-cli`'s job, talking to `flagrant-api` through the separate, admin-only `flagrant-client` crate (see [Architecture](#architecture)).
+
+A `FlagrantClient` (or its async counterpart, `AsyncFlagrantClient`) pairs one of three interchangeable transports with a project name, and exposes exactly one method:
+
+```rust
+fn get_features(&self, environment: &str, identity: &str) -> Result<Vec<FeatureResponse>>
+```
+
+Project is fixed for the client's lifetime - an app embedding it is typically wired to one project - while environment is passed per call, since the same client commonly serves more than one (`dev`, `prod`, ...).
+
+Each transport sits behind its own Cargo feature, so a consumer only pulls in what it actually needs:
+
+| Feature | Transport | Client type |
+|---|---|---|
+| `http-blocking` | `reqwest::blocking` | `FlagrantClient<HttpBlockingTransport>` |
+| `http-async` | `reqwest` (async) | `AsyncFlagrantClient<HttpAsyncTransport>` |
+| `grpc` | `tonic`, dialing the same `FeatureResolver/GetFeatures` RPC `flagrant-api` serves (see [Server-side-only flags](#server-side-only-flags)) | `AsyncFlagrantClient<GrpcTransport>` |
+
+```toml
+[dependencies]
+flagrant-sdk = { version = "0.0.38", features = ["http-blocking"] }  # or "http-async", or "grpc"
+```
+
+**HTTP, blocking:**
+
+```rust
+use flagrant_sdk::{FlagrantClient, HttpBlockingTransport};
+
+let transport = HttpBlockingTransport::new("http://localhost:3030".into(), None);
+let client = FlagrantClient::new(transport, "my-project".into());
+
+let features = client.get_features("prod", "alice")?;
+```
+
+**HTTP, async:**
+
+```rust
+use flagrant_sdk::{AsyncFlagrantClient, HttpAsyncTransport};
+
+let transport = HttpAsyncTransport::new("http://localhost:3030".into(), None);
+let client = AsyncFlagrantClient::new(transport, "my-project".into());
+
+let features = client.get_features("prod", "alice").await?;
+```
+
+**gRPC:**
+
+```rust
+use flagrant_sdk::{AsyncFlagrantClient, GrpcTransport};
+
+let transport = GrpcTransport::connect("http://localhost:50051", None).await?;
+let client = AsyncFlagrantClient::new(transport, "my-project".into());
+
+let features = client.get_features("prod", "alice").await?;
+```
+
+gRPC has no official synchronous client, so `GrpcTransport` only implements the async side - there's no blocking variant, unlike the two HTTP transports.
+
+Every transport's second constructor argument is an optional bearer/srv-token, exactly like the `Authorization: Bearer <token>` header/`authorization` metadata described in [Server-side-only flags](#server-side-only-flags) - pass `Some("prod-secret-token".into())` to unlock server-side-only features on top of the normal response, or `None` for a regular client that only ever sees public features.
+
+See `crates/flagrant-sdk/examples/grpc_get_features.rs` for a complete, runnable example.
+
 ## What's next
 
 - [x] **Backend only flags** - allow to reach for certain flags only within backend-to-backend communication
@@ -275,7 +339,7 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 - [x] **k8s helm chart**
 - [x] **Prometheus metrics** - identities per variant, trait and segment; runtime (cache/HTTP) metrics to follow
 
-Further out: analytics on flag exposure/conversion, and client SDKs beyond Rust (JVM, JS, Python).
+Further out: analytics on flag exposure/conversion, and client SDKs for other languages (JVM, JS, Python) - see [Using the Rust SDK](#using-the-rust-sdk-flagrant-sdk) for the one that exists today.
 
 # Architecture
 
@@ -283,8 +347,10 @@ To keep things simple yet still allow for extensibility, code is structured into
 
 - `flagrant` - core logic: entity models, SQL queries (via [hugsqlx](https://github.com/mbuczko/hugsqlx)), the weighted variant distributor, and the segment rule evaluator
 - `flagrant-types` - core types shared across all other crates (`Feature`, `Variant`, `Identity`, `Segment`, request/patch payloads, ...)
+- `flagrant-proto` - the `.proto` contract for the public feature-resolution gRPC service, compiled once into both client and server stubs, shared by `flagrant-api` and `flagrant-sdk`
 - `flagrant-api` - the Axum HTTP server exposing both the client-facing feature-resolution endpoint (optionally also over gRPC, TCP or Unix socket - see [Server-side-only flags](#server-side-only-flags)) and the management API, with OpenAPI docs served via [Scalar](https://scalar.com/)
+- `flagrant-sdk` - the embeddable Rust SDK external apps use to resolve features for an identity only, over a choice of transports (HTTP blocking/async, gRPC) - see [Using the Rust SDK](#using-the-rust-sdk-flagrant-sdk)
 - `flagrant-cli` - the command-line REPL used to manage projects, environments, features, identities and segments, with all table output rendered via [fancy-table](https://github.com/mbuczko/fancy-table)
-- `flagrant-client` - the HTTP client library used by `flagrant-cli` (and embeddable in other Rust apps) to talk to `flagrant-api`, with staging/caching baked in
+- `flagrant-client` - the admin-only HTTP client library `flagrant-cli` is built on, for everything management-related (projects, features, segments, identities, snapshots, ...); not meant to be embedded in other apps - that's what `flagrant-sdk` is for
 - `flagrant-repl` - a small, reusable REPL framework (readline, tab completion, hinting, command parsing) that `flagrant-cli` is built on
 - `flagrant-bombardier` - a load-testing tool that hammers a running `flagrant-api` with many concurrent identities to exercise/benchmark variant distribution

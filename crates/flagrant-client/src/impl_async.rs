@@ -1,17 +1,17 @@
 use reqwest::Response;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::http::{Auth, HttpClient};
+use crate::http::{Auth, HttpTransport};
 
-impl HttpClient {
-    pub fn new(host: String, auth: Auth) -> HttpClient {
+impl HttpTransport {
+    pub fn new(host: String, auth: Auth) -> HttpTransport {
         let client = reqwest::Client::new();
-        HttpClient::Async(client, host, auth)
+        HttpTransport::Async(client, host, auth)
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: String) -> anyhow::Result<T> {
         match self {
-            HttpClient::Async(client, host, _auth) => {
+            HttpTransport::Async(client, host, _auth) => {
                 match client.get(format!("{host}{path}")).send().await {
                     Ok(response) if response.status().is_success() => {
                         Ok(response.json::<T>().await?)
@@ -26,7 +26,7 @@ impl HttpClient {
 
     pub async fn put<P: Serialize>(&self, path: String, payload: P) -> anyhow::Result<()> {
         match self {
-            HttpClient::Async(client, host, _auth) => {
+            HttpTransport::Async(client, host, _auth) => {
                 let result = client
                     .put(format!("{host}{path}"))
                     .json(&payload)
@@ -49,7 +49,7 @@ impl HttpClient {
         payload: P,
     ) -> anyhow::Result<T> {
         match self {
-            HttpClient::Async(client, host, _auth) => {
+            HttpTransport::Async(client, host, _auth) => {
                 let result = client
                     .post(format!("{host}{path}"))
                     .json(&payload)
@@ -70,7 +70,7 @@ impl HttpClient {
 
     pub async fn delete(&self, path: String) -> anyhow::Result<Response> {
         match self {
-            HttpClient::Async(client, host, _auth) => {
+            HttpTransport::Async(client, host, _auth) => {
                 let result = client.delete(format!("{host}{path}")).send().await;
 
                 match result {

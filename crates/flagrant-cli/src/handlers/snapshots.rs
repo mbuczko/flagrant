@@ -68,7 +68,7 @@ fn resolve_relative_version(
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots"));
-    let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+    let snapshots: Vec<Snapshot> = ctx.transport.get(path)?;
     drop(ctx);
 
     snapshots.get(n).map(|s| s.version).ok_or_else(|| {
@@ -99,7 +99,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots"));
-    let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+    let snapshots: Vec<Snapshot> = ctx.transport.get(path)?;
     drop(ctx);
 
     if snapshots.is_empty() {
@@ -140,7 +140,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots/{version}"));
-    let snapshot: Snapshot = ctx.client.get(path)?;
+    let snapshot: Snapshot = ctx.transport.get(path)?;
     drop(ctx);
 
     let state = snapshot.parsed_state()?;
@@ -159,7 +159,7 @@ pub fn diff(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{feature_id}/snapshots/{version}/diff"));
-    let diff: SnapshotDiff = ctx.client.get(path)?;
+    let diff: SnapshotDiff = ctx.transport.get(path)?;
 
     drop(ctx);
 
@@ -187,7 +187,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
             let path = ctx
                 .env_resource()
                 .subpath(format!("/features/{feature_id}/snapshots"));
-            let snapshots: Vec<Snapshot> = ctx.client.get(path)?;
+            let snapshots: Vec<Snapshot> = ctx.transport.get(path)?;
             drop(ctx);
 
             if snapshots.is_empty() {
@@ -221,7 +221,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     let comment = match args.get(2) {
         Some(c) => c.to_string(),
         None => {
-            let current: Snapshot = ctx.client.get(path.clone())?;
+            let current: Snapshot = ctx.transport.get(path.clone())?;
             let Some(edited) =
                 prompt_line("New comment", current.comment.as_deref().unwrap_or(""))?
             else {
@@ -232,7 +232,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
         }
     };
 
-    let updated: Snapshot = ctx.client.patch(
+    let updated: Snapshot = ctx.transport.patch(
         path,
         UpdateSnapshotCommentPayload {
             comment: (!comment.is_empty()).then_some(comment),
@@ -265,7 +265,7 @@ pub fn restore(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()
     let path = ctx.env_resource().subpath(format!(
         "/features/{feature_id}/snapshots/{version}/restore"
     ));
-    let snapshot: Snapshot = ctx.client.post(path, RestoreRequest { comment })?;
+    let snapshot: Snapshot = ctx.transport.post(path, RestoreRequest { comment })?;
     let feature_name = ctx.feature.as_ref().unwrap().name.clone();
 
     drop(ctx);

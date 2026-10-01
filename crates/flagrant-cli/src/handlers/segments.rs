@@ -23,7 +23,7 @@ fn fetch_segment(name: &str, session: &Session<Connection>) -> anyhow::Result<Se
     let ctx = session.context.read().unwrap();
     let res = ctx.project_resource();
 
-    ctx.client
+    ctx.transport
         .get::<Segment>(res.subpath(format!("/segments/{name}")))
 }
 
@@ -72,7 +72,7 @@ pub(crate) fn fetch_overridden_features(
     let res = ctx.project_resource();
     let environment_id = ctx.environment.id;
 
-    ctx.client
+    ctx.transport
         .get::<Vec<SegmentFeatureOverride>>(
             res.subpath(format!("/segments/{segment_id}/overrides/{environment_id}")),
         )
@@ -91,7 +91,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let segment = {
         let ctx = session.context.read().unwrap();
         let res = ctx.project_resource();
-        ctx.client.post::<_, Segment>(
+        ctx.transport.post::<_, Segment>(
             res.subpath("/segments"),
             NewSegmentPayload {
                 name: name.to_string(),
@@ -119,7 +119,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     let pat = args.get(1).map(std::ops::Deref::deref).unwrap_or("");
 
     Segment::list(
-        ctx.client
+        ctx.transport
             .get::<Vec<Segment>>(res.subpath(format!("/segments?pattern={pat}")))?
             .as_ref(),
     );
@@ -210,7 +210,7 @@ pub fn delete(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()>
             let ctx = session.context.read().unwrap();
             let res = ctx.project_resource();
             let segments = ctx
-                .client
+                .transport
                 .get::<Vec<Segment>>(res.subpath("/segments?pattern="))?;
 
             if segments.is_empty() {
@@ -415,7 +415,7 @@ fn current_weights_for<'a>(
             "/segments/{segment_id}/features/{feature_id}/overrides/{environment_id}"
         ));
         Cow::Owned(
-            ctx.client
+            ctx.transport
                 .get::<Vec<SegmentVariantWeight>>(path)
                 .unwrap_or_default(),
         )

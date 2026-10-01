@@ -5,7 +5,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    http::{Auth, HttpClient},
+    http::{Auth, HttpTransport},
     resource::BaseResource,
 };
 
@@ -68,7 +68,7 @@ impl From<&str> for EnvironmentRef {
 
 #[derive(Debug)]
 pub struct Connection {
-    pub client: HttpClient,
+    pub transport: HttpTransport,
     pub project: Project,
     pub environment: Environment,
     pub feature: Option<Feature>,
@@ -98,20 +98,20 @@ impl Connection {
         project_name: String,
         environment: Option<impl Into<EnvironmentRef>>,
     ) -> anyhow::Result<Connection> {
-        let client = HttpClient::new(api_host, auth);
+        let transport = HttpTransport::new(api_host, auth);
         let path = format!("/projects/{project_name}");
 
         let environment = match environment {
-            Some(env) => client
+            Some(env) => transport
                 .get::<Environment>(format!("{path}/envs/{}", env.into()))
                 .ok(),
-            None => client
+            None => transport
                 .get::<Vec<Environment>>(format!("{path}/envs"))
                 .ok()
                 .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
         };
 
-        Self::build(client.get::<Project>(path).ok(), environment, client)
+        Self::build(transport.get::<Project>(path).ok(), environment, transport)
     }
 
     /// See the blocking `init` above for the `environment: None` default-selection rules.
@@ -121,32 +121,36 @@ impl Connection {
         project_name: String,
         environment: Option<impl Into<EnvironmentRef>>,
     ) -> anyhow::Result<Connection> {
-        let client = HttpClient::new(api_host, Auth::None);
+        let transport = HttpTransport::new(api_host, Auth::None);
         let path = format!("/projects/{project_name}");
 
         let environment = match environment {
-            Some(env) => client
+            Some(env) => transport
                 .get::<Environment>(format!("{path}/envs/{}", env.into()))
                 .await
                 .ok(),
-            None => client
+            None => transport
                 .get::<Vec<Environment>>(format!("{path}/envs"))
                 .await
                 .ok()
                 .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
         };
 
-        Self::build(client.get::<Project>(path).await.ok(), environment, client)
+        Self::build(
+            transport.get::<Project>(path).await.ok(),
+            environment,
+            transport,
+        )
     }
 
     fn build(
         project: Option<Project>,
         environment: Option<Environment>,
-        client: HttpClient,
+        transport: HttpTransport,
     ) -> anyhow::Result<Connection> {
         match (project, environment) {
             (Some(project), Some(environment)) => Ok(Connection {
-                client,
+                transport,
                 project,
                 environment,
                 feature: None,
@@ -221,11 +225,17 @@ impl Connection {
         BaseResource::Project(&self.project.name)
     }
 
+    /// Resolves features for an identity via the public evaluation endpoint. This is a thin
+    /// convenience wrapper around `flagrant-sdk`'s HTTP-blocking transport (the actual, reusable
+    /// implementation) rather than another admin capability bolted onto `HttpTransport` -
+    /// external consumers of the public API should depend on `flagrant-sdk` directly instead of
+    /// this admin-focused crate.
     #[cfg(feature = "blocking")]
     pub fn get_features(&self, identity: &str) -> anyhow::Result<Vec<FeatureResponse>> {
-        let path = self.env_resource().subpath("/features");
-        self.client
-            .get_with_identity(format!("/api/v1{path}"), Some(identity))
+        let transport =
+            flagrant_sdk::HttpBlockingTransport::new(self.transport.host().to_string(), None);
+        flagrant_sdk::FlagrantClient::new(transport, self.project.name.clone())
+            .get_features(&self.environment.name, identity)
     }
 }
 
