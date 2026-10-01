@@ -170,7 +170,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut last_enabled = None;
                 let mut was_erroring = false;
                 loop {
-                    match conn.client.get::<Feature>(feature_path.clone()) {
+                    match conn.transport.get::<Feature>(feature_path.clone()) {
                         Ok(feature) => {
                             if was_erroring {
                                 let _ = m.println(format!(

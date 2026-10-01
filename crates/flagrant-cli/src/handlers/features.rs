@@ -23,7 +23,7 @@ pub(crate) fn fetch_feature(name: &str, session: &Session<Connection>) -> anyhow
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
 
-    ctx.client
+    ctx.transport
         .get::<Feature>(res.subpath(format!("/features/{name}")))
 }
 
@@ -31,7 +31,7 @@ fn fetch_overrides(feature_id: i32, session: &Session<Connection>) -> Vec<Featur
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
 
-    ctx.client
+    ctx.transport
         .get::<Vec<FeatureOverride>>(res.subpath(format!("/features/{feature_id}/overrides")))
         .unwrap_or_default()
 }
@@ -62,7 +62,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
             };
 
             let parsed = val.parse().unwrap_or_else(|_| VariantValue::build(&val));
-            ctx.client.post::<_, Feature>(
+            ctx.transport.post::<_, Feature>(
                 res.subpath("/features"),
                 NewFeaturePayload {
                     name: name.to_string(),
@@ -485,7 +485,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .unwrap_or("");
 
     Feature::list(
-        ctx.client
+        ctx.transport
             .get::<Vec<Feature>>(res.subpath(format!(
                 "/features?tags={tags}&status={status}&pattern={pat}"
             )))?
@@ -553,7 +553,7 @@ pub fn unset_distribution(args: &[Arg], session: &Session<Connection>) -> anyhow
             )
         })?;
 
-        ctx.client.delete(ctx.env_resource().subpath(format!(
+        ctx.transport.delete(ctx.env_resource().subpath(format!(
             "/features/{}/distribution?pattern={pattern}",
             feature.id
         )))?;
@@ -720,7 +720,7 @@ fn progressive_status(session: &Session<Connection>) -> anyhow::Result<()> {
     let path = ctx
         .env_resource()
         .subpath(format!("/features/{}/rollout", feature.id));
-    let status: Option<RolloutStatus> = ctx.client.get(path)?;
+    let status: Option<RolloutStatus> = ctx.transport.get(path)?;
     drop(ctx);
 
     match status {

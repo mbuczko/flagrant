@@ -7,7 +7,7 @@ pub enum Auth {
 }
 
 #[derive(Debug)]
-pub enum HttpClient {
+pub enum HttpTransport {
     Async(reqwest::Client, Host, Auth),
     Blocking(reqwest::blocking::Client, Host, Auth),
 }

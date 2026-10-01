@@ -169,7 +169,7 @@ fn fetch_pinned_identities(variant_id: i32, session: &Session<Connection>) -> Ve
     let ctx = session.context.read().unwrap();
     let res = ctx.env_resource();
 
-    ctx.client
+    ctx.transport
         .get::<Vec<String>>(res.subpath(format!("/variants/{variant_id}/identities")))
         .unwrap_or_default()
 }

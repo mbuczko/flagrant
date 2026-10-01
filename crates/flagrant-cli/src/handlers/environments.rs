@@ -19,7 +19,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(name) = args.get(1) {
         let ctx = session.context.read().unwrap();
         let res = ctx.project.as_base_resource();
-        let env = ctx.client.post::<_, Environment>(
+        let env = ctx.transport.post::<_, Environment>(
             res.subpath("/envs"),
             NewEnvironmentPayload {
                 name: name.to_string(),
@@ -40,7 +40,7 @@ pub fn list(_args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> 
     let res = ctx.project.as_base_resource();
 
     list_with_current(
-        ctx.client
+        ctx.transport
             .get::<Vec<Environment>>(res.subpath("/envs"))?
             .as_ref(),
         Some(&ctx.environment.name),
@@ -59,7 +59,7 @@ pub fn show(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     {
         let res = ctx.project.as_base_resource();
         let env = ctx
-            .client
+            .transport
             .get::<Environment>(res.subpath(format!("/envs/{name}")))?;
         env.display(None, &());
         return Ok(());
@@ -98,7 +98,7 @@ pub fn describe(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<(
     let res = ctx.project.as_base_resource();
     let env_id = ctx.environment.id;
 
-    ctx.client.put(
+    ctx.transport.put(
         res.subpath(format!("/envs/{env_id}")),
         UpdateEnvironmentPayload {
             description: desc.clone(),
@@ -126,7 +126,7 @@ pub(crate) fn switch_to(env_name: &str, session: &Session<Connection>) -> anyhow
     let mut ctx = session.context.write().unwrap();
     let res = ctx.project.as_base_resource();
     let response = ctx
-        .client
+        .transport
         .get::<Environment>(res.subpath(format!("/envs/{env_name}")));
 
     if let Ok(env) = response {
@@ -169,7 +169,7 @@ fn hint_available(session: &Session<Connection>) -> anyhow::Result<String> {
     let ctx = session.context.read().unwrap();
     let res = ctx.project.as_base_resource();
     let names = ctx
-        .client
+        .transport
         .get::<Vec<Environment>>(res.subpath("/envs"))?
         .into_iter()
         .map(|e| e.name)

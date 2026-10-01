@@ -27,8 +27,9 @@ message Feature {
   VariantValue value = 3;
   // `optional` for explicit field presence - a plain `bool` has no wire presence at its
   // zero value, so every proto3 JSON serializer (grpcurl included) silently omits
-  // `is_enabled` entirely for a disabled feature instead of emitting `false`.
+  // `is_enabled`/`is_srv` entirely for a `false` value instead of emitting `false`.
   optional bool is_enabled = 4;
+  optional bool is_srv = 5;
 }
 
 // Mirrors flagrant_types::VariantValue's three variants exactly.
