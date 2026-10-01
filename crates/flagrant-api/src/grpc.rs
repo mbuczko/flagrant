@@ -69,6 +69,8 @@ impl FeatureResolver for GrpcFeatureResolver {
                 }),
                 is_enabled: Some(f.is_enabled),
                 is_srv: Some(f.is_srv),
+                description: f.description,
+                tags: f.tags.0.into_iter().map(|t| t.name).collect(),
             })
             .collect();
 

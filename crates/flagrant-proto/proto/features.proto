@@ -30,6 +30,8 @@ message Feature {
   // `is_enabled`/`is_srv` entirely for a `false` value instead of emitting `false`.
   optional bool is_enabled = 4;
   optional bool is_srv = 5;
+  string description = 6;
+  repeated string tags = 7;
 }
 
 // Mirrors flagrant_types::VariantValue's three variants exactly.

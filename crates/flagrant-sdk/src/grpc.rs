@@ -1,7 +1,7 @@
 use flagrant_proto::v1::{
     GetFeaturesRequest, feature_resolver_client::FeatureResolverClient, variant_value::Kind,
 };
-use flagrant_types::{FeatureResponse, VariantValue};
+use flagrant_types::{FeatureResponse, Tag, TagList, VariantValue};
 use tonic::transport::Channel;
 
 use crate::transport::AsyncTransport;
@@ -65,6 +65,8 @@ impl AsyncTransport for GrpcTransport {
                 FeatureResponse {
                     feature_id: f.feature_id,
                     name: f.name,
+                    description: f.description,
+                    tags: TagList(f.tags.into_iter().map(|name| Tag { name }).collect()),
                     value,
                     is_enabled: f.is_enabled.unwrap_or(false),
                     is_srv: f.is_srv.unwrap_or(false),

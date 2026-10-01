@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use flagrant_types::VariantValue;
+use flagrant_types::{FeatureResponse, TagList, VariantValue};
 use redis::{AsyncCommands, aio::ConnectionManager};
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +14,25 @@ use crate::config::RedisConfig;
 pub struct CachedFeature {
     pub feature_id: i32,
     pub name: String,
+    pub description: String,
+    pub tags: TagList,
     pub value: VariantValue,
     pub is_srv: bool,
     pub is_enabled: bool,
+}
+
+impl From<CachedFeature> for FeatureResponse {
+    fn from(f: CachedFeature) -> Self {
+        FeatureResponse {
+            feature_id: f.feature_id,
+            name: f.name,
+            description: f.description,
+            tags: f.tags,
+            value: f.value,
+            is_enabled: f.is_enabled,
+            is_srv: f.is_srv,
+        }
+    }
 }
 
 pub struct FeatureCache {
