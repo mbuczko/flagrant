@@ -285,7 +285,7 @@ Each transport sits behind its own Cargo feature, so a consumer only pulls in wh
 
 ```toml
 [dependencies]
-flagrant-sdk = { version = "0.0.39", features = ["http-blocking"] }  # or "http-async", or "grpc"
+flagrant-sdk = { version = "0.0.40", features = ["http-blocking"] }  # or "http-async", or "grpc"
 ```
 
 **HTTP, blocking:**
