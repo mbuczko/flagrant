@@ -11,8 +11,8 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.39"}
-flagrant-proto = {path = "../flagrant-proto", version = "0.0.39", optional = true}
+flagrant-types = {path = "../flagrant-types", version = "0.0.40"}
+flagrant-proto = {path = "../flagrant-proto", version = "0.0.40", optional = true}
 
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json"], optional = true}
