@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     TARGET="${HOST%-gnu}-musl" && \
     CC_aarch64_unknown_linux_musl=musl-gcc \
     CC_x86_64_unknown_linux_musl=musl-gcc \
-    RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none -Zunstable-options -Cpanic=immediate-abort" \
+    RUSTFLAGS="-Zlocation-detail=none -Zunstable-options -Cpanic=immediate-abort" \
     cargo build --release --locked \
       -Z build-std=std,panic_abort \
       -Z build-std-features= \
