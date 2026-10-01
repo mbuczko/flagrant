@@ -221,6 +221,8 @@ pub struct IdentityVariant {
     pub segment_id: Option<i32>,
     pub segment_dirty: bool,
     pub feature_name: String,
+    pub feature_description: String,
+    pub feature_tags: TagList,
     pub feature_value: Option<VariantValue>,
     pub pinned_at: Option<NaiveDateTime>,
     pub is_srv: bool,
@@ -552,11 +554,11 @@ pub struct SegmentFeatureOverride {
     pub weights: Vec<OverriddenVariant>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 #[schema(value_type = Vec<Tag>)]
 pub struct TagList(pub Vec<Tag>);
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Tag {
     pub name: String,
 }
@@ -565,9 +567,29 @@ pub struct Tag {
 pub struct FeatureResponse {
     pub feature_id: i32,
     pub name: String,
+    pub description: String,
+    pub tags: TagList,
     pub value: VariantValue,
     pub is_enabled: bool,
     pub is_srv: bool,
+}
+
+/// Fails only when the identity has no assigned/resolvable value for this feature
+/// (`feature_value` is `None`) - every other field is always present.
+impl TryFrom<IdentityVariant> for FeatureResponse {
+    type Error = ();
+
+    fn try_from(v: IdentityVariant) -> Result<Self, Self::Error> {
+        Ok(FeatureResponse {
+            feature_id: v.feature_id,
+            name: v.feature_name,
+            description: v.feature_description,
+            tags: v.feature_tags,
+            value: v.feature_value.ok_or(())?,
+            is_enabled: v.is_enabled,
+            is_srv: v.is_srv,
+        })
+    }
 }
 
 impl Feature {

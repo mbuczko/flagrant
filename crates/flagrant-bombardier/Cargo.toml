@@ -11,8 +11,8 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.39"}
-flagrant-client = {path = "../flagrant-client", version = "0.0.39", features = ["blocking"]}
+flagrant-types = {path = "../flagrant-types", version = "0.0.40"}
+flagrant-client = {path = "../flagrant-client", version = "0.0.40", features = ["blocking"]}
 
 anyhow = {workspace = true}
 serde = {workspace = true}

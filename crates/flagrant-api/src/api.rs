@@ -98,20 +98,11 @@ pub async fn resolve_features(
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key)
         && let Some(cached) = cache.get(key).await
     {
-        let response = cached
+        return Ok(cached
             .into_iter()
-            // A valid token only ever adds srv-only features to the response - it never
-            // narrows the response to just those.
             .filter(|f| include_srv || !f.is_srv)
-            .map(|f| FeatureResponse {
-                feature_id: f.feature_id,
-                name: f.name,
-                value: f.value,
-                is_enabled: f.is_enabled,
-                is_srv: f.is_srv,
-            })
-            .collect();
-        return Ok(response);
+            .map(FeatureResponse::from)
+            .collect());
     }
 
     let project = project::get_by_name(conn, project_name).await?;
@@ -121,14 +112,14 @@ pub async fn resolve_features(
 
     #[cfg(feature = "redis")]
     if let (Some(cache), Some(key)) = (&state.cache, &cache_key) {
-        // Cache the unfiltered list (srv-only features included) so one entry serves
-        // both privileged and unprivileged callers; filtering happens at read time.
         let cacheable: Vec<CachedFeature> = all_variants
             .into_iter()
             .filter_map(|v| {
                 Some(CachedFeature {
                     feature_id: v.feature_id,
                     name: v.feature_name,
+                    description: v.feature_description,
+                    tags: v.feature_tags,
                     value: v.feature_value?,
                     is_srv: v.is_srv,
                     is_enabled: v.is_enabled,
@@ -138,34 +129,16 @@ pub async fn resolve_features(
 
         cache.set(key, &cacheable).await;
 
-        let variants = cacheable
+        return Ok(cacheable
             .into_iter()
             .filter(|f| include_srv || !f.is_srv)
-            .map(|f| FeatureResponse {
-                feature_id: f.feature_id,
-                name: f.name,
-                value: f.value,
-                is_enabled: f.is_enabled,
-                is_srv: f.is_srv,
-            })
-            .collect();
-
-        return Ok(variants);
+            .map(FeatureResponse::from)
+            .collect());
     }
 
-    let variants = all_variants
+    Ok(all_variants
         .into_iter()
         .filter(|v| include_srv || !v.is_srv)
-        .filter_map(|v| {
-            Some(FeatureResponse {
-                feature_id: v.feature_id,
-                name: v.feature_name,
-                value: v.feature_value?,
-                is_enabled: v.is_enabled,
-                is_srv: v.is_srv,
-            })
-        })
-        .collect::<Vec<_>>();
-
-    Ok(variants)
+        .filter_map(|v| FeatureResponse::try_from(v).ok())
+        .collect())
 }

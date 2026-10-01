@@ -1,5 +1,3 @@
-use std::io::IsTerminal;
-
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_tracing() {
@@ -11,13 +9,6 @@ pub fn init_tracing() {
                 "flagrant_api=info,flagrant=info,axum::rejection=debug".into()
             }),
         )
-        .with(
-            // Colors are only useful when a human is directly watching a real terminal.
-            // A container's stdout is a pipe, not a TTY, and some log viewers (e.g. busybox
-            // ash) mangle ANSI codes badly enough to eat the rest of the line, so default to
-            // plain output whenever stdout isn't a TTY, on top of honoring `NO_COLOR`.
-            tracing_subscriber::fmt::layer()
-                .with_ansi(std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()),
-        )
+        .with(tracing_subscriber::fmt::layer())
         .init();
 }
