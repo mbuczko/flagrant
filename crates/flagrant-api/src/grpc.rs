@@ -6,17 +6,13 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::{Request, Response, Status, transport::Server};
 
-use crate::{api, config::GrpcConfig, state::AppState};
-
-pub mod proto {
-    tonic::include_proto!("flagrant.v1");
-}
-
-use proto::{
+use flagrant_proto::v1::{
     Feature, GetFeaturesRequest, GetFeaturesResponse,
     feature_resolver_server::{FeatureResolver, FeatureResolverServer},
     variant_value::Kind,
 };
+
+use crate::{api, config::GrpcConfig, state::AppState};
 
 pub struct GrpcFeatureResolver {
     state: AppState,
@@ -64,7 +60,7 @@ impl FeatureResolver for GrpcFeatureResolver {
             .map(|f| Feature {
                 feature_id: f.feature_id,
                 name: f.name,
-                value: Some(proto::VariantValue {
+                value: Some(flagrant_proto::v1::VariantValue {
                     kind: Some(match f.value {
                         VariantValue::Text(v) => Kind::Text(v),
                         VariantValue::Json(v) => Kind::Json(v),
@@ -72,6 +68,7 @@ impl FeatureResolver for GrpcFeatureResolver {
                     }),
                 }),
                 is_enabled: Some(f.is_enabled),
+                is_srv: Some(f.is_srv),
             })
             .collect();
 

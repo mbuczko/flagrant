@@ -910,9 +910,9 @@ dependencies = [
  "axum-extra",
  "dotenvy",
  "flagrant",
+ "flagrant-proto",
  "flagrant-types",
  "prometheus",
- "prost",
  "redis",
  "serde",
  "serde_json",
@@ -923,8 +923,6 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tonic",
- "tonic-prost",
- "tonic-prost-build",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -977,9 +975,20 @@ name = "flagrant-client"
 version = "0.0.38"
 dependencies = [
  "anyhow",
+ "flagrant-sdk",
  "flagrant-types",
  "reqwest",
  "serde",
+]
+
+[[package]]
+name = "flagrant-proto"
+version = "0.0.38"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -988,6 +997,18 @@ version = "0.0.38"
 dependencies = [
  "anyhow",
  "rustyline",
+]
+
+[[package]]
+name = "flagrant-sdk"
+version = "0.0.38"
+dependencies = [
+ "anyhow",
+ "flagrant-proto",
+ "flagrant-types",
+ "reqwest",
+ "tokio",
+ "tonic",
 ]
 
 [[package]]

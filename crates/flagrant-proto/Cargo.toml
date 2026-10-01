@@ -1,0 +1,19 @@
+[package]
+name = "flagrant-proto"
+version.workspace = true
+description.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+tonic = {workspace = true}
+tonic-prost = {workspace = true}
+prost = {workspace = true}
+
+[build-dependencies]
+tonic-prost-build = "0.14.6"

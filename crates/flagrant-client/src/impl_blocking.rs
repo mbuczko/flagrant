@@ -1,26 +1,18 @@
 use reqwest::blocking::Response;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::http::{Auth, HttpClient};
+use crate::http::{Auth, HttpTransport};
 
-impl HttpClient {
-    pub fn new(host: String, auth: Auth) -> HttpClient {
+impl HttpTransport {
+    pub fn new(host: String, auth: Auth) -> HttpTransport {
         let client = reqwest::blocking::Client::new();
-        HttpClient::Blocking(client, host, auth)
+        HttpTransport::Blocking(client, host, auth)
     }
 
-    pub(crate) fn get_with_identity<T: DeserializeOwned>(
-        &self,
-        path: String,
-        identity: Option<&str>,
-    ) -> anyhow::Result<T> {
+    pub fn get<T: DeserializeOwned>(&self, path: String) -> anyhow::Result<T> {
         match self {
-            HttpClient::Blocking(client, host, _auth) => {
-                match client
-                    .get(format!("{host}{path}"))
-                    .header("X-Flagrant-Identity", identity.unwrap_or_default())
-                    .send()
-                {
+            HttpTransport::Blocking(client, host, _auth) => {
+                match client.get(format!("{host}{path}")).send() {
                     Ok(response) if response.status().is_success() => Ok(response.json::<T>()?),
                     Ok(response) => Err(anyhow::anyhow!(response.text()?)),
                     Err(err) => Err(err.into()),
@@ -30,14 +22,22 @@ impl HttpClient {
         }
     }
 
-    pub(crate) fn post_with_identity<P: Serialize, T: DeserializeOwned>(
+    /// Host this transport talks to - needed to build a `flagrant-sdk` transport for the
+    /// public evaluation endpoint, which lives outside this crate's admin-only surface.
+    pub fn host(&self) -> &str {
+        match self {
+            HttpTransport::Blocking(_, host, _) => host,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn post<P: Serialize, T: DeserializeOwned>(
         &self,
         path: String,
-        _identity: Option<&str>,
         payload: P,
     ) -> anyhow::Result<T> {
         match self {
-            HttpClient::Blocking(client, host, _auth) => {
+            HttpTransport::Blocking(client, host, _auth) => {
                 let result = client.post(format!("{host}{path}")).json(&payload).send();
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response.json::<T>()?),
@@ -49,21 +49,9 @@ impl HttpClient {
         }
     }
 
-    pub fn get<T: DeserializeOwned>(&self, path: String) -> anyhow::Result<T> {
-        self.get_with_identity(path, None)
-    }
-
-    pub fn post<P: Serialize, T: DeserializeOwned>(
-        &self,
-        path: String,
-        payload: P,
-    ) -> anyhow::Result<T> {
-        self.post_with_identity(path, None, payload)
-    }
-
     pub fn put<P: Serialize>(&self, path: String, payload: P) -> anyhow::Result<()> {
         match self {
-            HttpClient::Blocking(client, host, _auth) => {
+            HttpTransport::Blocking(client, host, _auth) => {
                 let result = client.put(format!("{host}{path}")).json(&payload).send();
 
                 match result {
@@ -82,7 +70,7 @@ impl HttpClient {
         payload: P,
     ) -> anyhow::Result<T> {
         match self {
-            HttpClient::Blocking(client, host, _auth) => {
+            HttpTransport::Blocking(client, host, _auth) => {
                 let result = client.patch(format!("{host}{path}")).json(&payload).send();
                 match result {
                     Ok(response) if response.status().is_success() => Ok(response.json::<T>()?),
@@ -96,7 +84,7 @@ impl HttpClient {
 
     pub fn delete(&self, path: String) -> anyhow::Result<Response> {
         match self {
-            HttpClient::Blocking(client, host, _auth) => {
+            HttpTransport::Blocking(client, host, _auth) => {
                 let result = client.delete(format!("{host}{path}")).send();
 
                 match result {

@@ -1,0 +1,31 @@
+[package]
+name = "flagrant-sdk"
+version.workspace = true
+description.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+flagrant-types = {path = "../flagrant-types", version = "0.0.38"}
+flagrant-proto = {path = "../flagrant-proto", version = "0.0.38", optional = true}
+
+anyhow = {workspace = true}
+reqwest = {workspace = true, features = ["json"], optional = true}
+tonic = {workspace = true, optional = true, features = ["transport"]}
+
+[dev-dependencies]
+tokio = {workspace = true}
+
+[features]
+http-blocking = ["dep:reqwest", "reqwest/blocking"]
+http-async = ["dep:reqwest"]
+grpc = ["dep:tonic", "dep:flagrant-proto"]
+
+[[example]]
+name = "grpc_get_features"
+required-features = ["grpc"]
