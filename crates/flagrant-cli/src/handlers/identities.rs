@@ -72,7 +72,7 @@ pub fn add(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 
         let identity = {
             let ctx = session.context.read().unwrap();
-            ctx.transport.post::<_, IdentityWithTraits>(
+            ctx.client.post::<_, IdentityWithTraits>(
                 ctx.env_resource().subpath("/identities"),
                 NewIdentityPayload {
                     identity: identity_str.to_string(),
@@ -117,7 +117,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
         .map(Deref::deref)
         .unwrap_or("");
 
-    let identities = ctx.transport.get::<Vec<IdentityWithTraits>>(
+    let identities = ctx.client.get::<Vec<IdentityWithTraits>>(
         res.subpath(format!("/identities?traits={traits}&pattern={pat}")),
     )?;
 
@@ -136,7 +136,7 @@ pub fn list(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
 pub fn drop_matching(args: &[Arg], session: &Session<Connection>) -> anyhow::Result<()> {
     if let Some(pattern) = args.get(1) {
         let ctx = session.context.read().unwrap();
-        ctx.transport.delete(
+        ctx.client.delete(
             ctx.env_resource()
                 .subpath(format!("/identities?pattern={pattern}")),
         )?;
@@ -405,7 +405,7 @@ fn fetch_variant_assignments(
     let path = ctx
         .env_resource()
         .subpath(format!("/identities/{}/variants", identity.value));
-    ctx.transport
+    ctx.client
         .get::<Vec<IdentityVariant>>(path)
         .unwrap_or_default()
 }
@@ -414,7 +414,7 @@ fn resolve_identity(
     ctx: &flagrant_client::connection::Connection,
     identity_str: &str,
 ) -> anyhow::Result<IdentityWithTraits> {
-    ctx.transport.get::<IdentityWithTraits>(
+    ctx.client.get::<IdentityWithTraits>(
         ctx.env_resource()
             .subpath(format!("/identities/{identity_str}")),
     )

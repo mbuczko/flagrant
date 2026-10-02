@@ -1,5 +1,25 @@
 # Flagrant - CLI-driven feature flagging system
 
+## Table of contents
+
+- [What's there today](#whats-there-today)
+- [Running with Docker](#running-with-docker)
+- [Concepts](#concepts)
+  - [Context composition](#context-composition)
+  - [Interactive prompts](#interactive-prompts)
+  - [Features & variants](#features--variants)
+  - [Server-side-only flags](#server-side-only-flags)
+  - [Metrics](#metrics)
+  - [Identities & traits](#identities--traits)
+  - [Segments](#segments)
+  - [Overrides](#overrides)
+  - [Snapshots](#snapshots)
+  - [Querying resolved values](#querying-resolved-values)
+- [Using the Rust SDK (`flagrant-sdk`)](#using-the-rust-sdk-flagrant-sdk)
+  - [Caching](#caching)
+- [What's next](#whats-next)
+- [Architecture](#architecture)
+
 The feature-flagging space is already well served by excellent solutions like [Unleash](https://www.getunleash.io/) or [Flagsmith](https://www.flagsmith.com/), so why yet another one? Flagrant has an ambition to become the Redis of feature flagging - small, reliable, and completely CLI driven, providing everything needed to keep features under control without dragging in a dashboard-first, heavyweight platform.
 
 Under the hood it's a Rust/Axum HTTP API backed by SQLite, driven day-to-day through a REPL-style CLI rather than a web UI - staged changes, tab completion and all.
@@ -270,8 +290,10 @@ Restoring is itself a commit, not a rewrite of history - it produces a brand-new
 A `FlagrantClient` (or its async counterpart, `AsyncFlagrantClient`) pairs one of three interchangeable transports with a project name, and exposes exactly one method:
 
 ```rust
-fn get_features(&self, environment: &str, identity: &str) -> Result<Vec<FeatureResponse>>
+fn get_features(&self, environment: &str, identity: &str) -> Result<Features>
 ```
+
+`Features` is an immutable snapshot of the resolved feature set - a cheaply-cloneable view that derefs to `[FeatureResponse]`, so it iterates and indexes like a plain slice. Cloning shares one backing allocation instead of copying every entry, which is what keeps cache hits (see [Caching](#caching)) down to a refcount bump.
 
 Project is fixed for the client's lifetime - an app embedding it is typically wired to one project - while environment is passed per call, since the same client commonly serves more than one (`dev`, `prod`, ...).
 
@@ -321,11 +343,30 @@ let client = AsyncFlagrantClient::new(transport, "my-project".into());
 let features = client.get_features("prod", "alice").await?;
 ```
 
-gRPC has no official synchronous client, so `GrpcTransport` only implements the async side - there's no blocking variant, unlike the two HTTP transports.
-
 Every transport's second constructor argument is an optional bearer/srv-token, exactly like the `Authorization: Bearer <token>` header/`authorization` metadata described in [Server-side-only flags](#server-side-only-flags) - pass `Some("prod-secret-token".into())` to unlock server-side-only features on top of the normal response, or `None` for a regular client that only ever sees public features.
 
 See `crates/flagrant-sdk/examples/grpc_get_features.rs` for a complete, runnable example.
+
+### Caching
+
+Both client types take an optional `with_cache(cache_size, cache_ttl)` builder call, caching resolved features per `(environment, identity)` pair with LRU eviction once `cache_size` is reached:
+
+```rust
+use std::num::NonZeroUsize;
+use std::time::Duration;
+
+use flagrant_sdk::{FlagrantClient, HttpBlockingTransport};
+
+let transport = HttpBlockingTransport::new("http://localhost:3030".into(), None);
+let client = FlagrantClient::new(transport, "my-project".into())
+    .with_cache(NonZeroUsize::new(1_000).unwrap(), Some(Duration::from_secs(30)));
+
+let features = client.get_features("prod", "alice")?;
+```
+
+A hit within `cache_ttl` only bumps recency, without a round-trip to the transport, and hands back a clone of the cached `Features` snapshot - a refcount bump, not a deep copy of every `FeatureResponse`. An entry past its TTL is reported as a miss and refetched, but isn't evicted - it's kept around as a fallback, so if that refetch then fails (e.g. the connection to the Flagrant API died), the stale value is served instead of an error. Pass `None` as `cache_ttl` for a cache that never expires entries on its own, only via LRU eviction once `cache_size` is reached.
+
+Caching is entirely in-process and client-local - unrelated to the server-side `redis` caching layer mentioned in [What's next](#whats-next), which caches at `flagrant-api` instead.
 
 ## What's next
 
@@ -339,7 +380,7 @@ See `crates/flagrant-sdk/examples/grpc_get_features.rs` for a complete, runnable
 - [x] **k8s helm chart**
 - [x] **Prometheus metrics** - identities per variant, trait and segment; runtime (cache/HTTP) metrics to follow
 
-Further out: analytics on flag exposure/conversion, and client SDKs for other languages (JVM, JS, Python) - see [Using the Rust SDK](#using-the-rust-sdk-flagrant-sdk) for the one that exists today.
+Further out: analytics on flag exposure/conversion, and client SDKs for other languages (JVM, JS, [Python](https://github.com/mbuczko/flagrant-client-python)) - see [Using the Rust SDK](#using-the-rust-sdk-flagrant-sdk) for the one that exists today.
 
 # Architecture
 

@@ -5,7 +5,7 @@ use flagrant_types::{
 };
 
 use crate::{
-    http::{Auth, HttpTransport},
+    http::{Auth, HttpClient},
     resource::BaseResource,
 };
 
@@ -68,7 +68,7 @@ impl From<&str> for EnvironmentRef {
 
 #[derive(Debug)]
 pub struct Connection {
-    pub transport: HttpTransport,
+    pub client: HttpClient,
     pub project: Project,
     pub environment: Environment,
     pub feature: Option<Feature>,
@@ -76,7 +76,7 @@ pub struct Connection {
     /// Positional index that maps 1-based display index → VariantRef.
     /// Invalidated whenever pending ops change.
     pub variant_index: Vec<VariantRef>,
-    /// Identity currently in context (set by `USE @<identity>`).
+    /// Identity currently in context.
     pub identity: Option<IdentityWithTraits>,
     /// Staged patch for the current identity.
     pub identity_patch: Option<IdentityPatch>,
@@ -91,66 +91,30 @@ impl Connection {
     /// no `-e` given on the CLI) - in that case, the project's environment with the
     /// smallest id (i.e. whichever was created first) is used, rather than defaulting to
     /// some arbitrary/hardcoded id that may not even belong to this project.
-    #[cfg(feature = "blocking")]
     pub fn init(
         api_host: String,
         auth: Auth,
         project_name: String,
         environment: Option<impl Into<EnvironmentRef>>,
     ) -> anyhow::Result<Connection> {
-        let transport = HttpTransport::new(api_host, auth);
+        let client = HttpClient::new(api_host, auth);
         let path = format!("/projects/{project_name}");
 
         let environment = match environment {
-            Some(env) => transport
+            Some(env) => client
                 .get::<Environment>(format!("{path}/envs/{}", env.into()))
                 .ok(),
-            None => transport
+            None => client
                 .get::<Vec<Environment>>(format!("{path}/envs"))
                 .ok()
                 .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
         };
 
-        Self::build(transport.get::<Project>(path).ok(), environment, transport)
-    }
+        let project = client.get::<Project>(path).ok();
 
-    /// See the blocking `init` above for the `environment: None` default-selection rules.
-    #[cfg(not(feature = "blocking"))]
-    pub async fn init(
-        api_host: String,
-        project_name: String,
-        environment: Option<impl Into<EnvironmentRef>>,
-    ) -> anyhow::Result<Connection> {
-        let transport = HttpTransport::new(api_host, Auth::None);
-        let path = format!("/projects/{project_name}");
-
-        let environment = match environment {
-            Some(env) => transport
-                .get::<Environment>(format!("{path}/envs/{}", env.into()))
-                .await
-                .ok(),
-            None => transport
-                .get::<Vec<Environment>>(format!("{path}/envs"))
-                .await
-                .ok()
-                .and_then(|envs| envs.into_iter().min_by_key(|env| env.id)),
-        };
-
-        Self::build(
-            transport.get::<Project>(path).await.ok(),
-            environment,
-            transport,
-        )
-    }
-
-    fn build(
-        project: Option<Project>,
-        environment: Option<Environment>,
-        transport: HttpTransport,
-    ) -> anyhow::Result<Connection> {
         match (project, environment) {
             (Some(project), Some(environment)) => Ok(Connection {
-                transport,
+                client,
                 project,
                 environment,
                 feature: None,
@@ -225,17 +189,18 @@ impl Connection {
         BaseResource::Project(&self.project.name)
     }
 
-    /// Resolves features for an identity via the public evaluation endpoint. This is a thin
-    /// convenience wrapper around `flagrant-sdk`'s HTTP-blocking transport (the actual, reusable
-    /// implementation) rather than another admin capability bolted onto `HttpTransport` -
-    /// external consumers of the public API should depend on `flagrant-sdk` directly instead of
-    /// this admin-focused crate.
-    #[cfg(feature = "blocking")]
+    /// Resolves features for an identity via the public evaluation endpoint - the same one
+    /// `flagrant-sdk` exposes to external consumers, called directly here instead since this
+    /// admin-focused crate already has everything (host, project, environment) needed to reach
+    /// it without pulling in another crate for a single endpoint.
     pub fn get_features(&self, identity: &str) -> anyhow::Result<Vec<FeatureResponse>> {
-        let transport =
-            flagrant_sdk::HttpBlockingTransport::new(self.transport.host().to_string(), None);
-        flagrant_sdk::FlagrantClient::new(transport, self.project.name.clone())
-            .get_features(&self.environment.name, identity)
+        self.client.get_with_identity(
+            format!(
+                "/api/v1/projects/{}/envs/{}/features",
+                self.project.name, self.environment.name
+            ),
+            identity,
+        )
     }
 }
 

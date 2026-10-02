@@ -12,7 +12,7 @@ edition.workspace = true
 
 [dependencies]
 flagrant-types = {path = "../flagrant-types", version = "0.0.40"}
-flagrant-client = {path = "../flagrant-client", version = "0.0.40", features = ["blocking"]}
+flagrant-client = {path = "../flagrant-client", version = "0.0.40"}
 
 anyhow = {workspace = true}
 serde = {workspace = true}

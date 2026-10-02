@@ -4,7 +4,7 @@ use command::Command;
 use completer::ArgCompleter;
 use flagrant_client::{
     connection::Connection,
-    http::{Auth, HttpTransport},
+    http::{Auth, HttpClient},
 };
 use flagrant_repl::{
     completer::CommandLineCompleter,
@@ -121,8 +121,8 @@ fn main() -> anyhow::Result<()> {
     let args: Args = argh::from_env();
 
     if args.list_projects {
-        let transport = HttpTransport::new(args.host.clone(), Auth::None);
-        let projects = handlers::projects::list_projects(&transport)?;
+        let client = HttpClient::new(args.host.clone(), Auth::None);
+        let projects = handlers::projects::list_projects(&client)?;
         println!("Known projects:\n---------------");
         for project in projects {
             println!("{}", project.name);
@@ -133,11 +133,11 @@ fn main() -> anyhow::Result<()> {
     let Some(project_name) = args.project else {
         anyhow::bail!("--project must be provided");
     };
-    let transport = HttpTransport::new(args.host.clone(), Auth::None);
-    let connection = match transport.get::<Project>(format!("/projects/{project_name}")) {
+    let client = HttpClient::new(args.host.clone(), Auth::None);
+    let connection = match client.get::<Project>(format!("/projects/{project_name}")) {
         Ok(_) => Connection::init(args.host, Auth::None, project_name, args.environment)?,
         Err(_) => {
-            let (project, env) = handlers::projects::create_with_env(&project_name, &transport)?;
+            let (project, env) = handlers::projects::create_with_env(&project_name, &client)?;
             Connection::init(args.host, Auth::None, project.name, Some(env.id))?
         }
     };
