@@ -103,7 +103,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                             None => (None, prefix),
                         };
 
-                        ctx.transport
+                        ctx.client
                             .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={val}")))?
                             .into_iter()
                             .map(|t| match modifier {
@@ -121,7 +121,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                             let res = ctx.env_resource();
                             let (lhs, modifier, val) = strip_tag(val);
 
-                            ctx.transport
+                            ctx.client
                                 .get::<Vec<Tag>>(res.subpath(format!("/tags?prefix={val}")))?
                                 .into_iter()
                                 .map(|c| {
@@ -228,7 +228,7 @@ impl AutoCompleter for ArgCompleter<'_> {
                 Ok(match op {
                     "delete" | "show" | "use" if arg_n == 2 => complete_segments(&ctx, prefix)?,
                     "list" if arg_n == 2 => ctx
-                        .transport
+                        .client
                         .get::<Vec<Segment>>(res.subpath(format!("/segments?pattern={prefix}")))?
                         .into_iter()
                         .map(|s| s.name)
@@ -248,7 +248,7 @@ impl AutoCompleter for ArgCompleter<'_> {
 /// current environment. Shared by every command completing an identity token.
 fn complete_identities(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
-        .transport
+        .client
         .get::<Vec<IdentityWithTraits>>(
             ctx.env_resource()
                 .subpath(format!("/identities?prefix={prefix}")),
@@ -262,7 +262,7 @@ fn complete_identities(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<Str
 /// current environment. Shared by every command completing a feature token.
 fn complete_features(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
-        .transport
+        .client
         .get::<Vec<Feature>>(
             ctx.env_resource()
                 .subpath(format!("/features?prefix={prefix}")),
@@ -276,7 +276,7 @@ fn complete_features(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<Strin
 /// current project. Shared by every command completing an environment token.
 fn complete_environments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
-        .transport
+        .client
         .get::<Vec<Environment>>(
             ctx.project
                 .as_base_resource()
@@ -291,7 +291,7 @@ fn complete_environments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<S
 /// project. Shared by every command completing a segment token.
 fn complete_segments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
-        .transport
+        .client
         .get::<Vec<Segment>>(
             ctx.project_resource()
                 .subpath(format!("/segments?prefix={prefix}")),
@@ -305,7 +305,7 @@ fn complete_segments(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<Strin
 /// project. Shared by every command completing a trait token.
 fn complete_traits(ctx: &Connection, prefix: &str) -> anyhow::Result<Vec<String>> {
     Ok(ctx
-        .transport
+        .client
         .get::<Vec<Trait>>(
             ctx.project
                 .as_base_resource()

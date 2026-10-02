@@ -885,7 +885,7 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flagrant"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "chrono",
@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-api"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "axum 0.7.7",
@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-bombardier"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "argh",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-cli"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "argh",
@@ -972,10 +972,9 @@ dependencies = [
 
 [[package]]
 name = "flagrant-client"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
- "flagrant-sdk",
  "flagrant-types",
  "reqwest",
  "serde",
@@ -983,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-proto"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "prost",
  "tonic",
@@ -993,7 +992,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-repl"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "rustyline",
@@ -1001,11 +1000,12 @@ dependencies = [
 
 [[package]]
 name = "flagrant-sdk"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "anyhow",
  "flagrant-proto",
  "flagrant-types",
+ "lru",
  "reqwest",
  "tokio",
  "tonic",
@@ -1013,7 +1013,7 @@ dependencies = [
 
 [[package]]
 name = "flagrant-types"
-version = "0.0.40"
+version = "0.0.41"
 dependencies = [
  "chrono",
  "regex",
@@ -1059,6 +1059,12 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "foreign-types"
@@ -1224,7 +1230,7 @@ checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
  "allocator-api2",
  "equivalent",
- "foldhash",
+ "foldhash 0.1.5",
 ]
 
 [[package]]
@@ -1232,6 +1238,9 @@ name = "hashbrown"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+dependencies = [
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "hashlink"
@@ -1697,6 +1706,15 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
+name = "lru"
+version = "0.18.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef9ac18847474e638e3702b76c65d4eb93428471a74778ef0f1be711717f89b5"
+dependencies = [
+ "hashbrown 0.17.0",
+]
 
 [[package]]
 name = "matchers"

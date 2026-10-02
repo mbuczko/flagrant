@@ -7,7 +7,7 @@ edition.workspace = true
 [dependencies]
 flagrant-repl = {path = "../flagrant-repl"}
 flagrant-types = {path = "../flagrant-types"}
-flagrant-client = {path = "../flagrant-client", features = ["blocking"]}
+flagrant-client = {path = "../flagrant-client"}
 
 # common dependencies
 serde = {workspace = true}

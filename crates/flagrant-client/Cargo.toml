@@ -11,13 +11,9 @@ license.workspace = true
 edition.workspace = true
 
 [dependencies]
-flagrant-types = {path = "../flagrant-types", version = "0.0.40"}
-flagrant-sdk = {path = "../flagrant-sdk", version = "0.0.40", optional = true, features = ["http-blocking"]}
+flagrant-types = {path = "../flagrant-types", version = "0.0.41"}
 
 # common dependencies
 serde = {workspace = true}
 anyhow = {workspace = true}
 reqwest = {workspace = true, features = ["json", "blocking"]}
-
-[features]
-blocking = ["dep:flagrant-sdk"]
